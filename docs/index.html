@@ -1,0 +1,1382 @@
+<!doctype html>
+<!--
+  Strona produktu Poster (GitHub Pages z katalogu docs/ repozytorium poster-app). Jeden plik, bez zewnętrznych skryptów
+  i czcionek. Dwa języki: <main lang="en"> i <main lang="pl">, wybór: ?lang=… → zapamiętany → język przeglądarki.
+  Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (Polar, etap 6; pusty = przycisk „Wkrótce”),
+  CONTACT_URL – kontakt w sprawie wdrożenia (dziś profil GitHub, np. mailto: po zakupie domeny). Ceny w sekcji
+  „Pricing / Cennik” są zatwierdzone; cenę startową zmień po sprzedaży pierwszych 20 licencji.
+-->
+<html lang="en" data-lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Poster – your own news bot for social media</title>
+    <meta
+      name="description"
+      content="Poster runs 24/7 on your NAS or server: it collects news, writes posts with AI and publishes them to X and Facebook after your approval in Telegram. Free LITE edition (AGPL) and PRO."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23f97316'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-family='Arial,sans-serif' font-size='38' font-weight='700' fill='white'%3EP%3C/text%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --bg: #f6f7fb;
+        --surface: #fff;
+        --surface-2: #f1f3f9;
+        --border: #e3e6ef;
+        --text: #111827;
+        --muted: #5b6475;
+        --primary: #4f46e5;
+        --primary-soft: #eef2ff;
+        --accent: #f97316;
+        --ok: #16a34a;
+        --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 10px 30px rgba(16, 24, 40, 0.08);
+        --radius: 18px;
+        --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', Arial, sans-serif;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0e1a;
+          --surface: #121629;
+          --surface-2: #171b31;
+          --border: #262c48;
+          --text: #e8eaf3;
+          --muted: #a2a9c4;
+          --primary: #8b93ff;
+          --primary-soft: #1e2246;
+          --ok: #4ade80;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.6 var(--font);
+        -webkit-font-smoothing: antialiased;
+      }
+      html[data-lang='en'] [lang='pl'],
+      html[data-lang='pl'] [lang='en'] {
+        display: none !important;
+      }
+      a {
+        color: var(--primary);
+      }
+      img {
+        max-width: 100%;
+        display: block;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 20px;
+      }
+      /* górny pasek */
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: color-mix(in srgb, var(--bg) 85%, transparent);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+      }
+      .top .wrap {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        height: 64px;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        font-size: 18px;
+        color: var(--text);
+        text-decoration: none;
+      }
+      .mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-weight: 800;
+        background: linear-gradient(135deg, #6366f1, #f97316);
+      }
+      .nav {
+        display: flex;
+        gap: 18px;
+        margin-left: auto;
+        align-items: center;
+      }
+      .nav a {
+        color: var(--muted);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .nav a:hover {
+        color: var(--text);
+      }
+      .langs {
+        display: flex;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .langs button {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font: 600 13px var(--font);
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .langs button[aria-pressed='true'] {
+        background: var(--primary);
+        color: #fff;
+      }
+      /* sekcje */
+      section {
+        padding: 72px 0;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+        margin: 0 0 14px;
+      }
+      h1 {
+        font-size: clamp(34px, 5vw, 56px);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: clamp(26px, 3.4vw, 38px);
+        letter-spacing: -0.01em;
+      }
+      h3 {
+        font-size: 19px;
+      }
+      .lead {
+        font-size: 19px;
+        color: var(--muted);
+        max-width: 720px;
+      }
+      .eyebrow {
+        display: inline-block;
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--primary);
+        background: var(--primary-soft);
+        padding: 5px 12px;
+        border-radius: 999px;
+        margin-bottom: 18px;
+      }
+      .center {
+        text-align: center;
+      }
+      .center .lead {
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .btns {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 28px 0 10px;
+      }
+      .center .btns {
+        justify-content: center;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 13px 22px;
+        border-radius: 12px;
+        font-weight: 700;
+        text-decoration: none;
+        border: 1px solid var(--border);
+        color: var(--text);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+      .btn.primary {
+        border: 0;
+        color: #fff;
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      }
+      .btn.pro {
+        border: 0;
+        color: #fff;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+      }
+      .btn[aria-disabled='true'] {
+        opacity: 0.75;
+        cursor: default;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .hero {
+        padding-top: 64px;
+        background:
+          radial-gradient(1000px 420px at 85% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
+          radial-gradient(700px 360px at 0% 10%, rgba(249, 115, 22, 0.12), transparent 60%);
+      }
+      .shot {
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .shot img {
+        width: 100%;
+        height: auto;
+        cursor: zoom-in;
+      }
+      /* powiększony zrzut po kliknięciu */
+      .lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(5, 8, 20, 0.86);
+        cursor: zoom-out;
+      }
+      .lightbox img {
+        max-width: min(1400px, 100%);
+        max-height: 100%;
+        border-radius: 10px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .hero .shot {
+        margin-top: 44px;
+      }
+      /* jak to działa */
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-top: 36px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 22px;
+        box-shadow: var(--shadow);
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .icon {
+        font-size: 28px;
+        margin-bottom: 10px;
+      }
+      .num {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--primary);
+      }
+      /* funkcje z zrzutami */
+      .feature {
+        display: grid;
+        grid-template-columns: 1fr 1.25fr;
+        gap: 44px;
+        align-items: center;
+        margin-top: 56px;
+      }
+      .feature.flip {
+        grid-template-columns: 1.25fr 1fr;
+      }
+      .feature.flip > :first-child {
+        order: 2;
+      }
+      .feature ul,
+      .pro-list {
+        padding-left: 0;
+        list-style: none;
+        margin: 14px 0 0;
+      }
+      .feature li,
+      .pro-list li {
+        padding-left: 28px;
+        position: relative;
+        margin: 8px 0;
+        color: var(--muted);
+      }
+      .feature li::before,
+      .pro-list li::before {
+        content: '✓';
+        position: absolute;
+        left: 0;
+        color: var(--ok);
+        font-weight: 800;
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 36px;
+      }
+      .phone {
+        max-width: 300px;
+        margin: 0 auto;
+        border-radius: 28px;
+      }
+      /* PRO */
+      .pro {
+        background: linear-gradient(180deg, transparent, rgba(249, 115, 22, 0.06) 30%, rgba(99, 102, 241, 0.06));
+      }
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 800;
+        color: #fff;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        vertical-align: middle;
+      }
+      .gallery {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 36px;
+      }
+      .gallery figure {
+        margin: 0;
+      }
+      .gallery figcaption {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 10px;
+      }
+      /* porównanie */
+      .compare {
+        overflow-x: auto;
+        margin-top: 32px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        font-size: 15px;
+      }
+      th,
+      td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        vertical-align: top;
+      }
+      th:not(:first-child),
+      td:not(:first-child) {
+        text-align: center;
+        width: 22%;
+      }
+      thead th {
+        background: var(--surface-2);
+        font-size: 14px;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      .yes {
+        color: var(--ok);
+        font-weight: 800;
+      }
+      .no {
+        color: var(--muted);
+      }
+      /* cennik */
+      .prices {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-top: 36px;
+        align-items: stretch;
+      }
+      .price {
+        display: flex;
+        flex-direction: column;
+      }
+      .price.best {
+        border: 2px solid var(--accent);
+      }
+      .amount {
+        font-size: 40px;
+        font-weight: 800;
+        margin: 6px 0 2px;
+      }
+      .amount small {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .price ul {
+        flex: 1;
+      }
+      .price .btn {
+        justify-content: center;
+        margin-top: 18px;
+      }
+      /* FAQ */
+      details {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px 20px;
+        margin: 12px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+      details p {
+        color: var(--muted);
+        margin: 10px 0 0;
+      }
+      details code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.9em;
+        color: var(--text);
+        background: var(--surface-2);
+        border-radius: 6px;
+        padding: 1px 6px;
+      }
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 32px 0 48px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 22px;
+        justify-content: space-between;
+      }
+      footer a {
+        color: var(--muted);
+      }
+      @media (max-width: 900px) {
+        .steps {
+          grid-template-columns: 1fr 1fr;
+        }
+        .feature,
+        .gallery,
+        .prices,
+        .grid3 {
+          grid-template-columns: 1fr;
+        }
+        .feature.flip {
+          grid-template-columns: 1fr;
+        }
+        .feature.flip > :first-child {
+          order: 0;
+        }
+        .nav a {
+          display: none;
+        }
+        section {
+          padding: 52px 0;
+        }
+      }
+      @media (max-width: 520px) {
+        .steps {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap">
+        <a class="logo" href="#"><span class="mark">P</span>Poster</a>
+        <nav class="nav">
+          <a href="#how" lang="en">How it works</a>
+          <a href="#how-pl" lang="pl">Jak to działa</a>
+          <a href="#pro" lang="en">PRO</a>
+          <a href="#pro-pl" lang="pl">PRO</a>
+          <a href="#pricing" lang="en">Pricing</a>
+          <a href="#pricing-pl" lang="pl">Cennik</a>
+          <a href="#faq" lang="en">FAQ</a>
+          <a href="#faq-pl" lang="pl">Pytania</a>
+          <a href="https://github.com/imdangro/poster-app">GitHub</a>
+          <div class="langs" role="group" aria-label="Language / Język">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="pl" aria-pressed="false">PL</button>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <!-- ===================================================================================== ENGLISH -->
+    <main lang="en">
+      <section class="hero">
+        <div class="wrap center">
+          <span class="eyebrow">Self-hosted · open source · no subscription</span>
+          <h1>Your own news bot for social media</h1>
+          <p class="lead">
+            Poster runs 24/7 on your NAS or server. It collects the latest news from RSS feeds, Google News and X, lets AI pick the best
+            story and write the posts – and publishes them to X and Facebook after your ✅ in Telegram.
+          </p>
+          <div class="btns">
+            <a class="btn primary" href="https://github.com/imdangro/poster-app#readme">Download free LITE</a>
+            <a class="btn" href="#pro">See what PRO adds</a>
+          </div>
+          <p class="note">LITE is free under the AGPL-3.0 license. Docker on a NAS or a Linux server is all you need.</p>
+          <div class="shot">
+            <img
+              src="img/lite-dashboard-en.webp"
+              width="1280"
+              height="860"
+              alt="Poster dashboard: bot card, service status and recent activity"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="center">
+            <h2>How it works</h2>
+            <p class="lead">You set the topic and the sources once. Poster does the rest on its schedule.</p>
+          </div>
+          <div class="steps">
+            <div class="card">
+              <div class="icon">📰</div>
+              <div class="num">1 · SOURCES</div>
+              <h3>Fresh news</h3>
+              <p>RSS feeds of news sites, Google News and X profiles. Duplicates and old stories are filtered out.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🤖</div>
+              <div class="num">2 · AI</div>
+              <h3>Picked and written</h3>
+              <p>Gemini or a model on your own hardware (Ollama) picks the most important story and writes the posts.</p>
+            </div>
+            <div class="card">
+              <div class="icon">✅</div>
+              <div class="num">3 · TELEGRAM</div>
+              <h3>You approve</h3>
+              <p>The draft with the article photo lands in Telegram. One tap on ✅ publishes it, ❌ rejects it.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🚀</div>
+              <div class="num">4 · PUBLISHING</div>
+              <h3>Posted</h3>
+              <p>X and Facebook get the post and you get a report. A failed platform is retried with one tap on 🔁.</p>
+            </div>
+          </div>
+
+          <div class="feature">
+            <div>
+              <h2>A schedule that looks human</h2>
+              <p class="lead">Every few hours or at the hours you pick – on the days you choose.</p>
+              <ul>
+                <li>Preview of the next runs before you save</li>
+                <li>Random offset of up to 45 minutes, so posts do not go out to the minute</li>
+                <li>Pause, resume and “Run now” in one click</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img src="img/lite-schedule-en.webp" width="1280" height="860" alt="Bot schedule settings" loading="lazy" />
+            </div>
+          </div>
+          <div class="feature flip">
+            <div>
+              <h2>Costs under control</h2>
+              <p class="lead">The “Cost of one post” card shows what costs money with the current settings.</p>
+              <ul>
+                <li>The photo from the article is free – no paid image generation</li>
+                <li>AI text usually fits in a free quota (a Gemini key without billing) or runs on your own hardware</li>
+                <li>The approximate X API cost of a post is shown before you turn publishing on</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img src="img/lite-ai-en.webp" width="1280" height="860" alt="Cost of one post and the AI settings" loading="lazy" />
+            </div>
+          </div>
+          <div class="feature">
+            <div>
+              <h2>Every draft archived</h2>
+              <p class="lead">Images and texts of all posts stay on your NAS – ready to copy, download or post by hand.</p>
+              <ul>
+                <li>Texts for X and Facebook, plus a TikTok script</li>
+                <li>Publishing results with links to the posts</li>
+                <li>Why AI picked the story</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img
+                src="img/lite-draft-en.webp"
+                width="1280"
+                height="860"
+                alt="Draft details: image, post texts and TikTok script"
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          <div class="grid3">
+            <div class="card">
+              <div class="icon">🔐</div>
+              <h3>Your keys stay home</h3>
+              <p>API keys and account tokens are stored only in the panel on your NAS. No cloud account, no tracking.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🏠</div>
+              <h3>No open ports</h3>
+              <p>The panel polls Telegram, so the NAS does not have to be exposed to the internet.</p>
+            </div>
+            <div class="card">
+              <div class="icon">📱</div>
+              <h3>English and Polish</h3>
+              <p>The panel, Telegram messages and the docs in both languages. The panel works on a phone too.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pro" class="pro">
+        <div class="wrap">
+          <div class="center">
+            <span class="eyebrow">Poster PRO</span>
+            <h2>For those who run more than one profile</h2>
+            <p class="lead">The same program with more bots, more platforms and more automation – plus a year of updates and support.</p>
+          </div>
+          <div class="feature">
+            <ul class="pro-list">
+              <li><b>Multiple bots</b> – each with its own topic, accounts, schedule and Telegram chat; duplicate a bot in one click</li>
+              <li>
+                <b>Instagram and TikTok</b> – photo posts on Instagram and an 8-second vertical video for TikTok (free photo animation or
+                Google Veo)
+              </li>
+              <li><b>Your website or blog</b> – every new article becomes posts on all platforms, with an AI teaser or a free template</li>
+              <li><b>AI images and a brand image</b> when the article has no photo</li>
+              <li><b>Autopilot</b> – publishing without approval</li>
+              <li><b>More AI providers</b> – Groq, OpenRouter, Mistral and a fallback provider; monthly AI limits and usage counters</li>
+            </ul>
+            <div class="shot">
+              <img src="img/pro-dashboard-en.webp" width="1280" height="860" alt="PRO dashboard with three bots" loading="lazy" />
+            </div>
+          </div>
+          <div class="gallery">
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-publishing-en.webp"
+                  width="1280"
+                  height="860"
+                  alt="Publishing to X, Facebook, Instagram and TikTok"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Four platforms, with approval in Telegram or fully automatic.</figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-site-en.webp"
+                  width="1280"
+                  height="860"
+                  alt="Website / blog bot: post text from a template without AI"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Website / blog bot: every new article on your site, one per run.</figcaption>
+            </figure>
+          </div>
+
+          <div class="compare">
+            <table>
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th>LITE</th>
+                  <th>PRO</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Bots</td>
+                  <td>1</td>
+                  <td>unlimited</td>
+                </tr>
+                <tr>
+                  <td>Sources: RSS, Google News, X profiles</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Schedule, pause, “Run now”</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Draft approval in Telegram</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Publishing without approval (autopilot)</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>X and Facebook</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Instagram</td>
+                  <td>by hand</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>TikTok video (free photo animation or Google Veo)</td>
+                  <td>script only</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Website / blog mode</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>AI text: Gemini, Ollama, any OpenAI-compatible API</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Groq, OpenRouter, Mistral and a fallback provider</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Photo from the article, post with a link</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>AI images and a brand image</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Monthly AI limits and counters</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Drafts, history, alerts, cost per post, EN/PL panel</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Updates and support</td>
+                  <td>community</td>
+                  <td>12 months</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing">
+        <div class="wrap">
+          <div class="center">
+            <h2>Pricing</h2>
+            <p class="lead">One payment, no subscription. Your installation keeps working after the update period.</p>
+          </div>
+          <div class="prices">
+            <div class="card price">
+              <h3>LITE</h3>
+              <div class="amount">Free</div>
+              <p>Open source under AGPL-3.0.</p>
+              <ul class="pro-list">
+                <li>1 bot, X and Facebook</li>
+                <li>Approval in Telegram</li>
+                <li>Updates from GitHub</li>
+              </ul>
+              <a class="btn primary" href="https://github.com/imdangro/poster-app#readme">Download on GitHub</a>
+            </div>
+            <div class="card price best">
+              <h3>PRO <span class="badge">launch price</span></h3>
+              <div class="amount">
+                $79 <small><s>$99</s> · one-time</small>
+              </div>
+              <p>Launch price for the first 20 licences.</p>
+              <ul class="pro-list">
+                <li>All PRO features</li>
+                <li>12 months of updates and support</li>
+                <li>Renewal: $49 per year – optional</li>
+              </ul>
+              <a class="btn pro" data-buy href="#pricing">Buy PRO</a>
+            </div>
+            <div class="card price">
+              <h3>Installation service</h3>
+              <div class="amount"><small>on request</small></div>
+              <p>Poster PRO installed and set up for you.</p>
+              <ul class="pro-list">
+                <li>Installation on your NAS or server</li>
+                <li>X, Meta and TikTok developer apps</li>
+                <li>Your first bot, ready to publish</li>
+              </ul>
+              <a class="btn" href="https://github.com/imdangro" data-contact>Contact</a>
+            </div>
+          </div>
+          <p class="note center">Payments are handled by Polar (merchant of record).</p>
+        </div>
+      </section>
+
+      <section id="faq">
+        <div class="wrap">
+          <h2 class="center">FAQ</h2>
+          <details>
+            <summary>What do I need to run Poster?</summary>
+            <p>
+              A NAS or a Linux server with Docker and Docker Compose v2, about 1 GB of free RAM and a Telegram bot. The guide uses a UGREEN
+              NAS with UGOS as the example, but any Docker host works.
+            </p>
+          </details>
+          <details>
+            <summary>How much does running it cost?</summary>
+            <p>
+              Poster LITE is free. AI text usually fits in a free quota (a Gemini key from a project without billing) or runs on your own
+              hardware with Ollama. Publishing through the X API is billed by X: in 2026 about USD 0.015 for a post with a photo and about
+              USD 0.20 for a post with a link.
+            </p>
+          </details>
+          <details>
+            <summary>Do I have to expose my NAS to the internet?</summary>
+            <p>
+              No. The panel polls Telegram for button clicks and talks to the social media APIs with outgoing connections only. For remote
+              access a VPN such as Tailscale is the simplest option.
+            </p>
+          </details>
+          <details>
+            <summary>What happens when the 12 months of PRO updates end?</summary>
+            <p>Your installation keeps working with no time limit. Only updates stop until you renew the licence.</p>
+          </details>
+          <details>
+            <summary>Can I move from LITE to PRO later?</summary>
+            <p>
+              Yes. After the purchase run <code>sudo bash scripts/upgrade-to-pro.sh</code> in the project directory and enter the license
+              key from the email. PRO uses the same data directory, so your bot, keys and history stay where they are.
+            </p>
+          </details>
+          <details>
+            <summary>Is reading X profiles allowed?</summary>
+            <p>
+              X profiles are optional. Reading them through RSSHub uses a separate X account and may be against the X terms – RSS feeds of
+              news sites are the safe default.
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===================================================================================== POLSKI -->
+    <main lang="pl">
+      <section class="hero">
+        <div class="wrap center">
+          <span class="eyebrow">Na własnym serwerze · open source · bez abonamentu</span>
+          <h1>Własny bot newsowy do mediów społecznościowych</h1>
+          <p class="lead">
+            Poster działa 24/7 na Twoim NAS-ie albo serwerze. Zbiera najnowsze wiadomości z kanałów RSS, Google News i X, AI wybiera
+            najważniejszą i pisze posty, a po Twoim ✅ w Telegramie bot publikuje je na X i Facebooku.
+          </p>
+          <div class="btns">
+            <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md">Pobierz darmowy LITE</a>
+            <a class="btn" href="#pro-pl">Zobacz, co daje PRO</a>
+          </div>
+          <p class="note">LITE jest darmowy, na licencji AGPL-3.0. Wystarczy Docker na NAS-ie albo serwerze z Linuksem.</p>
+          <div class="shot">
+            <img
+              src="img/lite-dashboard-pl.webp"
+              width="1280"
+              height="860"
+              alt="Pulpit Postera: karta bota, stan usług i ostatnie działania"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="how-pl">
+        <div class="wrap">
+          <div class="center">
+            <h2>Jak to działa</h2>
+            <p class="lead">Temat i źródła ustawiasz raz. Resztę Poster robi sam, według harmonogramu.</p>
+          </div>
+          <div class="steps">
+            <div class="card">
+              <div class="icon">📰</div>
+              <div class="num">1 · ŹRÓDŁA</div>
+              <h3>Świeże newsy</h3>
+              <p>Kanały RSS portali, Google News i profile X. Duplikaty i stare wiadomości odpadają.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🤖</div>
+              <div class="num">2 · AI</div>
+              <h3>Wybór i tekst</h3>
+              <p>Gemini albo model na Twoim sprzęcie (Ollama) wybiera najważniejszą wiadomość i pisze posty.</p>
+            </div>
+            <div class="card">
+              <div class="icon">✅</div>
+              <div class="num">3 · TELEGRAM</div>
+              <h3>Ty akceptujesz</h3>
+              <p>Draft ze zdjęciem z artykułu trafia do Telegrama. ✅ publikuje, ❌ odrzuca.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🚀</div>
+              <div class="num">4 · PUBLIKACJA</div>
+              <h3>Opublikowane</h3>
+              <p>X i Facebook dostają post, a Ty – raport. Nieudaną platformę ponawiasz jednym kliknięciem 🔁.</p>
+            </div>
+          </div>
+
+          <div class="feature">
+            <div>
+              <h2>Harmonogram jak u człowieka</h2>
+              <p class="lead">Co kilka godzin albo o wybranych godzinach – w wybrane dni tygodnia.</p>
+              <ul>
+                <li>Podgląd najbliższych uruchomień przed zapisaniem</li>
+                <li>Losowe przesunięcie do 45 minut, żeby posty nie wychodziły co do minuty</li>
+                <li>Pauza, wznowienie i „Uruchom teraz” jednym kliknięciem</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img src="img/lite-schedule-pl.webp" width="1280" height="860" alt="Ustawienia harmonogramu bota" loading="lazy" />
+            </div>
+          </div>
+          <div class="feature flip">
+            <div>
+              <h2>Koszty pod kontrolą</h2>
+              <p class="lead">Karta „Koszt jednego posta” pokazuje, co kosztuje przy obecnych ustawieniach.</p>
+              <ul>
+                <li>Zdjęcie z artykułu jest za darmo – bez płatnego generowania grafik</li>
+                <li>Tekst AI zwykle mieści się w darmowym limicie (klucz Gemini bez billingu) albo działa na Twoim sprzęcie</li>
+                <li>Orientacyjny koszt posta przez X API widzisz, zanim włączysz publikację</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img src="img/lite-ai-pl.webp" width="1280" height="860" alt="Koszt jednego posta i ustawienia AI" loading="lazy" />
+            </div>
+          </div>
+          <div class="feature">
+            <div>
+              <h2>Każdy draft w archiwum</h2>
+              <p class="lead">
+                Grafiki i teksty wszystkich postów zostają na Twoim NAS-ie – do skopiowania, pobrania albo ręcznej publikacji.
+              </p>
+              <ul>
+                <li>Teksty na X i Facebooka oraz scenariusz TikToka</li>
+                <li>Wyniki publikacji z linkami do postów</li>
+                <li>Uzasadnienie, dlaczego AI wybrało tę wiadomość</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img
+                src="img/lite-draft-pl.webp"
+                width="1280"
+                height="860"
+                alt="Szczegóły draftu: grafika, teksty postów i scenariusz TikToka"
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          <div class="grid3">
+            <div class="card">
+              <div class="icon">🔐</div>
+              <h3>Klucze zostają u Ciebie</h3>
+              <p>Klucze API i tokeny kont leżą tylko w panelu na Twoim NAS-ie. Bez konta w chmurze i bez śledzenia.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🏠</div>
+              <h3>Bez otwierania portów</h3>
+              <p>Panel sam odpytuje Telegram, więc NAS nie musi być wystawiony do internetu.</p>
+            </div>
+            <div class="card">
+              <div class="icon">📱</div>
+              <h3>Po polsku i po angielsku</h3>
+              <p>Panel, wiadomości w Telegramie i dokumentacja w obu językach. Panel działa też na telefonie.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pro-pl" class="pro">
+        <div class="wrap">
+          <div class="center">
+            <span class="eyebrow">Poster PRO</span>
+            <h2>Dla prowadzących więcej niż jeden profil</h2>
+            <p class="lead">Ten sam program z większą liczbą botów, platform i automatyzacji – a do tego rok aktualizacji i wsparcia.</p>
+          </div>
+          <div class="feature">
+            <ul class="pro-list">
+              <li><b>Wiele botów</b> – każdy z własnym tematem, kontami, harmonogramem i czatem Telegram; kopia bota jednym kliknięciem</li>
+              <li>
+                <b>Instagram i TikTok</b> – posty ze zdjęciem na Instagramie i 8-sekundowe pionowe wideo na TikToka (darmowa animacja
+                zdjęcia albo Google Veo)
+              </li>
+              <li>
+                <b>Twoja strona albo blog</b> – każdy nowy artykuł staje się postami na wszystkich platformach, z zajawką AI albo z
+                darmowego szablonu
+              </li>
+              <li><b>Grafika AI i grafika marki</b>, gdy artykuł nie ma zdjęcia</li>
+              <li><b>Autopilot</b> – publikacja bez akceptacji</li>
+              <li><b>Więcej dostawców AI</b> – Groq, OpenRouter, Mistral i dostawca zapasowy; miesięczne limity i liczniki AI</li>
+            </ul>
+            <div class="shot">
+              <img src="img/pro-dashboard-pl.webp" width="1280" height="860" alt="Pulpit wersji PRO z trzema botami" loading="lazy" />
+            </div>
+          </div>
+          <div class="gallery">
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-publishing-pl.webp"
+                  width="1280"
+                  height="860"
+                  alt="Publikacja na X, Facebooku, Instagramie i TikToku"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Cztery platformy – z akceptacją w Telegramie albo w pełni automatycznie.</figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-site-pl.webp"
+                  width="1280"
+                  height="860"
+                  alt="Bot strony / bloga: tekst posta z szablonu bez AI"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Bot strony / bloga: każdy nowy artykuł z Twojej strony, jeden na uruchomienie.</figcaption>
+            </figure>
+          </div>
+
+          <div class="compare">
+            <table>
+              <thead>
+                <tr>
+                  <th>Funkcja</th>
+                  <th>LITE</th>
+                  <th>PRO</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Boty</td>
+                  <td>1</td>
+                  <td>bez limitu</td>
+                </tr>
+                <tr>
+                  <td>Źródła: RSS, Google News, profile X</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Harmonogram, pauza, „Uruchom teraz”</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Akceptacja draftów w Telegramie</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Publikacja bez akceptacji (autopilot)</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>X i Facebook</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Instagram</td>
+                  <td>ręcznie</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Wideo na TikToka (darmowa animacja zdjęcia albo Google Veo)</td>
+                  <td>tylko scenariusz</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Tryb strony / bloga</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Tekst AI: Gemini, Ollama, dowolne API zgodne z OpenAI</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Groq, OpenRouter, Mistral i dostawca zapasowy</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Zdjęcie z artykułu, post z linkiem</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Grafika AI i grafika marki</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Miesięczne limity i liczniki AI</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Drafty, historia, alerty, koszt posta, panel PL/EN</td>
+                  <td class="yes">✓</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Aktualizacje i wsparcie</td>
+                  <td>społeczność</td>
+                  <td>12 miesięcy</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing-pl">
+        <div class="wrap">
+          <div class="center">
+            <h2>Cennik</h2>
+            <p class="lead">Jedna płatność, bez abonamentu. Po okresie aktualizacji Twoja instalacja działa dalej.</p>
+          </div>
+          <div class="prices">
+            <div class="card price">
+              <h3>LITE</h3>
+              <div class="amount">0 zł</div>
+              <p>Open source na licencji AGPL-3.0.</p>
+              <ul class="pro-list">
+                <li>1 bot, X i Facebook</li>
+                <li>Akceptacja w Telegramie</li>
+                <li>Aktualizacje z GitHuba</li>
+              </ul>
+              <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md">Pobierz z GitHuba</a>
+            </div>
+            <div class="card price best">
+              <h3>PRO <span class="badge">cena na start</span></h3>
+              <div class="amount">
+                299 zł <small><s>399 zł</s> · jednorazowo</small>
+              </div>
+              <p>Cena startowa dla pierwszych 20 licencji.</p>
+              <ul class="pro-list">
+                <li>Wszystkie funkcje PRO</li>
+                <li>12 miesięcy aktualizacji i wsparcia</li>
+                <li>Przedłużenie: 199 zł za rok – opcjonalnie</li>
+              </ul>
+              <a class="btn pro" data-buy href="#pricing-pl">Kup PRO</a>
+            </div>
+            <div class="card price">
+              <h3>Wdrożenie</h3>
+              <div class="amount">od 800 zł</div>
+              <p>Poster PRO zainstalowany i skonfigurowany za Ciebie.</p>
+              <ul class="pro-list">
+                <li>Instalacja na Twoim NAS-ie albo serwerze</li>
+                <li>Aplikacje deweloperskie X, Meta i TikToka</li>
+                <li>Pierwszy bot gotowy do publikacji</li>
+              </ul>
+              <a class="btn" href="https://github.com/imdangro" data-contact>Kontakt</a>
+            </div>
+          </div>
+          <p class="note center">Płatności obsługuje Polar jako sprzedawca (merchant of record).</p>
+        </div>
+      </section>
+
+      <section id="faq-pl">
+        <div class="wrap">
+          <h2 class="center">Pytania</h2>
+          <details>
+            <summary>Czego potrzebuję, żeby uruchomić Postera?</summary>
+            <p>
+              NAS-a albo serwera z Linuksem, Dockerem i Docker Compose v2, ok. 1 GB wolnej pamięci RAM oraz bota w Telegramie. Instrukcja
+              pokazuje NAS UGREEN z UGOS, ale działa każdy host z Dockerem.
+            </p>
+          </details>
+          <details>
+            <summary>Ile kosztuje działanie?</summary>
+            <p>
+              Poster LITE jest darmowy. Tekst AI zwykle mieści się w darmowym limicie (klucz Gemini z projektu bez billingu) albo działa na
+              Twoim sprzęcie przez Ollamę. Publikację przez X API rozlicza X: w 2026 r. ok. 0,015 USD za post ze zdjęciem i ok. 0,20 USD za
+              post z linkiem.
+            </p>
+          </details>
+          <details>
+            <summary>Czy muszę wystawiać NAS-a do internetu?</summary>
+            <p>
+              Nie. Panel sam odpytuje Telegram o kliknięcia, a z API platform łączy się tylko połączeniami wychodzącymi. Do zdalnego dostępu
+              najprościej użyć VPN, np. Tailscale.
+            </p>
+          </details>
+          <details>
+            <summary>Co się dzieje po 12 miesiącach aktualizacji PRO?</summary>
+            <p>
+              Twoja instalacja działa dalej, bez ograniczeń czasowych. Do czasu przedłużenia licencji nie dostajesz tylko nowych wersji.
+            </p>
+          </details>
+          <details>
+            <summary>Czy mogę później przejść z LITE na PRO?</summary>
+            <p>
+              Tak. Po zakupie uruchom w katalogu projektu <code>sudo bash scripts/upgrade-to-pro.sh</code> i podaj klucz licencyjny z
+              e-maila. PRO używa tego samego katalogu danych, więc bot, klucze i historia zostają.
+            </p>
+          </details>
+          <details>
+            <summary>Czy wolno czytać profile X?</summary>
+            <p>
+              Profile X są opcjonalne. Odczyt przez RSSHub korzysta z osobnego konta X i może naruszać regulamin X – bezpiecznym wyborem są
+              kanały RSS portali.
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span>© 2026 Daniel Grodowski · Poster LITE: AGPL-3.0</span>
+        <span>
+          <a href="https://github.com/imdangro/poster-app"><span lang="en">Source code</span><span lang="pl">Kod źródłowy</span></a>
+          ·
+          <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.md"
+            ><span lang="en">Security</span><span lang="pl">Bezpieczeństwo</span></a
+          >
+          ·
+          <a href="https://github.com/imdangro/poster-app/blob/main/CONTRIBUTING.md"
+            ><span lang="en">Contributing</span><span lang="pl">Współpraca</span></a
+          >
+        </span>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        // Adres zakupu PRO (Polar) – pusty = sprzedaż jeszcze nie ruszyła, przycisk pokazuje „wkrótce”
+        var CHECKOUT_URL = '';
+        // Kontakt w sprawie wdrożenia – np. 'mailto:kontakt@twojadomena.pl' zamiast profilu GitHub
+        var CONTACT_URL = 'https://github.com/imdangro';
+        var META = {
+          en: {
+            title: 'Poster – your own news bot for social media',
+            soon: 'Coming soon',
+          },
+          pl: {
+            title: 'Poster – własny bot newsowy do mediów społecznościowych',
+            soon: 'Wkrótce',
+          },
+        };
+        var root = document.documentElement;
+        function store(lang) {
+          try {
+            localStorage.setItem('poster-site-lang', lang);
+          } catch (e) {}
+        }
+        function saved() {
+          try {
+            return localStorage.getItem('poster-site-lang');
+          } catch (e) {
+            return null;
+          }
+        }
+        function setLang(lang, remember) {
+          if (!META[lang]) lang = 'en';
+          root.setAttribute('data-lang', lang);
+          root.lang = lang;
+          document.title = META[lang].title;
+          document.querySelectorAll('[data-set-lang]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.getAttribute('data-set-lang') === lang));
+          });
+          if (remember) store(lang);
+        }
+        var param = new URLSearchParams(location.search).get('lang');
+        var browser = (navigator.language || '').toLowerCase().indexOf('pl') === 0 ? 'pl' : 'en';
+        setLang(META[param] ? param : saved() || browser, !!META[param]);
+        document.querySelectorAll('[data-set-lang]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            setLang(b.getAttribute('data-set-lang'), true);
+          });
+        });
+        document.querySelectorAll('[data-contact]').forEach(function (a) {
+          a.href = CONTACT_URL;
+        });
+        document.querySelectorAll('[data-buy]').forEach(function (a) {
+          if (CHECKOUT_URL) {
+            a.href = CHECKOUT_URL;
+            return;
+          }
+          a.textContent = a.closest('[lang]').getAttribute('lang') === 'pl' ? META.pl.soon : META.en.soon;
+          a.setAttribute('aria-disabled', 'true');
+          a.addEventListener('click', function (e) {
+            e.preventDefault();
+          });
+        });
+        // zrzut ekranu w pełnym rozmiarze: klik otwiera, klik albo Esc zamyka
+        function closeBox() {
+          var box = document.querySelector('.lightbox');
+          if (box) box.remove();
+        }
+        document.addEventListener('click', function (e) {
+          var img = e.target.closest('.shot img');
+          if (!img) return;
+          var box = document.createElement('div');
+          box.className = 'lightbox';
+          var big = document.createElement('img');
+          big.src = img.currentSrc || img.src;
+          big.alt = img.alt;
+          box.appendChild(big);
+          box.addEventListener('click', closeBox);
+          document.body.appendChild(box);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') closeBox();
+        });
+      })();
+    </script>
+  </body>
+</html>
