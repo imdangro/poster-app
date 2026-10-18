@@ -10,10 +10,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Poster – your own news bot for social media</title>
+    <title>Poster – social media automation on your own server</title>
     <meta
       name="description"
-      content="Poster runs 24/7 on your NAS or server: it collects news, writes posts with AI and publishes them to X and Facebook after your approval in Telegram. Free LITE edition (AGPL) and PRO."
+      content="Poster automates your social media from your own NAS or server: it follows news on your topic, drafts posts with AI and publishes them to X and Facebook after your approval in Telegram. Free LITE edition (AGPL) and PRO."
     />
     <link
       rel="icon"
@@ -540,10 +540,10 @@
       <section class="hero">
         <div class="wrap center">
           <span class="eyebrow">Self-hosted · open source · no subscription</span>
-          <h1>Your own news bot for social media</h1>
+          <h1>Social media on autopilot – on your own server</h1>
           <p class="lead">
-            Poster runs 24/7 on your NAS or server. It collects the latest news from RSS feeds, Google News and X, lets AI pick the best
-            story and write the posts – and publishes them to X and Facebook after your ✅ in Telegram.
+            Poster runs 24/7 on your NAS or server and keeps your profiles busy: it follows the news on your topic (RSS feeds, Google News,
+            X), lets AI pick the best story and draft the posts – and publishes them to X and Facebook after your ✅ in Telegram.
           </p>
           <div class="btns">
             <a class="btn primary" href="https://github.com/imdangro/poster-app#readme">Download free LITE</a>
@@ -674,11 +674,14 @@
             <ul class="pro-list">
               <li><b>Multiple bots</b> – each with its own topic, accounts, schedule and Telegram chat; duplicate a bot in one click</li>
               <li>
-                <b>Instagram and TikTok</b> – photo posts on Instagram and an 8-second vertical video for TikTok (free photo animation or
-                Google Veo)
+                <b>Instagram and TikTok</b> – photo posts on Instagram and an 8-second vertical TikTok video made from the post image
+                (optionally Google Veo with your own key)
               </li>
               <li><b>Your website or blog</b> – every new article becomes posts on all platforms, with an AI teaser or a free template</li>
-              <li><b>AI images and a brand image</b> when the article has no photo</li>
+              <li>
+                <b>Brand image or an illustration from your own AI account</b> when the article has no photo (or for every post, if you
+                choose)
+              </li>
               <li><b>Autopilot</b> – publishing without approval</li>
               <li><b>More AI providers</b> – Groq, OpenRouter, Mistral and a fallback provider; monthly AI limits and usage counters</li>
             </ul>
@@ -759,7 +762,7 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
-                  <td>TikTok video (free photo animation or Google Veo)</td>
+                  <td>TikTok video from the post image (Google Veo optional)</td>
                   <td>script only</td>
                   <td class="yes">✓</td>
                 </tr>
@@ -784,7 +787,7 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
-                  <td>AI images and a brand image</td>
+                  <td>Brand image, illustrations from your own AI account</td>
                   <td class="no">–</td>
                   <td class="yes">✓</td>
                 </tr>
@@ -908,10 +911,10 @@
       <section class="hero">
         <div class="wrap center">
           <span class="eyebrow">Na własnym serwerze · open source · bez abonamentu</span>
-          <h1>Własny bot newsowy do mediów społecznościowych</h1>
+          <h1>Autopilot social mediów na Twoim serwerze</h1>
           <p class="lead">
-            Poster działa 24/7 na Twoim NAS-ie albo serwerze. Zbiera najnowsze wiadomości z kanałów RSS, Google News i X, AI wybiera
-            najważniejszą i pisze posty, a po Twoim ✅ w Telegramie bot publikuje je na X i Facebooku.
+            Poster działa 24/7 na Twoim NAS-ie albo serwerze i prowadzi Twoje profile: śledzi wiadomości z Twojego tematu (kanały RSS,
+            Google News, X), AI wybiera najważniejszą i przygotowuje posty, a po Twoim ✅ w Telegramie publikuje je na X i Facebooku.
           </p>
           <div class="btns">
             <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md">Pobierz darmowy LITE</a>
@@ -1044,14 +1047,17 @@
             <ul class="pro-list">
               <li><b>Wiele botów</b> – każdy z własnym tematem, kontami, harmonogramem i czatem Telegram; kopia bota jednym kliknięciem</li>
               <li>
-                <b>Instagram i TikTok</b> – posty ze zdjęciem na Instagramie i 8-sekundowe pionowe wideo na TikToka (darmowa animacja
-                zdjęcia albo Google Veo)
+                <b>Instagram i TikTok</b> – posty ze zdjęciem na Instagramie i 8-sekundowe pionowe wideo na TikToka z grafiki posta
+                (opcjonalnie Google Veo z Twoim kluczem)
               </li>
               <li>
                 <b>Twoja strona albo blog</b> – każdy nowy artykuł staje się postami na wszystkich platformach, z zajawką AI albo z
                 darmowego szablonu
               </li>
-              <li><b>Grafika AI i grafika marki</b>, gdy artykuł nie ma zdjęcia</li>
+              <li>
+                <b>Grafika marki albo ilustracja z Twojego konta AI</b>, gdy artykuł nie ma zdjęcia (albo do każdego posta, jeśli
+                wybierzesz)
+              </li>
               <li><b>Autopilot</b> – publikacja bez akceptacji</li>
               <li><b>Więcej dostawców AI</b> – Groq, OpenRouter, Mistral i dostawca zapasowy; miesięczne limity i liczniki AI</li>
             </ul>
@@ -1132,7 +1138,7 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
-                  <td>Wideo na TikToka (darmowa animacja zdjęcia albo Google Veo)</td>
+                  <td>Wideo na TikToka z grafiki posta (opcjonalnie Google Veo)</td>
                   <td>tylko scenariusz</td>
                   <td class="yes">✓</td>
                 </tr>
@@ -1157,7 +1163,7 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
-                  <td>Grafika AI i grafika marki</td>
+                  <td>Grafika marki, ilustracje z Twojego konta AI</td>
                   <td class="no">–</td>
                   <td class="yes">✓</td>
                 </tr>
@@ -1303,11 +1309,11 @@
         var CONTACT_URL = 'https://github.com/imdangro';
         var META = {
           en: {
-            title: 'Poster – your own news bot for social media',
+            title: 'Poster – social media automation on your own server',
             soon: 'Coming soon',
           },
           pl: {
-            title: 'Poster – własny bot newsowy do mediów społecznościowych',
+            title: 'Poster – automatyzacja social mediów na Twoim serwerze',
             soon: 'Wkrótce',
           },
         };
