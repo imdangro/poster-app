@@ -2,9 +2,11 @@
 <!--
   Strona produktu Poster (GitHub Pages z katalogu docs/ repozytorium poster-app). Jeden plik, bez zewnętrznych skryptów
   i czcionek. Dwa języki: <main lang="en"> i <main lang="pl">, wybór: ?lang=… → zapamiętany → język przeglądarki.
-  Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (Polar, etap 6; pusty = przycisk „Wkrótce”),
-  CONTACT_URL – kontakt w sprawie wdrożenia (dziś profil GitHub, np. mailto: po zakupie domeny). Ceny w sekcji
-  „Pricing / Cennik” są zatwierdzone; cenę startową zmień po sprzedaży pierwszych 20 licencji.
+  Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (etap 6; pusty = przycisk „Wkrótce”),
+  CONTACT_URL – kontakt w sprawie wdrożenia (dziś profil GitHub, np. mailto: po zakupie domeny), LITE_RELEASED – czy
+  kod LITE jest już w repozytorium (false ustawia tools/publish-site.sh: przyciski „Pobierz” → „wkrótce”, bez linków
+  do plików repozytorium w stopce). Ceny w sekcji „Pricing / Cennik” są zatwierdzone; cenę startową zmień po sprzedaży
+  pierwszych 20 licencji.
 -->
 <html lang="en" data-lang="en">
   <head>
@@ -13,7 +15,7 @@
     <title>Poster – social media automation on your own server</title>
     <meta
       name="description"
-      content="Poster automates your social media from your own NAS or server: it follows news on your topic, drafts posts with AI and publishes them to X and Facebook after your approval in Telegram. Free LITE edition (AGPL) and PRO."
+      content="Poster automates your social media from your own NAS or server: it follows news on your topic, drafts posts with AI, adapts your own posts to every platform and publishes them to X and Facebook. Free LITE edition (AGPL) and PRO."
     />
     <link
       rel="icon"
@@ -543,10 +545,13 @@
           <h1>Social media on autopilot – on your own server</h1>
           <p class="lead">
             Poster runs 24/7 on your NAS or server and keeps your profiles busy: it follows the news on your topic (RSS feeds, Google News,
-            X), lets AI pick the best story and draft the posts – and publishes them to X and Facebook after your ✅ in Telegram.
+            X), lets AI pick the best story and draft the posts – and publishes them to X and Facebook after your ✅ in Telegram. Got
+            something of your own to say? Write it once – AI adapts it to every platform.
           </p>
           <div class="btns">
-            <a class="btn primary" href="https://github.com/imdangro/poster-app#readme">Download free LITE</a>
+            <a class="btn primary" href="https://github.com/imdangro/poster-app#readme" data-lite="Free LITE – coming soon"
+              >Download free LITE</a
+            >
             <a class="btn" href="#pro">See what PRO adds</a>
           </div>
           <p class="note">LITE is free under the AGPL-3.0 license. Docker on a NAS or a Linux server is all you need.</p>
@@ -596,6 +601,28 @@
 
           <div class="feature">
             <div>
+              <h2>Write once, post everywhere</h2>
+              <p class="lead">
+                Your own news – a promotion, an event, an opinion? Write the post your way and AI adapts it to every platform.
+              </p>
+              <ul>
+                <li>A separate version for X (within 280 characters) and for Facebook – AI keeps your facts and adds none</li>
+                <li>A photo straight from your phone's camera and a link at the end of the post</li>
+                <li>Edit the versions, then publish right away or send them for approval in Telegram</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img
+                src="img/lite-compose-en.webp"
+                width="1280"
+                height="860"
+                alt="New post: your text and its versions for X and Facebook"
+                loading="lazy"
+              />
+            </div>
+          </div>
+          <div class="feature flip">
+            <div>
               <h2>A schedule that looks human</h2>
               <p class="lead">Every few hours or at the hours you pick – on the days you choose.</p>
               <ul>
@@ -608,7 +635,7 @@
               <img src="img/lite-schedule-en.webp" width="1280" height="860" alt="Bot schedule settings" loading="lazy" />
             </div>
           </div>
-          <div class="feature flip">
+          <div class="feature">
             <div>
               <h2>Costs under control</h2>
               <p class="lead">The “Cost of one post” card shows what costs money with the current settings.</p>
@@ -622,7 +649,7 @@
               <img src="img/lite-ai-en.webp" width="1280" height="860" alt="Cost of one post and the AI settings" loading="lazy" />
             </div>
           </div>
-          <div class="feature">
+          <div class="feature flip">
             <div>
               <h2>Every draft archived</h2>
               <p class="lead">Images and texts of all posts stay on your NAS – ready to copy, download or post by hand.</p>
@@ -682,7 +709,11 @@
                 <b>Brand image or an illustration from your own AI account</b> when the article has no photo (or for every post, if you
                 choose)
               </li>
-              <li><b>Autopilot</b> – publishing without approval</li>
+              <li>
+                <b>Your own posts on all four platforms</b> – Instagram and TikTok versions too, with a brand image or an AI illustration
+                when you have no photo
+              </li>
+              <li><b>Autopilot</b> – publishing news without approval</li>
               <li><b>More AI providers</b> – Groq, OpenRouter, Mistral and a fallback provider; monthly AI limits and usage counters</li>
             </ul>
             <div class="shot">
@@ -713,6 +744,30 @@
                 />
               </div>
               <figcaption>Website / blog bot: every new article on your site, one per run.</figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-compose-en.webp"
+                  width="1280"
+                  height="860"
+                  alt="New post: versions for X, Facebook, Instagram and TikTok"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Your own post: versions for all four platforms, with your photo, a brand image or an AI image.</figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-ai-en.webp"
+                  width="1280"
+                  height="860"
+                  alt="AI and images: cost of one post, text provider and model"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>AI and images: cost of one post, text providers with a fallback, monthly AI limits.</figcaption>
             </figure>
           </div>
 
@@ -747,9 +802,14 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
-                  <td>Publishing without approval (autopilot)</td>
+                  <td>Publishing news without approval (autopilot)</td>
                   <td class="no">–</td>
                   <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Your own post adapted by AI, “Publish now”</td>
+                  <td>X, Facebook</td>
+                  <td>all 4 platforms</td>
                 </tr>
                 <tr>
                   <td>X and Facebook</td>
@@ -826,9 +886,10 @@
               <ul class="pro-list">
                 <li>1 bot, X and Facebook</li>
                 <li>Approval in Telegram</li>
+                <li>Your own posts adapted by AI</li>
                 <li>Updates from GitHub</li>
               </ul>
-              <a class="btn primary" href="https://github.com/imdangro/poster-app#readme">Download on GitHub</a>
+              <a class="btn primary" href="https://github.com/imdangro/poster-app#readme" data-lite="Coming soon">Download on GitHub</a>
             </div>
             <div class="card price best">
               <h3>PRO <span class="badge">launch price</span></h3>
@@ -845,7 +906,7 @@
             </div>
             <div class="card price">
               <h3>Installation service</h3>
-              <div class="amount"><small>on request</small></div>
+              <div class="amount"><small>Coming soon</small></div>
               <p>Poster PRO installed and set up for you.</p>
               <ul class="pro-list">
                 <li>Installation on your NAS or server</li>
@@ -855,7 +916,7 @@
               <a class="btn" href="https://github.com/imdangro" data-contact>Contact</a>
             </div>
           </div>
-          <p class="note center">Payments are handled by Polar (merchant of record).</p>
+          <p class="note center">Payments are handled by ****** (merchant of record).</p>
         </div>
       </section>
 
@@ -875,6 +936,13 @@
               Poster LITE is free. AI text usually fits in a free quota (a Gemini key from a project without billing) or runs on your own
               hardware with Ollama. Publishing through the X API is billed by X: in 2026 about USD 0.015 for a post with a photo and about
               USD 0.20 for a post with a link.
+            </p>
+          </details>
+          <details>
+            <summary>Can I publish my own posts, not only news?</summary>
+            <p>
+              Yes. In <b>New post</b> you write the text (optionally with a link and a photo), AI adapts it to every platform, and you
+              publish right away or after approval in Telegram. LITE posts to X and Facebook, PRO also to Instagram and TikTok.
             </p>
           </details>
           <details>
@@ -914,10 +982,13 @@
           <h1>Autopilot social mediów na Twoim serwerze</h1>
           <p class="lead">
             Poster działa 24/7 na Twoim NAS-ie albo serwerze i prowadzi Twoje profile: śledzi wiadomości z Twojego tematu (kanały RSS,
-            Google News, X), AI wybiera najważniejszą i przygotowuje posty, a po Twoim ✅ w Telegramie publikuje je na X i Facebooku.
+            Google News, X), AI wybiera najważniejszą i przygotowuje posty, a po Twoim ✅ w Telegramie publikuje je na X i Facebooku. Masz
+            coś własnego do ogłoszenia? Napisz raz – AI dopasuje post do każdej platformy.
           </p>
           <div class="btns">
-            <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md">Pobierz darmowy LITE</a>
+            <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md" data-lite="Darmowy LITE – wkrótce"
+              >Pobierz darmowy LITE</a
+            >
             <a class="btn" href="#pro-pl">Zobacz, co daje PRO</a>
           </div>
           <p class="note">LITE jest darmowy, na licencji AGPL-3.0. Wystarczy Docker na NAS-ie albo serwerze z Linuksem.</p>
@@ -967,6 +1038,28 @@
 
           <div class="feature">
             <div>
+              <h2>Napisz raz, opublikuj wszędzie</h2>
+              <p class="lead">
+                Własna nowość – promocja, wydarzenie, opinia? Napisz post po swojemu, a AI dopasuje go do każdej platformy.
+              </p>
+              <ul>
+                <li>Osobna wersja na X (do 280 znaków) i na Facebooka – AI trzyma się Twoich faktów i nic nie dopisuje</li>
+                <li>Zdjęcie prosto z aparatu telefonu i link na końcu posta</li>
+                <li>Poprawiasz wersje i publikujesz od razu albo wysyłasz do akceptacji w Telegramie</li>
+              </ul>
+            </div>
+            <div class="shot">
+              <img
+                src="img/lite-compose-pl.webp"
+                width="1280"
+                height="860"
+                alt="Nowy post: Twój tekst i jego wersje na X i Facebooka"
+                loading="lazy"
+              />
+            </div>
+          </div>
+          <div class="feature flip">
+            <div>
               <h2>Harmonogram jak u człowieka</h2>
               <p class="lead">Co kilka godzin albo o wybranych godzinach – w wybrane dni tygodnia.</p>
               <ul>
@@ -979,7 +1072,7 @@
               <img src="img/lite-schedule-pl.webp" width="1280" height="860" alt="Ustawienia harmonogramu bota" loading="lazy" />
             </div>
           </div>
-          <div class="feature flip">
+          <div class="feature">
             <div>
               <h2>Koszty pod kontrolą</h2>
               <p class="lead">Karta „Koszt jednego posta” pokazuje, co kosztuje przy obecnych ustawieniach.</p>
@@ -993,7 +1086,7 @@
               <img src="img/lite-ai-pl.webp" width="1280" height="860" alt="Koszt jednego posta i ustawienia AI" loading="lazy" />
             </div>
           </div>
-          <div class="feature">
+          <div class="feature flip">
             <div>
               <h2>Każdy draft w archiwum</h2>
               <p class="lead">
@@ -1058,7 +1151,11 @@
                 <b>Grafika marki albo ilustracja z Twojego konta AI</b>, gdy artykuł nie ma zdjęcia (albo do każdego posta, jeśli
                 wybierzesz)
               </li>
-              <li><b>Autopilot</b> – publikacja bez akceptacji</li>
+              <li>
+                <b>Własne posty na wszystkich czterech platformach</b> – także wersje na Instagram i TikToka, z grafiką marki albo
+                ilustracją AI, gdy nie masz zdjęcia
+              </li>
+              <li><b>Autopilot</b> – publikacja newsów bez akceptacji</li>
               <li><b>Więcej dostawców AI</b> – Groq, OpenRouter, Mistral i dostawca zapasowy; miesięczne limity i liczniki AI</li>
             </ul>
             <div class="shot">
@@ -1089,6 +1186,30 @@
                 />
               </div>
               <figcaption>Bot strony / bloga: każdy nowy artykuł z Twojej strony, jeden na uruchomienie.</figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-compose-pl.webp"
+                  width="1280"
+                  height="860"
+                  alt="Nowy post: wersje na X, Facebooka, Instagram i TikToka"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Własny post: wersje na wszystkie cztery platformy – z Twoim zdjęciem, grafiką marki albo grafiką AI.</figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <img
+                  src="img/pro-ai-pl.webp"
+                  width="1280"
+                  height="860"
+                  alt="AI i grafika: koszt jednego posta, dostawca i model tekstu"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>AI i grafika: koszt jednego posta, dostawcy tekstu z zapasowym, miesięczne limity AI.</figcaption>
             </figure>
           </div>
 
@@ -1123,9 +1244,14 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
-                  <td>Publikacja bez akceptacji (autopilot)</td>
+                  <td>Publikacja newsów bez akceptacji (autopilot)</td>
                   <td class="no">–</td>
                   <td class="yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Własny post dopasowany przez AI, „Publikuj teraz”</td>
+                  <td>X, Facebook</td>
+                  <td>wszystkie 4 platformy</td>
                 </tr>
                 <tr>
                   <td>X i Facebook</td>
@@ -1202,9 +1328,12 @@
               <ul class="pro-list">
                 <li>1 bot, X i Facebook</li>
                 <li>Akceptacja w Telegramie</li>
+                <li>Własne posty dopasowane przez AI</li>
                 <li>Aktualizacje z GitHuba</li>
               </ul>
-              <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md">Pobierz z GitHuba</a>
+              <a class="btn primary" href="https://github.com/imdangro/poster-app/blob/main/README.pl.md" data-lite="Wkrótce"
+                >Pobierz z GitHuba</a
+              >
             </div>
             <div class="card price best">
               <h3>PRO <span class="badge">cena na start</span></h3>
@@ -1221,7 +1350,7 @@
             </div>
             <div class="card price">
               <h3>Wdrożenie</h3>
-              <div class="amount">od 800 zł</div>
+              <div class="amount"><small>Wkrótce</small></div>
               <p>Poster PRO zainstalowany i skonfigurowany za Ciebie.</p>
               <ul class="pro-list">
                 <li>Instalacja na Twoim NAS-ie albo serwerze</li>
@@ -1231,7 +1360,7 @@
               <a class="btn" href="https://github.com/imdangro" data-contact>Kontakt</a>
             </div>
           </div>
-          <p class="note center">Płatności obsługuje Polar jako sprzedawca (merchant of record).</p>
+          <p class="note center">Płatności obsługuje ****** jako sprzedawca (merchant of record).</p>
         </div>
       </section>
 
@@ -1251,6 +1380,13 @@
               Poster LITE jest darmowy. Tekst AI zwykle mieści się w darmowym limicie (klucz Gemini z projektu bez billingu) albo działa na
               Twoim sprzęcie przez Ollamę. Publikację przez X API rozlicza X: w 2026 r. ok. 0,015 USD za post ze zdjęciem i ok. 0,20 USD za
               post z linkiem.
+            </p>
+          </details>
+          <details>
+            <summary>Czy mogę publikować własne posty, nie tylko newsy?</summary>
+            <p>
+              Tak. W <b>Nowym poście</b> piszesz tekst (opcjonalnie z linkiem i zdjęciem), AI dopasowuje go do każdej platformy, a Ty
+              publikujesz od razu albo po akceptacji w Telegramie. LITE publikuje na X i Facebooku, PRO także na Instagramie i TikToku.
             </p>
           </details>
           <details>
@@ -1289,13 +1425,17 @@
         <span>© 2026 Daniel Grodowski · Poster LITE: AGPL-3.0</span>
         <span>
           <a href="https://github.com/imdangro/poster-app"><span lang="en">Source code</span><span lang="pl">Kod źródłowy</span></a>
-          ·
-          <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.md"
-            ><span lang="en">Security</span><span lang="pl">Bezpieczeństwo</span></a
+          <span data-repo-doc
+            >·
+            <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.md"
+              ><span lang="en">Security</span><span lang="pl">Bezpieczeństwo</span></a
+            ></span
           >
-          ·
-          <a href="https://github.com/imdangro/poster-app/blob/main/CONTRIBUTING.md"
-            ><span lang="en">Contributing</span><span lang="pl">Współpraca</span></a
+          <span data-repo-doc
+            >·
+            <a href="https://github.com/imdangro/poster-app/blob/main/CONTRIBUTING.md"
+              ><span lang="en">Contributing</span><span lang="pl">Współpraca</span></a
+            ></span
           >
         </span>
       </div>
@@ -1303,10 +1443,12 @@
 
     <script>
       (function () {
-        // Adres zakupu PRO (Polar) – pusty = sprzedaż jeszcze nie ruszyła, przycisk pokazuje „wkrótce”
+        // Adres zakupu PRO – pusty = sprzedaż jeszcze nie ruszyła, przycisk pokazuje „wkrótce”
         var CHECKOUT_URL = '';
         // Kontakt w sprawie wdrożenia – np. 'mailto:kontakt@twojadomena.pl' zamiast profilu GitHub
         var CONTACT_URL = 'https://github.com/imdangro';
+        // Kod LITE jest już w repozytorium poster-app? Publikacja samej strony (tools/publish-site.sh) ustawia false.
+        var LITE_RELEASED = false;
         var META = {
           en: {
             title: 'Poster – social media automation on your own server',
@@ -1362,6 +1504,17 @@
             e.preventDefault();
           });
         });
+        // przed wydaniem LITE: zamiast „Pobierz” – „wkrótce”, bez linków do plików, których w repozytorium jeszcze nie ma
+        if (!LITE_RELEASED) {
+          document.querySelectorAll('[data-lite]').forEach(function (a) {
+            a.textContent = a.getAttribute('data-lite');
+            a.setAttribute('aria-disabled', 'true');
+            a.removeAttribute('href');
+          });
+          document.querySelectorAll('[data-repo-doc]').forEach(function (el) {
+            el.remove();
+          });
+        }
         // zrzut ekranu w pełnym rozmiarze: klik otwiera, klik albo Esc zamyka
         function closeBox() {
           var box = document.querySelector('.lightbox');
