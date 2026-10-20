@@ -252,6 +252,14 @@
         height: auto;
         cursor: zoom-in;
       }
+      /* zbliżenie karty panelu obok opisu (np. kanał YouTube): tło panelu i wygaszony dół, jak w kartach .zoom */
+      .shot.fade {
+        background: #f4f5fa;
+      }
+      .shot.fade img {
+        -webkit-mask-image: linear-gradient(180deg, #000 80%, transparent);
+        mask-image: linear-gradient(180deg, #000 80%, transparent);
+      }
       /* powiększony zrzut po kliknięciu */
       .lightbox {
         position: fixed;
@@ -727,6 +735,9 @@
               </li>
               <li><b>Your website or blog</b> – every new article becomes posts on all platforms, with an AI teaser or a free template</li>
               <li>
+                <b>Your YouTube channel</b> – every new video announced on all platforms with its thumbnail and a link, no YouTube login
+              </li>
+              <li>
                 <b>Brand image</b> when the article has no photo (or for every post, if you choose) – your own picture, e.g. a logo on a
                 background
               </li>
@@ -736,7 +747,29 @@
               <li><b>More AI providers</b> – Groq, OpenRouter, Mistral and a fallback provider; a monthly AI usage counter</li>
             </ul>
             <div class="shot">
-              <img src="img/pro-dashboard-en.webp" width="1280" height="860" alt="PRO dashboard with three bots" loading="lazy" />
+              <img src="img/pro-dashboard-en.webp" width="1280" height="860" alt="PRO dashboard with four bots" loading="lazy" />
+            </div>
+          </div>
+          <div class="feature flip">
+            <div>
+              <h2>For YouTube creators</h2>
+              <p class="lead">
+                Published a new video? Poster announces it on X, Facebook, Instagram and TikTok – usually 15–30 minutes later.
+              </p>
+              <ul>
+                <li>Paste your channel link – no YouTube login and no API keys</li>
+                <li>An AI teaser or a free template, the video thumbnail and a youtu.be link</li>
+                <li>You choose: videos, Shorts, live stream recordings – a premiere waits until it starts</li>
+              </ul>
+            </div>
+            <div class="shot fade">
+              <img
+                src="img/pro-zoom-youtube-en.webp"
+                width="1420"
+                height="1066"
+                alt="YouTube channel bot: the channel check and its latest videos"
+                loading="lazy"
+              />
             </div>
           </div>
           <div class="zooms">
@@ -874,6 +907,11 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
+                  <td>YouTube channel mode (new videos → posts)</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
                   <td>AI text: Gemini, Ollama, any OpenAI-compatible API</td>
                   <td class="yes">✓</td>
                   <td class="yes">✓</td>
@@ -985,6 +1023,14 @@
             <p>
               Yes. In <b>New post</b> you write the text (optionally with a link and a photo), AI adapts it to every platform, and you
               publish right away or after approval in Telegram. LITE posts to X and Facebook, PRO also to Instagram and TikTok.
+            </p>
+          </details>
+          <details>
+            <summary>Does Poster work with my YouTube channel?</summary>
+            <p>
+              Yes, in PRO. Paste the channel link into a “YouTube channel” bot – Poster checks the public RSS feed of your videos every few
+              minutes, so you need no YouTube login and no API key. Every new video gets a post with its thumbnail and a link on all
+              platforms of the bot.
             </p>
           </details>
           <details>
@@ -1190,6 +1236,10 @@
                 darmowego szablonu
               </li>
               <li>
+                <b>Twój kanał YouTube</b> – każdy nowy film ogłoszony na wszystkich platformach z miniaturą i linkiem, bez logowania do
+                YouTube
+              </li>
+              <li>
                 <b>Grafika marki</b>, gdy artykuł nie ma zdjęcia (albo do każdego posta, jeśli wybierzesz) – Twój obrazek, np. logo na tle
               </li>
               <li>
@@ -1201,7 +1251,27 @@
               <li><b>Więcej dostawców AI</b> – Groq, OpenRouter, Mistral i dostawca zapasowy; miesięczny licznik użycia AI</li>
             </ul>
             <div class="shot">
-              <img src="img/pro-dashboard-pl.webp" width="1280" height="860" alt="Pulpit wersji PRO z trzema botami" loading="lazy" />
+              <img src="img/pro-dashboard-pl.webp" width="1280" height="860" alt="Pulpit wersji PRO z czterema botami" loading="lazy" />
+            </div>
+          </div>
+          <div class="feature flip">
+            <div>
+              <h2>Dla twórców YouTube</h2>
+              <p class="lead">Nowy film na kanale? Poster ogłosi go na X, Facebooku, Instagramie i TikToku – zwykle 15–30 minut później.</p>
+              <ul>
+                <li>Wklejasz link do kanału – bez logowania do YouTube i bez kluczy API</li>
+                <li>Zapowiedź od AI albo darmowy szablon, miniatura filmu i link youtu.be</li>
+                <li>Ty wybierasz: filmy, Shorts, zapisy transmisji – premiera czeka na start</li>
+              </ul>
+            </div>
+            <div class="shot fade">
+              <img
+                src="img/pro-zoom-youtube-pl.webp"
+                width="1420"
+                height="1066"
+                alt="Bot kanału YouTube: sprawdzenie kanału i jego najnowsze filmy"
+                loading="lazy"
+              />
             </div>
           </div>
           <div class="zooms">
@@ -1333,6 +1403,11 @@
                   <td class="yes">✓</td>
                 </tr>
                 <tr>
+                  <td>Tryb kanału YouTube (nowe filmy → posty)</td>
+                  <td class="no">–</td>
+                  <td class="yes">✓</td>
+                </tr>
+                <tr>
                   <td>Tekst AI: Gemini, Ollama, dowolne API zgodne z OpenAI</td>
                   <td class="yes">✓</td>
                   <td class="yes">✓</td>
@@ -1446,6 +1521,14 @@
             <p>
               Tak. W <b>Nowym poście</b> piszesz tekst (opcjonalnie z linkiem i zdjęciem), AI dopasowuje go do każdej platformy, a Ty
               publikujesz od razu albo po akceptacji w Telegramie. LITE publikuje na X i Facebooku, PRO także na Instagramie i TikToku.
+            </p>
+          </details>
+          <details>
+            <summary>Czy Poster działa z moim kanałem YouTube?</summary>
+            <p>
+              Tak, w PRO. Wklejasz link do kanału w bocie „Kanał YouTube” – Poster co kilka minut sprawdza publiczny kanał RSS z Twoimi
+              filmami, więc nie potrzebujesz logowania do YouTube ani klucza API. Każdy nowy film dostaje post z miniaturą i linkiem na
+              wszystkich platformach bota.
             </p>
           </details>
           <details>
