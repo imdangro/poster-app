@@ -5,7 +5,7 @@
   Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (etap 6; pusty = przycisk „Wkrótce”),
   CONTACT_URL – kontakt w sprawie wdrożenia (dziś profil GitHub, np. mailto: po zakupie domeny), LITE_RELEASED – czy
   kod LITE jest już w repozytorium (false ustawia tools/publish-site.sh: przyciski „Pobierz” → „wkrótce”, bez linków
-  do plików repozytorium w stopce). Ceny w sekcji „Pricing / Cennik” są zatwierdzone; cenę startową zmień po sprzedaży
+  do plików repozytorium w stopce i bez polecenia instalacji – docs/install.sh trafia na stronę dopiero z wersją LITE). Ceny w sekcji „Pricing / Cennik” są zatwierdzone; cenę startową zmień po sprzedaży
   pierwszych 20 licencji.
 -->
 <html lang="en" data-lang="en">
@@ -280,6 +280,44 @@
       .hero .shot {
         margin-top: 44px;
       }
+      /* polecenie instalacji (hero) – widoczne po wydaniu LITE */
+      .install {
+        max-width: 620px;
+        margin: 18px auto 0;
+      }
+      .install .note {
+        margin: 0 0 8px;
+      }
+      .cmd {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 8px 8px 16px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        text-align: left;
+      }
+      .cmd code {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere; /* na telefonie całe polecenie w dwóch liniach */
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 14px;
+      }
+      .cmd button {
+        flex: none;
+        padding: 7px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        background: var(--surface-2);
+        cursor: pointer;
+      }
       /* jak to działa */
       .steps {
         display: grid;
@@ -541,6 +579,10 @@
         .steps {
           grid-template-columns: 1fr;
         }
+        /* adres instalatora w jednej linii */
+        .cmd code {
+          font-size: 12.5px;
+        }
       }
     </style>
   </head>
@@ -584,6 +626,13 @@
             <a class="btn" href="#pro">See what PRO adds</a>
           </div>
           <p class="note">LITE is free under the AGPL-3.0 license. Docker on a NAS or a Linux server is all you need.</p>
+          <div class="install" data-repo-doc>
+            <p class="note">Install it with one command over SSH:</p>
+            <div class="cmd">
+              <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>
+              <button type="button" data-copy="Copied ✓">Copy</button>
+            </div>
+          </div>
           <div class="shot">
             <img
               src="img/lite-dashboard-en.webp"
@@ -1072,6 +1121,16 @@
               NAS with UGOS as the example, but any Docker host works.
             </p>
           </details>
+          <details data-repo-doc>
+            <summary>How do I install it?</summary>
+            <p>
+              Log in to your NAS or server over SSH and run <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>. The
+              installer checks Docker, downloads Poster, prepares the configuration, starts the containers and shows the panel address with
+              a one-time code for your password – you set everything else in the browser. Prefer to do it by hand? The
+              <a href="https://github.com/imdangro/poster-app#-step-by-step-installation-nas-or-a-server-with-docker">README</a> has a
+              step-by-step guide.
+            </p>
+          </details>
           <details>
             <summary>How much does running it cost?</summary>
             <p>
@@ -1111,8 +1170,9 @@
           <details>
             <summary>Can I move from LITE to PRO later?</summary>
             <p>
-              Yes. After the purchase run <code>sudo bash scripts/upgrade-to-pro.sh</code> in the project directory and enter the license
-              key from the email. PRO uses the same data directory, so your bot, keys and history stay where they are.
+              Yes. After the purchase paste the license key from the email in the panel (<i>Settings → PRO edition</i>) – the panel checks
+              it and shows one command to run over SSH: <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO uses the same data directory,
+              so your bot, keys and history stay where they are.
             </p>
           </details>
         </div>
@@ -1137,6 +1197,13 @@
             <a class="btn" href="#pro-pl">Zobacz, co daje PRO</a>
           </div>
           <p class="note">LITE jest darmowy, na licencji AGPL-3.0. Wystarczy Docker na NAS-ie albo serwerze z Linuksem.</p>
+          <div class="install" data-repo-doc>
+            <p class="note">Zainstalujesz go jednym poleceniem przez SSH:</p>
+            <div class="cmd">
+              <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>
+              <button type="button" data-copy="Skopiowano ✓">Kopiuj</button>
+            </div>
+          </div>
           <div class="shot">
             <img
               src="img/lite-dashboard-pl.webp"
@@ -1632,6 +1699,17 @@
               pokazuje NAS UGREEN z UGOS, ale działa każdy host z Dockerem.
             </p>
           </details>
+          <details data-repo-doc>
+            <summary>Jak zainstalować Postera?</summary>
+            <p>
+              Zaloguj się na NAS albo serwer przez SSH i uruchom <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>.
+              Instalator sprawdzi Dockera, pobierze Postera, przygotuje konfigurację, uruchomi kontenery i pokaże adres panelu z
+              jednorazowym kodem do ustawienia hasła – resztę ustawiasz w przeglądarce. Wolisz krok po kroku? Instrukcję znajdziesz w
+              <a href="https://github.com/imdangro/poster-app/blob/main/README.pl.md#-instalacja-krok-po-kroku-nas-lub-serwer-z-dockerem"
+                >README</a
+              >.
+            </p>
+          </details>
           <details>
             <summary>Ile kosztuje działanie?</summary>
             <p>
@@ -1673,8 +1751,9 @@
           <details>
             <summary>Czy mogę później przejść z LITE na PRO?</summary>
             <p>
-              Tak. Po zakupie uruchom w katalogu projektu <code>sudo bash scripts/upgrade-to-pro.sh</code> i podaj klucz licencyjny z
-              e-maila. PRO używa tego samego katalogu danych, więc bot, klucze i historia zostają.
+              Tak. Po zakupie wklej klucz licencyjny z e-maila w panelu (<i>Ustawienia → Wersja PRO</i>) – panel go sprawdzi i pokaże jedno
+              polecenie do uruchomienia przez SSH: <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO używa tego samego katalogu danych,
+              więc bot, klucze i historia zostają.
             </p>
           </details>
         </div>
@@ -1776,6 +1855,20 @@
             el.remove();
           });
         }
+        // „Kopiuj” przy poleceniu instalacji: tekst z <code> obok, na chwilę „Skopiowano ✓”
+        document.querySelectorAll('[data-copy]').forEach(function (b) {
+          var label = b.textContent;
+          b.addEventListener('click', function () {
+            var text = b.parentNode.querySelector('code').textContent;
+            if (!navigator.clipboard) return;
+            navigator.clipboard.writeText(text).then(function () {
+              b.textContent = b.getAttribute('data-copy');
+              setTimeout(function () {
+                b.textContent = label;
+              }, 2000);
+            });
+          });
+        });
         // zrzut ekranu w pełnym rozmiarze: klik otwiera, klik albo Esc zamyka
         function closeBox() {
           var box = document.querySelector('.lightbox');
