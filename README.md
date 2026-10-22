@@ -9,3 +9,5 @@ page: **[posterapp.pl](https://posterapp.pl/)**.
 posty z pomocą AI i publikuje je po Twojej akceptacji w Telegramie, a Twoje własne posty dopasowuje do każdej
 platformy. Darmowa wersja **LITE** (open source, AGPL) pojawi się w tym repozytorium wkrótce. Na razie jest tu tylko
 strona produktu: **[posterapp.pl](https://posterapp.pl/)**.
+
+📧 kontakt@posterapp.pl

@@ -1,12 +1,15 @@
 <!doctype html>
 <!--
   Strona produktu Poster (GitHub Pages z katalogu docs/ repozytorium poster-app). Jeden plik, bez zewnętrznych skryptów
-  i czcionek. Dwa języki: <main lang="en"> i <main lang="pl">, wybór: ?lang=… → zapamiętany → język przeglądarki.
+  i czcionek. Dwa języki: <main lang="en"> i <main lang="pl">, wybór: ?lang=… → zapamiętany → język przeglądarki
+  (zapamiętuje tylko kliknięcie przełącznika – w localStorage, bez plików cookie, więc bez banera zgody).
   Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (etap 6; pusty = przycisk „Wkrótce”),
-  CONTACT_URL – kontakt w sprawie wdrożenia (dziś profil GitHub, np. mailto: po zakupie domeny), LITE_RELEASED – czy
+  CONTACT_URL – kontakt w sprawie wdrożenia (e-mail kontakt@posterapp.pl, ten sam co w stopce), LITE_RELEASED – czy
   kod LITE jest już w repozytorium (false ustawia tools/publish-site.sh: przyciski „Pobierz” → „wkrótce”, bez linków
-  do plików repozytorium w stopce i bez polecenia instalacji – docs/install.sh trafia na stronę dopiero z wersją LITE). Ceny w sekcji „Pricing / Cennik” są zatwierdzone; cenę startową zmień po sprzedaży
-  pierwszych 20 licencji.
+  do plików repozytorium w stopce i bez polecenia instalacji – docs/install.sh trafia na stronę dopiero z wersją LITE).
+  Ceny w sekcji „Pricing / Cennik” są zatwierdzone. W Polarze PRO ma cenę regularną, a cenę startową daje rabat
+  z limitem 20 użyć przypięty do linku zakupu – po ich wyczerpaniu Polar sam go pomija, a tu usuń cenę startową
+  (tools/PUBLIKACJA.md → „Polar”).
 -->
 <html lang="en" data-lang="en">
   <head>
@@ -1087,7 +1090,7 @@
               <div class="amount">
                 $79 <small><s>$99</s> · one-time</small>
               </div>
-              <p>Launch price for the first 20 licences.</p>
+              <p>Launch price for the first 20 licences – the discount is applied at checkout.</p>
               <ul class="pro-list">
                 <li>All PRO features</li>
                 <li>12 months of updates and support</li>
@@ -1104,10 +1107,10 @@
                 <li>X, Meta, Threads and TikTok developer apps</li>
                 <li>Your first bot, ready to publish</li>
               </ul>
-              <a class="btn" href="https://github.com/imdangro" data-contact>Contact</a>
+              <a class="btn" href="mailto:kontakt@posterapp.pl" data-contact>Contact</a>
             </div>
           </div>
-          <p class="note center">Payments are handled by ****** (merchant of record).</p>
+          <p class="note center">Payments are handled by Polar as the merchant of record: it takes the payment and handles taxes.</p>
         </div>
       </section>
 
@@ -1170,9 +1173,10 @@
           <details>
             <summary>Can I move from LITE to PRO later?</summary>
             <p>
-              Yes. After the purchase paste the license key from the email in the panel (<i>Settings → PRO edition</i>) – the panel checks
-              it and shows one command to run over SSH: <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO uses the same data directory,
-              so your bot, keys and history stay where they are.
+              Yes. After the purchase copy the license key from the order page (<i>Access purchase</i> in the email from Polar) and paste it
+              in the panel (<i>Settings → PRO edition</i>) – the panel checks it and shows one command to run over SSH:
+              <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO uses the same data directory, so your bot, keys and history stay where
+              they are.
             </p>
           </details>
         </div>
@@ -1665,7 +1669,7 @@
               <div class="amount">
                 299 zł <small><s>399 zł</s> · jednorazowo</small>
               </div>
-              <p>Cena startowa dla pierwszych 20 licencji.</p>
+              <p>Cena startowa dla pierwszych 20 licencji – rabat naliczy się przy zakupie.</p>
               <ul class="pro-list">
                 <li>Wszystkie funkcje PRO</li>
                 <li>12 miesięcy aktualizacji i wsparcia</li>
@@ -1682,10 +1686,10 @@
                 <li>Aplikacje deweloperskie X, Meta, Threads i TikToka</li>
                 <li>Pierwszy bot gotowy do publikacji</li>
               </ul>
-              <a class="btn" href="https://github.com/imdangro" data-contact>Kontakt</a>
+              <a class="btn" href="mailto:kontakt@posterapp.pl" data-contact>Kontakt</a>
             </div>
           </div>
-          <p class="note center">Płatności obsługuje ****** jako sprzedawca (merchant of record).</p>
+          <p class="note center">Płatności obsługuje Polar jako sprzedawca (merchant of record): przyjmuje płatność i rozlicza podatki.</p>
         </div>
       </section>
 
@@ -1751,9 +1755,9 @@
           <details>
             <summary>Czy mogę później przejść z LITE na PRO?</summary>
             <p>
-              Tak. Po zakupie wklej klucz licencyjny z e-maila w panelu (<i>Ustawienia → Wersja PRO</i>) – panel go sprawdzi i pokaże jedno
-              polecenie do uruchomienia przez SSH: <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO używa tego samego katalogu danych,
-              więc bot, klucze i historia zostają.
+              Tak. Po zakupie skopiuj klucz licencyjny ze strony zamówienia (<i>Access purchase</i> w e-mailu od Polara) i wklej go w panelu
+              (<i>Ustawienia → Wersja PRO</i>) – panel go sprawdzi i pokaże jedno polecenie do uruchomienia przez SSH:
+              <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO używa tego samego katalogu danych, więc bot, klucze i historia zostają.
             </p>
           </details>
         </div>
@@ -1762,9 +1766,12 @@
 
     <footer>
       <div class="wrap">
-        <span>© 2026 Daniel Grodowski · Poster LITE: AGPL-3.0</span>
+        <span
+          >© 2026 Daniel Grodowski, Kraków · <a href="mailto:kontakt@posterapp.pl">kontakt@posterapp.pl</a> · Poster LITE: AGPL-3.0</span
+        >
         <span>
           <a href="https://github.com/imdangro/poster-app"><span lang="en">Source code</span><span lang="pl">Kod źródłowy</span></a>
+          · <a href="privacy.html?lang=en" lang="en">Privacy policy</a><a href="privacy.html?lang=pl" lang="pl">Polityka prywatności</a>
           <span data-repo-doc
             >·
             <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.md"
@@ -1785,8 +1792,8 @@
       (function () {
         // Adres zakupu PRO – pusty = sprzedaż jeszcze nie ruszyła, przycisk pokazuje „wkrótce”
         var CHECKOUT_URL = '';
-        // Kontakt w sprawie wdrożenia – np. 'mailto:kontakt@twojadomena.pl' zamiast profilu GitHub
-        var CONTACT_URL = 'https://github.com/imdangro';
+        // Kontakt w sprawie wdrożenia (przyciski „Kontakt” w cenniku)
+        var CONTACT_URL = 'mailto:kontakt@posterapp.pl';
         // Kod LITE jest już w repozytorium poster-app? Publikacja samej strony (tools/publish-site.sh) ustawia false.
         var LITE_RELEASED = false;
         var META = {
@@ -1824,7 +1831,7 @@
         }
         var param = new URLSearchParams(location.search).get('lang');
         var browser = (navigator.language || '').toLowerCase().indexOf('pl') === 0 ? 'pl' : 'en';
-        setLang(META[param] ? param : saved() || browser, !!META[param]);
+        setLang(META[param] ? param : saved() || browser, false);
         document.querySelectorAll('[data-set-lang]').forEach(function (b) {
           b.addEventListener('click', function () {
             setLang(b.getAttribute('data-set-lang'), true);
