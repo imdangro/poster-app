@@ -7,6 +7,14 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.0.1 – 2026-10-24
+
+- The *Copy* button (e.g. next to the PRO upgrade command in *Settings*) also works when the panel is opened via
+  `http://nas-address:7080` – it used to end with “Could not copy”. Next to the PRO upgrade command the panel now says
+  it can be run from any directory, and `upgrade-to-pro.sh` ends with the update command with its full path.
+- The menu shows *Calendar* and *Scheduled* with a PRO badge – they lead to a description of these PRO features with
+  a link to the product page.
+
 ## 1.0.0 – 2026-10-24
 
 - The first public version of Poster LITE – a free news bot: one bot, RSS, Google News and X profile sources,

@@ -581,6 +581,7 @@ window.POSTER_I18N.en = {
   'Napisz post': 'Write a post',
   'Post z linkiem: ok. {0} za post na X (płatne API X, ceny w X Developer Console).':
     'A post with a link: about {0} per post on X (paid X API, prices in the X Developer Console).',
+  Zaplanowane: 'Scheduled',
   'Wersje powstaną osobno dla każdego bota, w jego języku: {0}.': 'The versions are written separately for each bot, in its language: {0}.',
   'Wybrane boty nie mają włączonych platform – włącz je w zakładce Publikacja.':
     'The selected bots have no platforms turned on – turn them on in the Publishing tab.',
@@ -592,9 +593,18 @@ window.POSTER_I18N.en = {
   'Żadna z wybranych platform nie jest włączona w tym bocie.': 'None of the selected platforms is turned on in this bot.',
   'Pominięte w tym bocie (wyłączone w zakładce Publikacja): {0}': 'Skipped in this bot (turned off in the Publishing tab): {0}',
   'Nie wysłano:': 'Not sent:',
+  'Zaplanowane posty': 'Scheduled posts',
   'żadna z wybranych platform nie jest włączona w tym bocie': 'none of the selected platforms is turned on in this bot',
   'Nie wysłano: {0}': 'Not sent: {0}',
+  Kalendarz: 'Calendar',
   'Planowanie postów, posty cykliczne i kalendarz treści': 'Scheduling posts, recurring posts and a content calendar',
+  'Funkcja wersji PRO': 'A PRO feature',
+  'Kalendarz treści': 'Content calendar',
+  'Planowanie postów': 'Post scheduling',
+  'Wszystkie posty w jednym kalendarzu: zaplanowane i cykliczne, przebiegi botów i to, co już wyszło – dzień po dniu, z podglądem platform.':
+    'All your posts in one calendar: scheduled and recurring ones, bot runs and everything already published – day by day, with the platforms at a glance.',
+  'Własny post wyjdzie o wybranej godzinie – raz albo cyklicznie (np. co poniedziałek o 9:00), a przed każdym kolejnym wpisem AI napisze nową wersję tekstu.':
+    'Your own post goes out at the time you pick – once or on a schedule (e.g. every Monday at 9:00), and before each next post AI writes a fresh version of the text.',
   'Tekst i grafika': 'Text & images',
   'Skąd bot bierze grafikę do posta.': 'Where the bot takes the post image from.',
   'Sprawdź klucz': 'Check the key',
@@ -633,6 +643,7 @@ window.POSTER_I18N.en = {
   'licencja {0}': 'license {0}',
   'Teraz przez SSH na NAS-ie uruchom': 'Now run this on the NAS over SSH',
   'W katalogu projektu (np. /volume1/docker/poster). ': 'In the project directory (e.g. /volume1/docker/poster). ',
+  'Z dowolnego katalogu – polecenie ma pełną ścieżkę. ': 'From any directory – the command has the full path. ',
   'Skrypt nie zapyta o klucz: aktywuje licencję na tym NAS-ie i usunie klucz z panelu.':
     'The script will not ask for the key: it activates the license on this NAS and removes the key from the panel.',
   'Skrypt nie zapyta o klucz: aktywuje licencję na tym NAS-ie, przełączy instalację na PRO i usunie klucz z panelu. Boty, klucze i historia zostają bez zmian.':

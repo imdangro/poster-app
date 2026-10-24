@@ -426,6 +426,29 @@
       oninput: (e) => onchange(e.target.value),
     });
   }
+  // Schowek: navigator.clipboard działa tylko w bezpiecznym kontekście (HTTPS albo localhost), a panel w sieci domowej
+  // zwykle otwiera się przez http://adres-NAS-a – wtedy kopiujemy starym sposobem, przez ukryte pole tekstowe
+  async function copyText(text) {
+    if (window.isSecureContext && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {}
+    }
+    const back = document.activeElement;
+    const ta = h('textarea', { readOnly: true, style: { position: 'fixed', top: '0', left: '0', opacity: '0' } });
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length); // iOS zaznacza tylko tak
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (e) {}
+    ta.remove();
+    if (back && back.focus) back.focus();
+    return ok;
+  }
   function copyBtn(text) {
     return h(
       'button',
@@ -434,12 +457,8 @@
         type: 'button',
         title: tr('Kopiuj'),
         onclick: async () => {
-          try {
-            await navigator.clipboard.writeText(text);
-            toast(tr('Skopiowano'));
-          } catch (e) {
-            toast(tr('Nie udało się skopiować – zaznacz tekst ręcznie'), 'warn');
-          }
+          if (await copyText(text)) toast(tr('Skopiowano'));
+          else toast(tr('Nie udało się skopiować – zaznacz tekst ręcznie'), 'warn');
         },
       },
       icon('copy'),
@@ -659,6 +678,8 @@
         { class: 'nav' },
         link('#/', icon('home'), tr('Pulpit')),
         link('#/compose', icon('edit'), tr('Nowy post')),
+        link('#/calendar', icon('calendar'), tr('Kalendarz'), h('span', { class: 'badge pro' }, 'PRO')),
+        link('#/planned', icon('clock'), tr('Zaplanowane'), h('span', { class: 'badge pro' }, 'PRO')),
         link('#/drafts', icon('image'), tr('Drafty')),
         link('#/settings', icon('sliders'), tr('Ustawienia')),
       ),
@@ -738,12 +759,37 @@
       if (parts[0] === 'new') return await pageNew();
       if (parts[0] === 'bot' && parts[1]) return await pageBot(parts[1], parts[2] || 'general');
       if (parts[0] === 'compose') return await pageCompose(parts[1]);
+      if (parts[0] === 'planned' || parts[0] === 'calendar') return pageProPlanning(parts[0]);
       if (parts[0] === 'drafts') return await pageDrafts(parts[1]);
       if (parts[0] === 'settings') return await pageSettings();
       location.hash = '#/';
     } catch (e) {
       fill(mainEl, pageHead(tr('Ups…')), alertBox('bad', e.message));
     }
+  }
+
+  // Kalendarz i zaplanowane posty są w wersji PRO – w LITE pozycje menu prowadzą do opisu z linkiem do strony produktu
+  function pageProPlanning(which) {
+    const cal = which === 'calendar';
+    fill(
+      mainEl,
+      pageHead(cal ? tr('Kalendarz') : tr('Zaplanowane posty'), tr('Funkcja wersji PRO')),
+      h(
+        'div',
+        { class: 'stack' },
+        proCard(
+          cal ? tr('Kalendarz treści') : tr('Planowanie postów'),
+          cal
+            ? tr(
+                'Wszystkie posty w jednym kalendarzu: zaplanowane i cykliczne, przebiegi botów i to, co już wyszło – dzień po dniu, z podglądem platform.',
+              )
+            : tr(
+                'Własny post wyjdzie o wybranej godzinie – raz albo cyklicznie (np. co poniedziałek o 9:00), a przed każdym kolejnym wpisem AI napisze nową wersję tekstu.',
+              ),
+        ),
+        h('div', { class: 'row' }, proButton()),
+      ),
+    );
   }
 
   // ============================================================================================ PULPIT
@@ -3900,7 +3946,9 @@
           tr('Teraz przez SSH na NAS-ie uruchom'),
           h('div', { class: 'input-group' }, h('code', { class: 'cmdline' }, lk.command), copyBtn(lk.command)),
           [
-            lk.projectDir ? null : tr('W katalogu projektu (np. /volume1/docker/poster). '),
+            lk.projectDir
+              ? tr('Z dowolnego katalogu – polecenie ma pełną ścieżkę. ')
+              : tr('W katalogu projektu (np. /volume1/docker/poster). '),
             pro
               ? tr('Skrypt nie zapyta o klucz: aktywuje licencję na tym NAS-ie i usunie klucz z panelu.')
               : tr(

@@ -16,6 +16,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lang.sh
 . scripts/license.sh
+# polecenie aktualizacji z pełną ścieżką – działa z każdego katalogu
+UPDATE_CMD="sudo bash $PWD/scripts/update.sh"
 
 info() { printf '\033[1;34m[pro]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[%s]\033[0m %s\n' "$(m uwaga note)" "$*"; }
@@ -34,7 +36,7 @@ ORIGIN="$(dgit remote get-url origin)" || die "$(m "Nie mogę odczytać adresu r
 ALREADY_PRO=0
 if [ "$ORIGIN" = "$PRO_REPO" ]; then
   if [ ! -f "$PRO_STATE" ]; then # wersja PRO bez licencji na tym NAS-ie (np. wdrożenie) – nic do zrobienia
-    info "$(m "To już jest wersja PRO. Aktualizacje: sudo bash scripts/update.sh" "This is already the PRO edition. Updates: sudo bash scripts/update.sh")"
+    info "$(m "To już jest wersja PRO. Aktualizacje: $UPDATE_CMD" "This is already the PRO edition. Updates: $UPDATE_CMD")"
     exit 0
   fi
   ALREADY_PRO=1
@@ -151,7 +153,7 @@ fi
 
 VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' panel/package.json | head -n1)"
 info "$(m "Przebudowuję panel i importuję workflow (Poster PRO $VERSION)..." "Rebuilding the panel and importing the workflow (Poster PRO $VERSION)...")"
-bash scripts/update.sh --no-pull || die "$(m "Wersja PRO jest pobrana, ale przebudowa się nie udała – popraw błąd powyżej i uruchom: sudo bash scripts/update.sh" \
-  "The PRO edition is downloaded, but the rebuild failed – fix the error above and run: sudo bash scripts/update.sh")"
-info "$(m "Gotowe: Poster PRO $VERSION. Boty, klucze i historia zostały bez zmian. Aktualizacje: sudo bash scripts/update.sh" \
-  "Done: Poster PRO $VERSION. Bots, keys and history are unchanged. Updates: sudo bash scripts/update.sh")"
+bash scripts/update.sh --no-pull || die "$(m "Wersja PRO jest pobrana, ale przebudowa się nie udała – popraw błąd powyżej i uruchom: $UPDATE_CMD" \
+  "The PRO edition is downloaded, but the rebuild failed – fix the error above and run: $UPDATE_CMD")"
+info "$(m "Gotowe: Poster PRO $VERSION. Boty, klucze i historia zostały bez zmian. Aktualizacje: $UPDATE_CMD" \
+  "Done: Poster PRO $VERSION. Bots, keys and history are unchanged. Updates: $UPDATE_CMD")"
