@@ -7,8 +7,9 @@
   CONTACT_URL – kontakt w sprawie wdrożenia (e-mail kontakt@posterapp.pl, ten sam co w stopce), LITE_RELEASED – czy
   kod LITE jest już w repozytorium (false ustawia tools/publish-site.sh: przyciski „Pobierz” → „wkrótce”, bez linków
   do plików repozytorium w stopce i bez polecenia instalacji – docs/install.sh trafia na stronę dopiero z wersją LITE).
-  Ceny w sekcji „Pricing / Cennik” są zatwierdzone. W Polarze PRO ma cenę regularną, a cenę startową daje rabat
-  z limitem 20 użyć przypięty do linku zakupu – po ich wyczerpaniu Polar sam go pomija, a tu usuń cenę startową
+  Ceny w sekcji „Pricing / Cennik” są zatwierdzone: PLN w polskiej wersji, USD i EUR w angielskiej (walutę kasy Polar
+  dobiera do kraju kupującego). W Polarze PRO ma cenę regularną, a cenę startową daje rabat z limitem 20 użyć
+  przypięty do linku zakupu – po ich wyczerpaniu Polar sam go pomija, a tu usuń cenę startową
   (tools/PUBLIKACJA.md → „Polar”).
 -->
 <html lang="en" data-lang="en">
@@ -1090,11 +1091,11 @@
               <div class="amount">
                 $79 <small><s>$99</s> · one-time</small>
               </div>
-              <p>Launch price for the first 20 licences – the discount is applied at checkout.</p>
+              <p>Launch price for the first 20 licences – the discount is applied at checkout. Euro area: €69 instead of €89.</p>
               <ul class="pro-list">
                 <li>All PRO features</li>
                 <li>12 months of updates and support</li>
-                <li>Renewal: $49 per year – optional</li>
+                <li>Renewal: $49 (€45) per year – optional</li>
               </ul>
               <a class="btn pro" data-buy href="#pricing">Buy PRO</a>
             </div>
@@ -1795,7 +1796,7 @@
         // Kontakt w sprawie wdrożenia (przyciski „Kontakt” w cenniku)
         var CONTACT_URL = 'mailto:kontakt@posterapp.pl';
         // Kod LITE jest już w repozytorium poster-app? Publikacja samej strony (tools/publish-site.sh) ustawia false.
-        var LITE_RELEASED = false;
+        var LITE_RELEASED = true;
         var META = {
           en: {
             title: 'Poster – social media automation on your own server',

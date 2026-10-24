@@ -1,0 +1,143 @@
+# Poster – panel sterowania + n8n + RSSHub na NAS (UGREEN DXP2800 / dowolny host z Dockerem)
+#
+#   sudo docker compose up -d --build   # start / aktualizacja (buduje też panel)
+#   sudo docker compose logs -f panel   # logi panelu (n8n: logs -f n8n)
+#
+# Wartości ${...} pochodzą z pliku .env obok. Boty, klucze API i konta ustawiasz w panelu: http://IP_NAS:7080
+
+name: poster
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.40.7}
+    container_name: poster-n8n
+    restart: unless-stopped
+    # Obraz n8n działa jako użytkownik "node" (UID/GID 1000:1000) – katalogi w ./data muszą do niego należeć.
+    user: "1000:1000"
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${N8N_PORT:-5678}:5678" # BIND_ADDRESS=127.0.0.1 na serwerze w internecie
+    environment:
+      # --- Serwer / sieć LAN ---
+      - N8N_PORT=5678
+      - N8N_LISTEN_ADDRESS=0.0.0.0 # IPv4 – n8n startuje także na hostach bez IPv6 (domyślne „::” by go zatrzymało)
+      - N8N_PROTOCOL=http
+      - N8N_HOST=${NAS_IP:-localhost}
+      - N8N_EDITOR_BASE_URL=http://${NAS_IP:-localhost}:${N8N_PORT:-5678}
+      - N8N_WEBHOOK_URL=http://${NAS_IP:-localhost}:${N8N_PORT:-5678}/
+      - N8N_SECURE_COOKIE=false # dostęp po http:// w LAN (bez TLS)
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?Ustaw N8N_ENCRYPTION_KEY w .env (scripts/init-nas.sh generuje go automatycznie)}
+      # --- Strefa czasowa (daty w postach; harmonogram botów liczy panel) ---
+      - GENERIC_TIMEZONE=${TZ:-Europe/Warsaw}
+      - TZ=${TZ:-Europe/Warsaw}
+      # --- Baza SQLite (domyślna) + porządek w historii wykonań ---
+      - DB_TYPE=sqlite
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168 # godziny (7 dni)
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=20000
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem # grafiki nie puchną w bazie SQLite
+      # --- Bezpieczeństwo / dostęp workflow ---
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false # workflow czyta PANEL_INTERNAL_TOKEN i POSTER_PANEL_URL ($env)
+      - N8N_RESTRICT_FILE_ACCESS_TO=/home/node/.n8n-files # jedyny katalog dostępny dla węzłów plikowych
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=true
+      # --- Połączenie z panelem sterowania ---
+      # Ustawienia botów przychodzą z panelu razem ze zleceniem (webhook), a zapytania do API idą przez
+      # bramkę panelu, która dokleja klucze – n8n nie przechowuje żadnych kluczy ani tokenów kont.
+      - POSTER_PANEL_URL=http://panel:7081
+      - PANEL_INTERNAL_TOKEN=${PANEL_INTERNAL_TOKEN:?Brak PANEL_INTERNAL_TOKEN w .env – uruchom sudo bash scripts/init-nas.sh}
+    volumes:
+      - ./data/n8n:/home/node/.n8n # baza SQLite, klucz, ustawienia, binaria
+      - ./data/files:/home/node/.n8n-files # drafty: JSON + grafiki + wideo (archiwum/backup)
+    depends_on:
+      - rsshub
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5678/healthz/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging: *default-logging
+
+  # Panel sterowania botami (WWW): boty, harmonogramy, klucze API, konta X/FB/IG/TikTok, drafty.
+  panel:
+    build: ./panel
+    image: poster-panel:local
+    container_name: poster-panel
+    restart: unless-stopped
+    user: "1000:1000" # jak n8n – katalog data/panel musi należeć do 1000:1000 (scripts/init-nas.sh)
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${PANEL_PORT:-7080}:7080" # interfejs WWW w LAN; port 7081 (API dla n8n) jest dostępny tylko w sieci Dockera
+    environment:
+      - TZ=${TZ:-Europe/Warsaw} # harmonogram botów liczony w tej strefie
+      - PANEL_INTERNAL_TOKEN=${PANEL_INTERNAL_TOKEN:?Brak PANEL_INTERNAL_TOKEN w .env – uruchom sudo bash scripts/init-nas.sh}
+      - PANEL_PUBLIC_URL=http://${NAS_IP:-localhost}:${PANEL_PORT:-7080}
+      - N8N_PUBLIC_URL=http://${NAS_IP:-localhost}:${N8N_PORT:-5678}
+      - N8N_INTERNAL_URL=http://n8n:5678
+      - RSSHUB_URL=http://rsshub:1200
+      - POSTER_X_ALERT_AFTER=${POSTER_X_ALERT_AFTER:-3} # alert „odczyt X nie działa” po tylu uruchomieniach z rzędu
+      # --- Jednorazowa migracja: przy PIERWSZYM starcie panel przenosi te wartości z .env do swoich
+      #     ustawień (pierwszy bot + klucze). Potem ustawienia zmieniasz już tylko w panelu.
+      - POSTER_TOPIC=${POSTER_TOPIC:-}
+      - POSTER_BRAND_NAME=${POSTER_BRAND_NAME:-}
+      - POST_LANGUAGE=${POST_LANGUAGE:-}
+      - NEWS_RSS_FEEDS=${NEWS_RSS_FEEDS:-}
+      - X_SOURCE=${X_SOURCE:-}
+      - X_HANDLES=${X_HANDLES:-}
+      - X_RSS_URL_TEMPLATE=${X_RSS_URL_TEMPLATE:-}
+      - APIFY_TOKEN=${APIFY_TOKEN:-}
+      - APIFY_ACTOR_ID=${APIFY_ACTOR_ID:-}
+      - APIFY_MAX_ITEMS=${APIFY_MAX_ITEMS:-}
+      - MAX_NEWS_AGE_HOURS=${MAX_NEWS_AGE_HOURS:-}
+      - MAX_CANDIDATES=${MAX_CANDIDATES:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_TEXT_MODEL=${GEMINI_TEXT_MODEL:-}
+      - REQUIRE_APPROVAL=${REQUIRE_APPROVAL:-}
+      - ENABLE_X=${ENABLE_X:-}
+      - ENABLE_FACEBOOK=${ENABLE_FACEBOOK:-}
+      - ENABLE_INSTAGRAM=${ENABLE_INSTAGRAM:-}
+      - ENABLE_TIKTOK=${ENABLE_TIKTOK:-}
+      - X_CLIENT_ID=${X_CLIENT_ID:-}
+      - X_CLIENT_SECRET=${X_CLIENT_SECRET:-}
+      - META_GRAPH_VERSION=${META_GRAPH_VERSION:-}
+      - META_PAGE_ID=${META_PAGE_ID:-}
+      - META_PAGE_ACCESS_TOKEN=${META_PAGE_ACCESS_TOKEN:-}
+      - META_IG_USER_ID=${META_IG_USER_ID:-}
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY:-}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET:-}
+      - TIKTOK_REDIRECT_URI=${TIKTOK_REDIRECT_URI:-}
+      - TIKTOK_POST_MODE=${TIKTOK_POST_MODE:-}
+      - TIKTOK_PRIVACY_LEVEL=${TIKTOK_PRIVACY_LEVEL:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS:-}
+    volumes:
+      - ./data/panel:/data # ustawienia, klucze (chmod 600), historia, pamięć duplikatów
+      - ./data/files:/files:ro # drafty zapisane przez n8n (podgląd w panelu, tylko odczyt)
+    logging: *default-logging
+
+  # RSSHub zamienia profile X (Twitter) na kanały RSS – dostępny tylko wewnątrz sieci Dockera (http://rsshub:1200).
+  rsshub:
+    image: diygod/rsshub:${RSSHUB_VERSION:-latest} # tag ustawisz w .env (RSSHUB_VERSION), domyślnie latest
+    container_name: poster-rsshub
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - TZ=${TZ:-Europe/Warsaw}
+      - CACHE_TYPE=memory
+      - CACHE_EXPIRE=300
+      - CACHE_CONTENT_EXPIRE=3600
+      - TWITTER_AUTH_TOKEN=${TWITTER_AUTH_TOKEN:-}
+      # opcjonalne proxy tylko dla odczytu X (RSSHub obsługuje wyłącznie profile X), np. socks5h://user:haslo@host:port
+      - PROXY_URI=${RSSHUB_PROXY_URI:-}
+    # Odkomentuj, żeby testować RSSHub z przeglądarki: http://IP_NAS:1200/twitter/user/WatcherGuru
+    # ports:
+    #   - "1200:1200"
+    logging: *default-logging

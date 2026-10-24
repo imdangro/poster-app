@@ -1,0 +1,18 @@
+# Poster – dane runtime (baza n8n, ustawienia i klucze panelu, drafty) i kopie zapasowe
+data/
+*.tgz
+
+# Konfiguracja z sekretami (szablon .env.example zostaje w repozytorium)
+.env
+.env.*
+!.env.example
+
+# Narzędzia, edytory, systemy
+node_modules/
+__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

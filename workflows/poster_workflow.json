@@ -1,0 +1,2188 @@
+{
+  "id": "PosterBotMain001",
+  "name": "Poster – newsy → LLM → grafika → social media",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "poster",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e3d89905-f7dc-545a-907e-87aa24350a46",
+      "name": "Start: zlecenie z panelu",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "25d08b7b-5f87-50f7-a097-d127d215ec92"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: !!$env.PANEL_INTERNAL_TOKEN && $json.headers['x-poster-token'] === $env.PANEL_INTERNAL_TOKEN, executionId: $execution.id }) }}",
+        "options": {}
+      },
+      "id": "b0e8d206-29bb-59ae-875b-76c980865b05",
+      "name": "Odpowiedz panelowi",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e5948de8-62fa-5b8d-a0ec-5f2c63b963ad",
+              "leftValue": "={{ !!$env.PANEL_INTERNAL_TOKEN && $json.headers['x-poster-token'] === $env.PANEL_INTERNAL_TOKEN }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c5120541-94ff-5568-8cf3-b7e0f4b95a45",
+      "name": "Token panelu poprawny?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ⚙️ CONFIG – ustawienia bota przychodzą z panelu (http://NAS:7080) razem ze zleceniem:\n//   kind = \"generate\" (harmonogram / „Uruchom teraz”), \"publish\" (kliknięcie ✅ w Telegramie)\n//   albo \"compose\" (własny post z panelu – ✍️ Nowy post: teksty na platformy są już gotowe).\n// Sekrety (klucze API, tokeny kont platform) zostają w panelu – wszystkie zapytania do API\n// idą przez bramkę panelu (config.gateway), która dokleja klucze właściwe dla danego bota.\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Start: zlecenie z panelu').first().json.body.config.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"Zlecenie z panelu nie zawiera konfiguracji bota\": \"The request from the panel has no bot configuration\",\n  \"Niepoprawne ID draftu: {0}\": \"Invalid draft ID: {0}\",\n  \"Własny post bez platform – wybierz je w panelu\": \"Own post without platforms – choose them in the panel\",\n  \"Własny post\": \"Own post\",\n  \"Brak ID czatu Telegram – uzupełnij w panelu (Ustawienia → Telegram)\": \"No Telegram chat ID – fill it in in the panel (Settings → Telegram)\",\n  \"Bot nie ma źródeł newsów – dodaj kanały RSS lub profile X w panelu\": \"The bot has no news sources – add RSS feeds or X profiles in the panel\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst body = $('Start: zlecenie z panelu').first().json.body || {};\nconst c = body.config || {};\nconst str = (v, def = '') => (v === undefined || v === null ? '' : String(v)).trim() || def;\nconst int = (v, def) => {\n  const n = parseInt(v, 10);\n  return Number.isFinite(n) && n > 0 ? n : def;\n};\nconst bool = (v) => v === true || v === 'true';\n\nif (!/^[a-z0-9]{3,20}$/.test(str(c.botId))) throw new Error(tr('Zlecenie z panelu nie zawiera konfiguracji bota'));\nconst mode = ['publish', 'compose'].includes(body.kind) ? body.kind : 'generate';\nconst panelUrl = str($env.POSTER_PANEL_URL, str(c.panelUrl, 'http://panel:7081')).replace(/\\/+$/, '');\n\nconst feeds = (Array.isArray(c.feeds) ? c.feeds : [])\n  .filter((f) => f && /^https?:\\/\\//i.test(String(f.url || '')))\n  .map((f) => ({ url: String(f.url), label: str(f.label, String(f.url)), kind: f.kind === 'x' ? 'x' : 'rss' }));\nconst xSource = ['rsshub', 'apify', 'none'].includes(c.xSource) ? c.xSource : 'rsshub';\nconst g = c.gemini || {};\nconst meta = c.meta || {};\n\nlet publish = null;\nif (mode === 'publish') {\n  const draftId = str(body.draftId);\n  // ID trafia do ścieżki pliku – tylko bezpieczne znaki\n  if (!/^[A-Za-z0-9_-]{1,40}$/.test(draftId)) throw new Error(tr('Niepoprawne ID draftu: {0}', draftId.slice(0, 50)));\n  publish = { draftId, chatId: body.chatId, messageId: body.messageId || null, approvedBy: str(body.approvedBy, 'Telegram') };\n}\n// Własny post: teksty na wybrane platformy (AI dopasowało je w panelu albo to tekst autora) i grafika z panelu\nlet compose = null;\nif (mode === 'compose') {\n  const cc = body.compose || {};\n  const im = cc.image || {};\n  const all = ['x', 'facebook'];\n  const platforms = all.filter((k) => Array.isArray(cc.platforms) && cc.platforms.includes(k));\n  if (!platforms.length) throw new Error(tr('Własny post bez platform – wybierz je w panelu'));\n  compose = {\n    text: str(cc.text).slice(0, 5000),\n    title: str(cc.title, tr('Własny post')).slice(0, 200),\n    link: /^https?:\\/\\/\\S+$/i.test(str(cc.link)) ? str(cc.link).slice(0, 1000) : '',\n    platforms,\n    posts: Object.fromEntries(platforms.map((k) => [k, str((cc.posts || {})[k])])),\n    // upload = zdjęcie wgrane w panelu (panel odda je węzłowi „Grafika: panel”), none = bez grafiki\n    image: {\n      source: ['upload', 'none'].includes(im.source) ? im.source : 'none',\n      upload: /^[a-z0-9]{6,40}$/.test(str(im.upload)) ? str(im.upload) : '',\n    },\n    publishNow: cc.publishNow === true,\n    ai: str(cc.ai).slice(0, 120),\n  };\n}\nif (!str((c.telegram || {}).chatId)) throw new Error(tr('Brak ID czatu Telegram – uzupełnij w panelu (Ustawienia → Telegram)'));\nconst needFeeds = mode === 'generate';\nif (needFeeds && !feeds.length && !(xSource === 'apify' && (c.xHandles || []).length)) {\n  throw new Error(tr('Bot nie ma źródeł newsów – dodaj kanały RSS lub profile X w panelu'));\n}\n\nreturn [\n  {\n    json: {\n      mode,\n      runId: str(body.runId),\n      trigger: str(body.trigger, 'manual'),\n      botId: c.botId,\n      botName: str(c.botName, 'Poster'),\n      // język wiadomości w Telegramie i raportów (tr() w węzłach Code; prompty AI zostają po polsku)\n      lang: c.lang === 'en' ? 'en' : 'pl',\n      topic: str(c.topic, str(c.botName, 'newsy')),\n      brandName: str(c.brandName, str(c.botName, 'Poster')),\n      language: str(c.language, 'polski'),\n      instructions: str(c.instructions),\n      maxAgeHours: int(c.maxAgeHours, 12),\n      maxCandidates: int(c.maxCandidates, 25),\n      feeds,\n      xSource,\n      xHandles: (Array.isArray(c.xHandles) ? c.xHandles : []).map((h) => String(h).replace(/^@/, '')).filter(Boolean),\n      apify: { actorId: str((c.apify || {}).actorId, 'apidojo~tweet-scraper'), maxItems: int((c.apify || {}).maxItems, 40) },\n      gemini: { textModel: str(g.textModel, 'gemini-3.8-flash') },\n      // publikacja od razu po zapisaniu draftu: własny post z „Publikuj teraz” w panelu\n      autoPublish: !!compose && compose.publishNow,\n      compose,\n      enableX: bool(c.enableX),\n      enableFacebook: bool(c.enableFacebook),\n      meta: { graphVersion: str(meta.graphVersion, 'v24.0'), pageId: str(meta.pageId) },\n      telegram: { chatId: str(c.telegram.chatId) },\n      // grafika: source (zdjęcie ze źródła) | link (post z linkiem) | none\n      image: { mode: ['source', 'link', 'none'].includes((c.image || {}).mode) ? c.image.mode : 'source' },\n      publish,\n      panelUrl,\n      gateway: `${panelUrl}/gw/${c.botId}`,\n      storageDir: str($env.POSTER_STORAGE_DIR, '/home/node/.n8n-files').replace(/\\/+$/, ''),\n    },\n  },\n];\n"
+      },
+      "id": "60d144a8-7e7f-50ad-be4a-76e99116209f",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9b5cb63e-d94a-588e-9a88-c84b3c1f4dfe",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "publish",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "3e4d868c-130d-5331-86d3-45ee21f06d82",
+      "name": "Zlecenie: publikacja?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "31a3cb4a-4421-58c2-9ddb-9a0b06d13e4c",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "compose",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "867c6ea0-b6b0-57fc-ae87-fea743953bd3",
+      "name": "Zlecenie: własny post?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Jeden element = jeden kanał RSS (portale newsowe + profile X zamienione na RSS przez RSSHub).\nconst feeds = $('Config').first().json.feeds || [];\n// Bez kanałów (np. tylko Apify) przepuszczamy pusty element – RSS Read zwróci błąd, który pomijamy.\nif (!feeds.length) return [{ json: { url: '', label: '', kind: 'none' } }];\nreturn feeds.map((feed) => ({ json: feed }));\n"
+      },
+      "id": "ac670b4f-a4f0-59a1-aeaf-ac695e1a5128",
+      "name": "Lista źródeł",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "customFields": "media:content,media:thumbnail,media:group"
+        }
+      },
+      "id": "10c7b6eb-7d89-541f-9fb7-285fd1c1b194",
+      "name": "Pobierz RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ujednolica wpisy z RSS/RSSHub do wspólnego formatu + wylicza stabilny klucz deduplikacji (id).\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Config').first().json.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"błąd\": \"error\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst feedItems = $('Lista źródeł').all();\n// tryb „własna strona”: AI dostaje dłuższy fragment treści artykułu (pole body)\nconst site = !!$('Config').first().json.site;\nconst articles = [];\nconst feedErrors = [];\n\n// Encje HTML w jednym przejściu (bez podwójnego dekodowania), w tym liczbowe z WordPressa (&#8217; → ’)\nconst ENTITIES = {\n  nbsp: ' ',\n  quot: '\"',\n  apos: \"'\",\n  lt: '<',\n  gt: '>',\n  amp: '&',\n  hellip: '…',\n  ndash: '–',\n  mdash: '—',\n  lsquo: '‘',\n  rsquo: '’',\n  ldquo: '“',\n  rdquo: '”',\n  bdquo: '„',\n  laquo: '«',\n  raquo: '»',\n};\nconst entity = (m, e) => {\n  if (e[0] !== '#') return ENTITIES[e.toLowerCase()] ?? m;\n  const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);\n  return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;\n};\nconst decode = (s) =>\n  String(s || '')\n    .replace(/<(script|style)\\b[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<[^>]*>/g, ' ')\n    .replace(/&(#\\d{1,7}|#x[0-9a-f]{1,6}|[a-z]{2,8});/gi, entity)\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n// Kanoniczny klucz: tweety → \"x:<status_id>\" (niezależnie od domeny x.com/twitter.com/nitter),\n// artykuły → host + ścieżka bez parametrów śledzących (utm_*, fbclid...), bez \"www.\" i końcowego \"/\".\n// Uwaga: w sandboksie Code node nie ma klas URL/URLSearchParams – parsujemy wyrażeniami regularnymi.\nconst TRACKING = /^(utm_\\w*|fbclid|gclid|mc_\\w*|ref|ref_src|oc|cmpid|ncid|guccounter)(=|$)/i;\nfunction parseUrl(link) {\n  const m = String(link).match(/^https?:\\/\\/([^/?#:]+)(?::\\d+)?([^?#]*)(?:\\?([^#]*))?/i);\n  return m ? { host: m[1].toLowerCase().replace(/^www\\./, ''), path: m[2] || '', query: m[3] || '' } : null;\n}\nfunction canonical(link) {\n  const tw = String(link).match(/^https?:\\/\\/(?:www\\.|mobile\\.)?(?:twitter\\.com|x\\.com|[^/]*nitter[^/]*)\\/([^/]+)\\/status(?:es)?\\/(\\d+)/i);\n  if (tw) return { id: `x:${tw[2]}`, url: `https://x.com/${tw[1]}/status/${tw[2]}` };\n  const u = parseUrl(link);\n  if (!u) return null;\n  const query = u.query.split('&').filter((kv) => kv && !TRACKING.test(kv));\n  const q = query.length ? '?' + query.join('&') : '';\n  // w postach link bez parametrów śledzących (np. utm_source=rss z kanału) – ruch z sociali nie udaje RSS-a\n  return { id: `${u.host}${u.path.replace(/\\/+$/, '')}${q}`, url: String(link).replace(/[?#].*$/, '') + q };\n}\n\n// Obrazki z wpisu: <enclosure>, media:content / media:thumbnail / media:group, pierwsze <img> w treści\n// (RSSHub wstawia zdjęcia tweetów jako <img>). Panel wybierze z nich pierwsze pasujące.\nfunction imagesOf(j) {\n  const out = [];\n  const push = (u) => {\n    const url = String(u || '')\n      .replace(/&amp;/g, '&')\n      .trim();\n    if (/^https?:\\/\\//i.test(url) && !out.includes(url)) out.push(url);\n  };\n  const enc = j.enclosure;\n  if (enc && enc.url && (!enc.type || /^image\\//i.test(enc.type))) push(enc.url);\n  const media = (v, depth = 0) => {\n    if (!v || depth > 4) return;\n    if (Array.isArray(v)) return v.forEach((x) => media(x, depth + 1));\n    if (typeof v !== 'object') return;\n    const a = v.$ || {};\n    if (a.url && (!a.medium || a.medium === 'image') && (!a.type || /^image\\//i.test(a.type))) push(a.url);\n    for (const k of Object.keys(v)) if (k.startsWith('media:')) media(v[k], depth + 1);\n  };\n  media(j['media:content']);\n  media(j['media:group']);\n  media(j['media:thumbnail']);\n  const html = String(j['content:encoded'] || j.content || '');\n  for (const m of html.matchAll(/<img\\b[^>]*\\bsrc=[\"']([^\"']+)[\"']/gi)) push(m[1]);\n  return out.slice(0, 5);\n}\n\n// Błąd węzła RSS bywa obiektem ({ message, description }) – do raportu wystarczy krótki tekst.\nconst errText = (e) =>\n  String((e && typeof e === 'object' ? [e.message, e.description].filter(Boolean).join(' – ') || JSON.stringify(e) : e) || tr('błąd'))\n    .replace(/\\s+/g, ' ')\n    .slice(0, 300);\n\n// Kanał, z którego pochodzi wpis (lub błąd). W węźle Code `item.pairedItem` to tylko numer pozycji na\n// wejściu, więc źródło ustalamy przez itemMatching (śledzi pochodzenie elementu przez węzeł RSS).\nconst feedOf = (i) => {\n  try {\n    return $('Lista źródeł').itemMatching(i).json || {};\n  } catch (e) {\n    return feedItems.length === 1 ? feedItems[0].json || {} : {};\n  }\n};\n\nconst input = $input.all();\nfor (let i = 0; i < input.length; i++) {\n  const item = input[i];\n  const feed = feedOf(i);\n  const j = item.json || {};\n\n  if (j.error) {\n    if (feed.kind !== 'none') feedErrors.push({ feed: feed.label || feed.url, kind: feed.kind, error: errText(j.error) });\n    continue;\n  }\n  const link = j.link || (typeof j.guid === 'string' ? j.guid : '');\n  if (!link || !/^https?:\\/\\//i.test(link)) continue;\n  const c = canonical(link);\n  if (!c) continue;\n\n  const isX = c.id.startsWith('x:') || feed.kind === 'x';\n  const summary = decode(j.contentSnippet || j.content || j.summary || j.description).slice(0, 600);\n  const title = decode(j.title).slice(0, 300) || summary.slice(0, 160);\n  const date = new Date(j.isoDate || j.pubDate || Date.now());\n  const source = feed.label || (parseUrl(link) || {}).host || 'RSS';\n\n  articles.push({\n    id: c.id,\n    url: c.url,\n    title,\n    summary,\n    // pełniejsza treść artykułu (content:encoded) – tylko dla bota „własna strona”\n    ...(site ? { body: decode(j['content:encoded'] || j.content || j.summary || j.description).slice(0, 2500) } : {}),\n    source,\n    sourceType: isX ? 'x' : 'rss',\n    author: decode(j.creator || j.author || ''),\n    images: imagesOf(j),\n    publishedAt: Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString(),\n  });\n}\n\nreturn [{ json: { articles, feedErrors } }];\n"
+      },
+      "id": "932fecb8-f979-5893-b50e-4112bb3f44e5",
+      "name": "Normalizuj RSS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f0851246-344d-5d57-9bf1-e3bc98d53803",
+              "leftValue": "={{ $('Config').first().json.xSource }}",
+              "rightValue": "apify",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "535d98e7-31e5-5e86-9129-7d5c4b1f37ff",
+      "name": "X przez Apify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1840,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/apify/v2/acts/{{ $('Config').first().json.apify.actorId }}/run-sync-get-dataset-items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timeout",
+              "value": "240"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ twitterHandles: $('Config').first().json.xHandles, maxItems: $('Config').first().json.apify.maxItems, sort: 'Latest' }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "54d8bf64-42f7-5ffd-8f42-f0fc7db91322",
+      "name": "Apify: pobierz tweety",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2060,
+        20
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dokleja tweety z Apify (opcjonalne źródło X) do listy artykułów z RSS.\nconst base = $('Normalizuj RSS').first().json;\nconst articles = [...(base.articles || [])];\nconst feedErrors = [...(base.feedErrors || [])];\n\nfor (const item of $input.all()) {\n  const t = item.json || {};\n  if (t.error) {\n    feedErrors.push({ feed: 'Apify', error: (t.error.message || JSON.stringify(t.error)).slice(0, 300) });\n    continue;\n  }\n  const text = String(t.fullText || t.full_text || t.text || '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  if (t.noResults || !text) continue;\n\n  const user = t.author?.userName || t.author?.screen_name || t.user?.screen_name || 'i';\n  const rawUrl = String(t.url || t.twitterUrl || '');\n  const fromUrl = rawUrl.match(/status(?:es)?\\/(\\d+)/);\n  const statusId = String(t.id || t.id_str || (fromUrl && fromUrl[1]) || '').trim();\n  if (!/^\\d+$/.test(statusId)) continue;\n\n  const date = new Date(t.createdAt || t.created_at || Date.now());\n  const images = [];\n  for (const m of [].concat((t.extendedEntities || t.extended_entities || {}).media || [], (t.entities || {}).media || [], t.media || [])) {\n    const u = m && (m.media_url_https || m.media_url || (m.type === 'photo' && m.url));\n    if (typeof u === 'string' && /^https?:\\/\\//.test(u) && !images.includes(u)) images.push(u);\n  }\n  articles.push({\n    id: `x:${statusId}`,\n    url: `https://x.com/${user}/status/${statusId}`,\n    title: text.slice(0, 280),\n    summary: text.slice(0, 600),\n    source: `X @${user}`,\n    sourceType: 'x',\n    author: t.author?.name || user,\n    images: images.slice(0, 4),\n    publishedAt: Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString(),\n  });\n}\n\nreturn [{ json: { articles, feedErrors } }];\n"
+      },
+      "id": "f277e71f-773c-5a38-93c6-6f66c7df7e54",
+      "name": "Normalizuj Apify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2280,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Zostawia tylko świeże wpisy (maks. wiek z panelu) i usuwa duplikaty w obrębie tego przebiegu\n// (ten sam link lub ten sam tytuł z kilku źródeł). Następny węzeł pyta panel, które z nich bot\n// już widział w poprzednich uruchomieniach (pamięć duplikatów – osobna dla każdego bota).\nconst cfg = $('Config').first().json;\nconst { articles = [], feedErrors = [] } = $input.first().json;\n\nif (feedErrors.length) console.log('⚠️ Błędy źródeł:', JSON.stringify(feedErrors));\n\nconst cutoff = Date.now() - cfg.maxAgeHours * 3600 * 1000;\nconst normTitle = (s) =>\n  String(s)\n    .toLowerCase()\n    .replace(/[^\\p{L}\\p{N}]+/gu, ' ')\n    .trim()\n    .slice(0, 120);\nconst seenIds = new Set();\nconst seenTitles = new Set();\n\nconst fresh = articles\n  .filter((a) => new Date(a.publishedAt).getTime() >= cutoff)\n  .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))\n  .filter((a) => {\n    const t = normTitle(a.title);\n    if (seenIds.has(a.id) || (t && seenTitles.has(t))) return false;\n    seenIds.add(a.id);\n    if (t) seenTitles.add(t);\n    return true;\n  })\n  .slice(0, 200);\n\n// data najnowszego wpisu w kanałach (także starszego niż limit) – do komunikatu „brak nowego artykułu”\nconst newestAt = articles.reduce((m, a) => (a.publishedAt > m ? a.publishedAt : m), '') || null;\n\nconsole.log(`Źródła: ${articles.length} wpisów, świeżych i unikalnych: ${fresh.length}`);\nreturn [{ json: { runId: cfg.runId, total: articles.length, articles: fresh, feedErrors, newestAt } }];\n"
+      },
+      "id": "9e1aa992-106a-5792-8c9d-1ec8a159abc2",
+      "name": "Filtruj świeże",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.panelUrl }}/internal/bots/{{ $('Config').first().json.botId }}/candidates",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "4b0eab7c-f29d-55bb-b694-2f59b55d1433",
+      "name": "Deduplikacja w panelu (URL/ID)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2720,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Buduje zapytanie do AI z wymuszonym schematem JSON. Panel wysyła je do dostawcy wybranego w bocie\n// (Gemini albo API zgodne z OpenAI, np. Ollama). Tu edytujesz ton i zasady postów.\nconst cfg = $('Config').first().json;\n\n// Wejście: odpowiedź panelu – tylko newsy, których ten bot jeszcze nie widział + jego ostatnie tematy\nconst res = $input.first().json || {};\nconst candidates = (res.articles || [])\n  .slice()\n  .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))\n  .slice(0, cfg.maxCandidates);\nconst nothing = 'Brak nowych newsów';\nif (!candidates.length) {\n  console.log(`${nothing} – kończę bez draftu.`);\n  return [];\n}\n\nconst fmt = (iso) => DateTime.fromISO(iso).setZone($now.zoneName).toFormat('dd.LL HH:mm');\n\nconst SCRIPT_FORMAT = `\n  🎣 HOOK (0–3 s): ...\n  📰 NEWS (3–10 s): ...\n  🔎 ROZWINIĘCIE (10–45 s): ...\n  📣 CTA (45–60 s): ...\n  🎥 B-ROLL: 3–5 punktów z sugestiami ujęć/materiałów\n  💬 NAPISY NA EKRANIE: 3–5 krótkich haseł`;\n\nconst instructionsBlock = cfg.instructions\n  ? `\\nDODATKOWE WYTYCZNE WŁAŚCICIELA PROFILU (stosuj je, o ile nie łamią zasad powyżej):\\n${cfg.instructions}\\n`\n  : '';\n\n// ================================================================================ newsy\n// Tematy ostatnich draftów – żeby nie powtarzać tej samej historii z innego źródła.\nconst recentTopics = (res.recentTopics || []).slice(-15);\n\nconst newsList = candidates\n  .map(\n    (a, i) =>\n      `[${i}] ${fmt(a.publishedAt)} | ${a.sourceType === 'x' ? 'X/Twitter' : 'RSS'} | ${a.source}\\n` +\n      `Tytuł: ${a.title}\\n` +\n      (a.summary && a.summary !== a.title ? `Treść: ${String(a.summary).slice(0, 350)}\\n` : ''),\n  )\n  .join('\\n');\n\nconst newsFields = [\n  ['selected_index', 'numer wybranego newsa z listy [n].'],\n  ['news_title', `krótki, rzeczowy tytuł wybranego newsa (po ${cfg.language}).`],\n  ['why_selected', '1 zdanie – dlaczego ten news.'],\n  [\n    'post_x',\n    'dynamiczny wpis na X, MAKSYMALNIE 260 znaków łącznie ze spacjami, emoji i hashtagami; mocne pierwsze słowa; 2–3 trafne hashtagi na końcu.',\n  ],\n  [\n    'post_fb_insta',\n    'angażujący post na Facebook/Instagram, 600–1500 znaków: hook w pierwszej linii, krótkie akapity, emoji jako punktory, pytanie lub CTA do komentowania, na końcu linia ze źródłem i 5–10 hashtagów (maks. 15).',\n  ],\n  ['script_tiktok', `skrypt wideo 30–60 s w formacie:${SCRIPT_FORMAT}`],\n];\nconst fields = newsFields;\n\nconst system = `Jesteś doświadczonym redaktorem newsowym i social media managerem profilu \"${cfg.brandName}\" o tematyce: ${cfg.topic}.\nPiszesz w języku: ${cfg.language}. Znasz specyfikę X (Twitter), Facebooka, Instagrama i TikToka.\n\nZASADY:\n- Wybierz DOKŁADNIE JEDEN news: najważniejszy i najbardziej angażujący dla odbiorców tematu \"${cfg.topic}\" (świeżość, waga, wiarygodność, potencjał dyskusji).\n- Odrzucaj reklamy, spam, clickbait, wpisy niezwiązane z tematem i tematy z listy \"już opublikowane\".\n- Nie wymyślaj faktów, liczb, cytatów ani dat. Opieraj się wyłącznie na treści newsa. Plotkę/nieoficjalną informację oznacz jako nieoficjalną.\n- Nie wstawiaj linków URL do postów. W poście FB/IG podaj nazwę źródła (np. \"Źródło: CoinDesk\").\n- Jeśli żaden news nie nadaje się do publikacji, ustaw skip=true i podaj skip_reason (pozostałe pola mogą być puste).\n${instructionsBlock}\nPOLA ODPOWIEDZI (czysty JSON zgodny ze schematem):\n${fields.map(([k, d]) => `- ${k}: ${d}`).join('\\n')}`;\n\nconst user = `TEMAT PROFILU: ${cfg.topic}\n\nJUŻ OPUBLIKOWANE (nie powtarzaj):\n${recentTopics.length ? recentTopics.map((t) => `- ${t}`).join('\\n') : '- (brak)'}\n\nNAJŚWIEŻSZE WIADOMOŚCI:\n${newsList}`;\n\nconst names = ['skip', 'skip_reason', ...fields.map(([k]) => k)];\nconst schema = {\n  type: 'OBJECT',\n  properties: Object.fromEntries(\n    names.map((k) => [\n      k,\n      k === 'skip'\n        ? { type: 'BOOLEAN', description: 'true, gdy żaden news nie nadaje się do publikacji' }\n        : { type: k === 'selected_index' ? 'INTEGER' : 'STRING' },\n    ]),\n  ),\n  required: names.filter((k) => k !== 'skip_reason'),\n  propertyOrdering: names,\n};\n\nreturn [{ json: { candidates, llm: { system, user, schema, maxTokens: 8192 } } }];\n"
+      },
+      "id": "84baa512-b23a-5316-975e-6833ee2a19d5",
+      "name": "Przygotuj prompt LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3060,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.panelUrl }}/internal/bots/{{ $('Config').first().json.botId }}/llm",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.llm) }}",
+        "options": {
+          "timeout": 1200000
+        }
+      },
+      "id": "ea69ea9f-58b2-51cf-896e-ad17e9a2e647",
+      "name": "AI: wybierz news i napisz posty",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3500,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsuje JSON z AI (odpowiedź panelu: { text, provider, model, fallbackUsed }), pilnuje limitów platform\n// (X: 280 „ważonych” znaków, IG: 2200 znaków / 30 hashtagów) i nadaje ID draftu.\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Config').first().json.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"AI nie zwróciło treści\": \"AI returned no content\",\n  \"Odpowiedź LLM nie jest poprawnym JSON-em: {0}\": \"The LLM response is not valid JSON: {0}\",\n  \"(bez powodu)\": \"(no reason given)\",\n  \"Brak pola „{0}” w odpowiedzi LLM\": \"The LLM response has no “{0}” field\",\n  \"🆕 <b>Nowy draft</b> · 🤖 <b>{0}</b> · <code>{1}</code>\": \"🆕 <b>New draft</b> · 🤖 <b>{0}</b> · <code>{1}</code>\",\n  \"🔗 {0}: <a href=\\\"{1}\\\">otwórz źródło</a>\": \"🔗 {0}: <a href=\\\"{1}\\\">open the source</a>\",\n  \"👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.\": \"👇 Check the texts and approve with the button under the last message.\",\n  \"🐦 <b>X</b> (post z linkiem) · {0}/280\": \"🐦 <b>X</b> (post with a link) · {0}/280\",\n  \"📘📸 <b>Facebook / Instagram</b> · {0} znaków\": \"📘📸 <b>Facebook / Instagram</b> · {0} characters\",\n  \"📘 <b>Facebook</b> (post z linkiem) · {0} znaków\": \"📘 <b>Facebook</b> (post with a link) · {0} characters\",\n  \"✅ Publikuj ({0})\": \"✅ Publish ({0})\",\n  \"✅ Zatwierdź\": \"✅ Approve\",\n  \"❌ Odrzuć\": \"❌ Reject\",\n  \"🎬 <b>TikTok – skrypt</b>\": \"🎬 <b>TikTok – script</b>\",\n  \"Tekst: {0}\": \"Text: {0}\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst cfg = $('Config').first().json;\nconst prompt = $('Przygotuj prompt LLM').first().json;\nconst candidates = prompt.candidates;\nconst res = $input.first().json || {};\n\nconst text = String(res.text || '').trim();\nif (!text) throw new Error(tr('AI nie zwróciło treści'));\n\nlet out;\ntry {\n  out = JSON.parse(text.replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, ''));\n} catch (e) {\n  throw new Error(tr('Odpowiedź LLM nie jest poprawnym JSON-em: {0}', text.slice(0, 400)));\n}\nconst skip = out.skip === true;\nif (skip) {\n  const reason = String(out.skip_reason || tr('(bez powodu)')).slice(0, 500);\n  console.log('LLM pominął publikację:', reason);\n  try {\n    // informacja dla panelu (historia uruchomień) – błąd raportu nie przerywa przebiegu\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: `${cfg.panelUrl}/internal/events`,\n      headers: { 'x-poster-token': $env.PANEL_INTERNAL_TOKEN },\n      body: { type: 'skip', runId: cfg.runId, botId: cfg.botId, reason },\n      json: true,\n      timeout: 10000,\n    });\n  } catch (e) {}\n  return [];\n}\nfor (const key of ['post_x', 'post_fb_insta', 'script_tiktok']) {\n  if (typeof out[key] !== 'string' || !out[key].trim()) throw new Error(tr('Brak pola „{0}” w odpowiedzi LLM', key));\n}\nconst news = candidates[Number(out.selected_index)] || candidates[0];\n\n// --- Limity platform ---------------------------------------------------------------------------\n// Długość wg zasad X: URL = 23 znaki, znaki spoza podstawowych zakresów Unicode (emoji, CJK) = 2.\nfunction xLength(s) {\n  let n = 0;\n  for (const ch of String(s).replace(/https?:\\/\\/\\S+/g, 'x'.repeat(23))) {\n    const cp = ch.codePointAt(0);\n    const light = cp <= 0x10ff || (cp >= 0x2000 && cp <= 0x200d) || (cp >= 0x2010 && cp <= 0x201f) || (cp >= 0x2032 && cp <= 0x2037);\n    n += light ? 1 : 2;\n  }\n  return n;\n}\nfunction splitTags(s) {\n  const m = String(s).match(/((?:\\s*#[\\p{L}\\p{N}_]+)+)\\s*$/u);\n  return m ? { body: s.slice(0, m.index).trim(), tags: m[1].trim().split(/\\s+/) } : { body: String(s).trim(), tags: [] };\n}\nfunction fitX(s, limit = 280) {\n  s = String(s).trim();\n  if (xLength(s) <= limit) return s;\n  let { body, tags } = splitTags(s);\n  const join = (b, t) => (t.length ? `${b}\\n\\n${t.join(' ')}` : b);\n  while (tags.length > 1 && xLength(join(body, tags)) > limit) tags.pop();\n  const words = body.split(/\\s+/);\n  while (words.length > 1 && xLength(join(words.join(' ') + '…', tags)) > limit) words.pop();\n  let result = join(words.join(' ') + '…', tags);\n  while (xLength(result) > limit) result = [...result].slice(0, -2).join('') + '…';\n  return result;\n}\nfunction fitCaption(s, limit = 2200, maxTags = 30) {\n  let { body, tags } = splitTags(String(s).trim());\n  tags = tags.slice(0, maxTags);\n  const tagLine = tags.join(' ');\n  const room = limit - (tagLine ? tagLine.length + 2 : 0);\n  if (body.length > room) body = body.slice(0, Math.max(0, room - 1)).replace(/\\s+\\S*$/, '') + '…';\n  return tagLine ? `${body}\\n\\n${tagLine}` : body;\n}\n\nconst postX = fitX(out.post_x);\n// Post z linkiem (tryb „link” albo brak grafiki): X liczy każdy URL jako 23 znaki.\nconst newsUrl = /^https?:\\/\\//i.test(String(news.url || '')) ? String(news.url) : '';\nconst postXLink = newsUrl ? `${fitX(out.post_x, 255)}\\n\\n${newsUrl}` : postX;\nconst postFb = fitCaption(out.post_fb_insta);\nconst script = out.script_tiktok.trim().slice(0, 3000);\n\n// --- Draft --------------------------------------------------------------------------------------\nconst draftId = `d${$now.toFormat('yyyyLLdd-HHmm')}-${Math.random().toString(36).slice(2, 6)}`;\nconst newsTitle = String(out.news_title || news.title).trim();\n\n// --- Wiadomości do Telegrama (HTML) --------------------------------------------------------------\nconst esc = (s) =>\n  String(s ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\nconst cut = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));\nconst platforms = [cfg.enableX && 'X', cfg.enableFacebook && 'FB'].filter(Boolean);\n\n// Nagłówek (podpis zdjęcia) – linię o pochodzeniu grafiki dopisuje węzeł „Grafika: przygotuj”.\nconst captionParts = [\n  tr('🆕 <b>Nowy draft</b> · 🤖 <b>{0}</b> · <code>{1}</code>', esc(cfg.botName), draftId),\n  `📰 <b>${esc(cut(newsTitle, 200))}</b>`,\n  tr('🔗 {0}: <a href=\"{1}\">otwórz źródło</a>', esc(cut(news.source, 60)), esc(news.url)),\n  out.why_selected ? `💡 ${esc(cut(out.why_selected, 300))}` : '',\n  tr('👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.'),\n].filter(Boolean);\nconst llmModel = `${res.provider || 'gemini'}/${res.model || cfg.gemini.textModel}`;\n\n// Teksty postów w dwóch wariantach – węzeł „Grafika: przygotuj” wybiera właściwy, gdy wiadomo już, czy jest grafika.\nconst postsText = (withImage) =>\n  [\n    withImage\n      ? `🐦 <b>X</b> · ${xLength(postX)}/280\\n<pre>${esc(postX)}</pre>`\n      : `${tr('🐦 <b>X</b> (post z linkiem) · {0}/280', xLength(postXLink))}\\n<pre>${esc(postXLink)}</pre>`,\n    withImage\n      ? `${tr('📘📸 <b>Facebook / Instagram</b> · {0} znaków', postFb.length)}\\n<pre>${esc(postFb)}</pre>`\n      : `${tr('📘 <b>Facebook</b> (post z linkiem) · {0} znaków', postFb.length)}\\n<pre>${esc(postFb)}</pre>`,\n  ]\n    .filter(Boolean)\n    .join('\\n\\n');\n// przyciski ✅/❌ pod ostatnią wiadomością draftu\nconst keyboard = {\n  inline_keyboard: [\n    [\n      { text: platforms.length ? tr('✅ Publikuj ({0})', platforms.join(' + ')) : tr('✅ Zatwierdź'), callback_data: `pub:${draftId}` },\n      { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },\n    ],\n  ],\n};\nconst messages = [\n  { text: postsText(true), textLink: postsText(false) },\n  {\n    text: [`${tr('🎬 <b>TikTok – skrypt</b>')}\\n${esc(script)}`, `🧠 <i>${tr('Tekst: {0}', esc(llmModel))}</i>`]\n      .filter(Boolean)\n      .join('\\n\\n'),\n    reply_markup: keyboard,\n  },\n];\n\nreturn [\n  {\n    json: {\n      draftId,\n      botId: cfg.botId,\n      botName: cfg.botName,\n      runId: cfg.runId,\n      createdAt: new Date().toISOString(),\n      status: 'draft',\n      topic: cfg.topic,\n      news: {\n        title: newsTitle,\n        url: news.url,\n        source: news.source,\n        sourceType: news.sourceType,\n        publishedAt: news.publishedAt,\n        images: Array.isArray(news.images) ? news.images.slice(0, 5) : [],\n      },\n      whySelected: out.why_selected || '',\n      post_x: postX,\n      post_x_link: postXLink,\n      post_fb_insta: postFb,\n      script_tiktok: script,\n      llmModel,\n      results: {},\n      telegram: { captionParts, messages },\n    },\n  },\n];\n"
+      },
+      "id": "1d729525-fc71-5938-ad78-97117209599b",
+      "name": "Parsuj odpowiedź LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ✍️ Własny post z panelu (zlecenie „compose”): teksty na wybrane platformy są gotowe – AI dopasowało je w panelu\n// albo to tekst autora. Budujemy z nich draft w tym samym formacie co „Parsuj odpowiedź LLM” i wiadomości do\n// Telegrama; dalej (grafika, draft, Telegram, publikacja, raport) wszystko jak przy newsach.\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Config').first().json.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"✍️ <b>Własny post</b> · 🤖 <b>{0}</b> · <code>{1}</code>\": \"✍️ <b>Own post</b> · 🤖 <b>{0}</b> · <code>{1}</code>\",\n  \"🔗 <a href=\\\"{0}\\\">link w poście</a>\": \"🔗 <a href=\\\"{0}\\\">link in the post</a>\",\n  \"🚀 Publikuję teraz – zlecenie z panelu ({0}).\": \"🚀 Publishing now – job from the panel ({0}).\",\n  \"👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.\": \"👇 Check the texts and approve with the button under the last message.\",\n  \"📘 <b>Facebook</b> · {0} znaków\": \"📘 <b>Facebook</b> · {0} characters\",\n  \"✅ Publikuj ({0})\": \"✅ Publish ({0})\",\n  \"❌ Odrzuć\": \"❌ Reject\",\n  \"Tekst: {0} (dopasowany do platform)\": \"Text: {0} (adapted to the platforms)\",\n  \"Tekst: Twój, bez AI\": \"Text: yours, no AI\",\n  \"Własny post\": \"Own post\",\n  \"bez AI\": \"no AI\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst cfg = $('Config').first().json;\nconst c = cfg.compose;\nconst has = (k) => c.platforms.includes(k);\n\n// Długość wg zasad X: URL = 23 znaki, znaki spoza podstawowych zakresów Unicode (emoji, CJK) = 2.\nfunction xLength(s) {\n  let n = 0;\n  for (const ch of String(s).replace(/https?:\\/\\/\\S+/g, 'x'.repeat(23))) {\n    const cp = ch.codePointAt(0);\n    const light = cp <= 0x10ff || (cp >= 0x2000 && cp <= 0x200d) || (cp >= 0x2010 && cp <= 0x201f) || (cp >= 0x2032 && cp <= 0x2037);\n    n += light ? 1 : 2;\n  }\n  return n;\n}\nconst esc = (s) =>\n  String(s ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\nconst cut = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));\n\nconst draftId = `d${$now.toFormat('yyyyLLdd-HHmm')}-${Math.random().toString(36).slice(2, 6)}`;\nconst postX = c.posts.x || '';\nconst postFb = c.posts.facebook || '';\nconst names = { x: 'X', facebook: 'FB' };\nconst platforms = c.platforms.map((k) => names[k]);\n\n// Nagłówek (podpis zdjęcia) – linię o grafice dopisuje węzeł „Grafika: przygotuj” (przed ostatnią linią)\nconst captionParts = [\n  tr('✍️ <b>Własny post</b> · 🤖 <b>{0}</b> · <code>{1}</code>', esc(cfg.botName), draftId),\n  `📝 <b>${esc(cut(c.title, 200))}</b>`,\n  c.link ? tr('🔗 <a href=\"{0}\">link w poście</a>', esc(c.link)) : '',\n  c.publishNow\n    ? tr('🚀 Publikuję teraz – zlecenie z panelu ({0}).', platforms.join(', '))\n    : tr('👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.'),\n].filter(Boolean);\n\n// Teksty postów – w Telegramie najwyżej 4096 znaków na wiadomość, więc długie teksty skracamy tylko w podglądzie\nconst blocks = [\n  has('x') && [`🐦 <b>X</b> · ${xLength(postX)}/280`, postX],\n  has('facebook') && [tr('📘 <b>Facebook</b> · {0} znaków', postFb.length), postFb],\n].filter(Boolean);\nconst room = Math.floor(3600 / blocks.length);\nconst postsText = blocks\n  .map(([title, text]) => `${title}\\n<pre>${esc(text.length > room ? `${text.slice(0, room - 1)}…` : text)}</pre>`)\n  .join('\\n\\n');\n\n// przyciski ✅/❌ pod ostatnią wiadomością draftu (bez nich, gdy autor kliknął „Publikuj teraz”)\nconst keyboard = {\n  inline_keyboard: [\n    [\n      { text: tr('✅ Publikuj ({0})', platforms.join(' + ')), callback_data: `pub:${draftId}` },\n      { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },\n    ],\n  ],\n};\nconst info = [`🧠 <i>${c.ai ? tr('Tekst: {0} (dopasowany do platform)', esc(c.ai)) : tr('Tekst: Twój, bez AI')}</i>`]\n  .filter(Boolean)\n  .join('\\n\\n');\nconst messages = [\n  { text: postsText, textLink: postsText },\n  { text: info, reply_markup: c.publishNow ? undefined : keyboard },\n];\n\nreturn [\n  {\n    json: {\n      draftId,\n      botId: cfg.botId,\n      botName: cfg.botName,\n      runId: cfg.runId,\n      createdAt: new Date().toISOString(),\n      status: 'draft',\n      mode: 'manual',\n      topic: cfg.topic,\n      // „news” – jak w draftach z newsów: tytuł (pierwsza linia tekstu), link z posta, źródło = własny post\n      news: {\n        title: c.title,\n        url: c.link,\n        source: tr('Własny post'),\n        sourceType: 'manual',\n        publishedAt: new Date().toISOString(),\n        images: [],\n      },\n      whySelected: '',\n      platforms: c.platforms,\n      composeText: c.text,\n      // X: link (jeśli jest) panel dopisał już na końcu tekstu\n      post_x: postX,\n      post_x_link: postX,\n      post_fb_insta: postFb,\n      script_tiktok: '',\n      // grafika dla węzła „Grafika: panel”: zdjęcie wgrane w panelu albo brak\n      composeImage: { source: c.image.source, upload: c.image.upload },\n      llmModel: c.ai || tr('bez AI'),\n      results: {},\n      telegram: { captionParts, messages },\n    },\n  },\n];\n"
+      },
+      "id": "c1f79a88-0ea1-5985-bc2f-df7d36de82ca",
+      "name": "Post własny: przygotuj",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3720,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.panelUrl }}/internal/bots/{{ $('Config').first().json.botId }}/image",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ news: { url: $json.news.url, title: $json.news.title, images: $json.news.images }, compose: $json.composeImage }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "d836e8b3-7259-55a8-8fee-a080961a7d3f",
+      "name": "Grafika: panel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4060,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Grafika z panelu (zdjęcie ze źródła albo brak) → plik binarny n8n + plik JSON draftu.\n// Bez grafiki draft też powstaje: X i Facebook dostają wtedy post z linkiem.\n// Własny post (✍️ Nowy post): zdjęcie wgrane w panelu; bez grafiki – post z linkiem albo sam tekst.\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Config').first().json.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"grafika: {0}\": \"image: {0}\",\n  \"błąd panelu\": \"panel error\",\n  \"🚫 Bez grafiki – X i Facebook: sam tekst\": \"🚫 No image – X and Facebook: text only\",\n  \"🚫 Bez grafiki – X i Facebook: post z linkiem\": \"🚫 No image – X and Facebook: post with a link\",\n  \"📷 Twoje zdjęcie\": \"📷 Your photo\",\n  \"📷 Zdjęcie ze źródła: {0} (sprawdź prawa do publikacji)\": \"📷 Photo from the source: {0} (check the publishing rights)\",\n  \" · X/FB: post z linkiem\": \" · X/FB: post with a link\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst cfg = $('Config').first().json;\nconst compose = cfg.mode === 'compose';\nconst draft = compose ? $('Post własny: przygotuj').first().json : $('Parsuj odpowiedź LLM').first().json;\nconst res = $input.first().json || {};\n\nconst warnings = [...(Array.isArray(res.warnings) ? res.warnings : [])];\nif (res.error) warnings.push(tr('grafika: {0}', typeof res.error === 'string' ? res.error : res.error.message || tr('błąd panelu')));\n\nconst b64 = typeof res.data === 'string' && res.data ? res.data : null;\nconst mime = res.mimeType || 'image/png';\nconst ext = /jpe?g/i.test(mime) ? 'jpg' : 'png';\nconst hasImage = !!b64;\nconst host = (u) => {\n  const m = String(u || '').match(/^https?:\\/\\/([^/?#]+)/i);\n  return m ? m[1].replace(/^www\\./, '') : '';\n};\n\nconst image = hasImage\n  ? {\n      file: `${draft.draftId}.${ext}`,\n      mimeType: mime,\n      sizeBytes: Math.floor((b64.length * 3) / 4),\n      source: res.source,\n      ...(res.width ? { width: res.width, height: res.height } : {}),\n      ...(res.url ? { url: res.url } : {}),\n    }\n  : null;\n// „link” = X i FB publikują tekst z linkiem (podgląd artykułu robi platforma); własny post – tylko bez grafiki\nconst linkMode = (!compose && cfg.image.mode === 'link') || !hasImage;\n// własny post bez grafiki i bez linku: X i Facebook dostają sam tekst\nconst textOnly = compose && !draft.news.url;\n\n// --- Telegram: nagłówek z informacją, skąd jest grafika ------------------------------------------\nconst esc = (s) =>\n  String(s ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\nconst noImage = textOnly ? tr('🚫 Bez grafiki – X i Facebook: sam tekst') : tr('🚫 Bez grafiki – X i Facebook: post z linkiem');\nconst imageLine = !hasImage\n  ? noImage\n  : res.source === 'upload'\n    ? tr('📷 Twoje zdjęcie')\n    : tr('📷 Zdjęcie ze źródła: {0} (sprawdź prawa do publikacji)', esc(host(res.url)));\nconst parts = [...draft.telegram.captionParts];\n// news: po linku do źródła; własny post: przed ostatnią linią (akceptacja / „publikuję teraz”)\nconst at = compose ? parts.length - 1 : Math.min(3, parts.length);\nparts.splice(at, 0, imageLine + (!compose && cfg.image.mode === 'link' && hasImage ? tr(' · X/FB: post z linkiem') : ''));\nif (warnings.length) parts.push(`⚠️ ${esc(warnings.join(' · ').slice(0, 400))}`);\n// podpis zdjęcia w Telegramie: maks. 1024 znaki – najpierw odpadają uzasadnienie i ostrzeżenia (bez cięcia tagów HTML)\nfor (const drop of ['⚠️', '💡', '🔗']) {\n  if (parts.join('\\n').length <= 1024) break;\n  const i = parts.findIndex((l) => l.startsWith(drop));\n  if (i >= 0) parts.splice(i, 1);\n}\nconst caption = parts.join('\\n');\n\nconst [posts, script] = draft.telegram.messages;\nconst telegram = { caption, messages: [{ text: linkMode ? posts.textLink : posts.text }, script] };\n\nconst { telegram: _t, ...clean } = draft;\nconst finalDraft = { ...clean, image, imageMode: compose ? draft.composeImage.source : cfg.image.mode, linkMode, warnings };\n\nconst binary = {\n  draft: {\n    data: Buffer.from(JSON.stringify(finalDraft, null, 2), 'utf8').toString('base64'),\n    mimeType: 'application/json',\n    fileName: `${draft.draftId}.json`,\n    fileExtension: 'json',\n  },\n};\nif (hasImage) binary.data = { data: b64, mimeType: mime, fileName: image.file, fileExtension: ext };\n\nreturn [{ json: { ...finalDraft, hasImage, telegram }, binary }];\n"
+      },
+      "id": "3419ce40-c2e1-549e-bd4d-d68238137506",
+      "name": "Grafika: przygotuj",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4280,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "79348383-aee7-503c-9e71-fa56537a85da",
+              "leftValue": "={{ $json.hasImage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f9e3ce68-8cf6-596f-b4e8-7d1b34bb0972",
+      "name": "Jest grafika?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.storageDir }}/{{ $json.image.file }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "bad01983-fd00-59f7-b24a-bd09a31a15de",
+      "name": "Zapisz grafikę na dysku",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        4720,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.storageDir }}/{{ $json.draftId }}.json",
+        "dataPropertyName": "draft",
+        "options": {}
+      },
+      "id": "691a90d5-2168-5e23-a438-ff50ef13efbd",
+      "name": "Zapisz draft na dysku",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        4940,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b0ff6c5d-378f-5d12-a3a7-989aba56e760",
+              "leftValue": "={{ $('Grafika: przygotuj').first().json.hasImage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "440f7eea-be14-5621-aa9e-119938732921",
+      "name": "Telegram: ze zdjęciem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5160,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/sendPhoto",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formData",
+              "name": "chat_id",
+              "value": "={{ $('Config').first().json.telegram.chatId }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "photo",
+              "inputDataFieldName": "data"
+            },
+            {
+              "parameterType": "formData",
+              "name": "caption",
+              "value": "={{ $('Grafika: przygotuj').first().json.telegram.caption }}"
+            },
+            {
+              "parameterType": "formData",
+              "name": "parse_mode",
+              "value": "HTML"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "39287024-f495-552e-8138-1ea424a0b01d",
+      "name": "Telegram: wyślij grafikę",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5380,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Config').first().json.telegram.chatId, text: $('Grafika: przygotuj').first().json.telegram.caption, parse_mode: 'HTML', link_preview_options: { is_disabled: true } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "e5590215-6b8f-5f61-be49-8b5b01f7315e",
+      "name": "Telegram: wyślij nagłówek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5380,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Po nagłówku (zdjęcie albo wiadomość, gdy draft jest bez grafiki): dwie wiadomości jako odpowiedzi,\n// wysyłane PO KOLEI (dwa węzły), żeby przyciski ✅/❌ zawsze były pod ostatnią wiadomością.\nconst cfg = $('Config').first().json;\nconst draft = $('Grafika: przygotuj').first().json;\nconst headMessageId = $input.first().json.result?.message_id;\n\nconst body = (m) => ({\n  chat_id: cfg.telegram.chatId,\n  text: m.text,\n  parse_mode: 'HTML',\n  link_preview_options: { is_disabled: true },\n  ...(headMessageId ? { reply_parameters: { message_id: headMessageId, allow_sending_without_reply: true } } : {}),\n  ...(m.reply_markup ? { reply_markup: m.reply_markup } : {}),\n});\nconst [posts, script] = draft.telegram.messages;\nreturn [{ json: { posts: body(posts), script: body(script) } }];\n"
+      },
+      "id": "92d43462-d81e-525c-9841-5012767bc543",
+      "name": "Telegram: przygotuj teksty",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Telegram: przygotuj teksty').first().json.posts) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "8e560eef-466e-5ec7-9ad1-58a34fbaf257",
+      "name": "Telegram: wyślij teksty postów",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5820,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Telegram: przygotuj teksty').first().json.script) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "c97d5e46-5112-5f70-b1fe-d31150219593",
+      "name": "Telegram: wyślij skrypt i przyciski",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6040,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.panelUrl }}/internal/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'draft', runId: $('Config').first().json.runId, botId: $('Config').first().json.botId, draftId: $('Grafika: przygotuj').first().json.draftId, title: $('Grafika: przygotuj').first().json.news.title, image: ($('Grafika: przygotuj').first().json.image || {}).source || 'none', auto: $('Config').first().json.autoPublish === true }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "55ce09de-6421-56e6-ab60-b3d3e392c525",
+      "name": "Panel: zgłoś draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6260,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8400ad37-05d7-5442-ba2e-116e804bb755",
+              "leftValue": "={{ $('Config').first().json.autoPublish === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "51d7ce7a-d5bf-58ec-86cf-6d830a78c5f6",
+      "name": "Publikować bez akceptacji?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wspólne wejście łańcucha publikacji – kliknięcie ✅ w Telegramie (zlecenie z panelu), własny post\n// z „Publikuj teraz” w panelu (publikacja od razu po zapisaniu draftu).\nconst cfg = $('Config').first().json;\n\nif (cfg.mode !== 'publish') {\n  const draft = $('Grafika: przygotuj').first().json;\n  const last = $('Telegram: wyślij skrypt i przyciski').first().json.result;\n  const via = 'panel';\n  return [\n    {\n      json: {\n        draftId: draft.draftId,\n        chatId: cfg.telegram.chatId,\n        messageId: last ? last.message_id : null,\n        approvedBy: via,\n        via,\n      },\n    },\n  ];\n}\n\nconst p = cfg.publish;\nreturn [\n  {\n    json: {\n      draftId: p.draftId,\n      chatId: p.chatId || cfg.telegram.chatId,\n      messageId: p.messageId,\n      approvedBy: p.approvedBy,\n      via: 'telegram',\n    },\n  },\n];\n"
+      },
+      "id": "8566b833-7879-5a2c-81b3-b9b9f0fa05fe",
+      "name": "Kontekst publikacji",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Config').first().json.storageDir }}/{{ $json.draftId }}.json",
+        "options": {}
+      },
+      "id": "ce7be4a4-4dc4-57fc-85e8-404e514539ee",
+      "name": "Wczytaj draft",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Czyta plik JSON draftu z dysku i ustala, które platformy trzeba jeszcze opublikować\n// (przy ponownej próbie pomijamy platformy, które już się udały – brak duplikatów).\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Config').first().json.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"ℹ️ Draft {0} był już opublikowany – pomijam.\": \"ℹ️ Draft {0} has already been published – skipping.\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst cfg = $('Config').first().json;\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data'); // helpers udostępnia task runner n8n\nconst draft = JSON.parse(buffer.toString('utf8'));\nconst prev = draft.results || {};\n\n// Draft bez grafiki (albo tryb „link”): X i Facebook publikują tekst z linkiem.\nconst hasImage = !!(draft.image && draft.image.file);\nconst linkMode = draft.linkMode === true || !hasImage;\nconst url = draft.news && /^https?:\\/\\//i.test(String(draft.news.url || '')) ? String(draft.news.url) : '';\n// własny post: tylko platformy wybrane w edytorze (drafty z newsów – wszystkie włączone w bocie)\nconst chosen = (k) => !Array.isArray(draft.platforms) || draft.platforms.includes(k);\n\nconst todo = {\n  x: cfg.enableX && chosen('x') && !prev.x?.ok,\n  facebook: cfg.enableFacebook && chosen('facebook') && !prev.facebook?.ok,\n};\n// platformy pominięte, bo wymagają grafiki\nconst skipped = {};\n\nreturn [\n  {\n    json: {\n      ...draft,\n      todo,\n      skipped,\n      hasImage,\n      linkMode,\n      // X: w trybie linku – tekst z adresem artykułu (X sam pokaże kartę z podglądem)\n      xText: linkMode ? draft.post_x_link || draft.post_x : draft.post_x,\n      xWithImage: hasImage && !linkMode,\n      fbWithImage: hasImage && !linkMode,\n      fbLink: url,\n      alreadyPublished: draft.status === 'published',\n      // komunikat dla węzła „Telegram: już opublikowany”\n      alreadyPublishedText: tr('ℹ️ Draft {0} był już opublikowany – pomijam.', draft.draftId),\n    },\n  },\n];\n"
+      },
+      "id": "38ddc052-d4b7-5868-bbe0-fc5508e01e13",
+      "name": "Parsuj draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ffaf693d-4627-5856-84b5-d03a89cd8fdf",
+              "leftValue": "={{ $json.alreadyPublished }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d918988e-f5c6-5a34-b3a5-76baad740b54",
+      "name": "Już opublikowany?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1840,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Kontekst publikacji').first().json.chatId, text: $json.alreadyPublishedText }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "1531002d-6aeb-5884-93a1-c3b55cc6705c",
+      "name": "Telegram: już opublikowany",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2060,
+        980
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.panelUrl }}/internal/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'publish', runId: $('Config').first().json.runId, botId: $('Config').first().json.botId, draftId: $('Parsuj draft').first().json.draftId, status: 'published', results: $('Parsuj draft').first().json.results }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "00414a8f-e559-5178-a58d-5e385d566c49",
+      "name": "Panel: zgłoś (już opublikowany)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2280,
+        980
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a5fa3570-1815-5b82-b646-c5f68604dfcb",
+              "leftValue": "={{ $('Parsuj draft').first().json.todo.x }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fc6c964b-fa1e-5b63-9e8c-7ceba67794ac",
+      "name": "X włączony?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2060,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7c74bc2b-2222-5509-9110-30f3402411cc",
+              "leftValue": "={{ $('Parsuj draft').first().json.xWithImage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "2aff5bab-4e7a-5815-947d-720cb98b007d",
+      "name": "X: z grafiką?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2280,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Config').first().json.storageDir }}/{{ $('Parsuj draft').first().json.image.file }}",
+        "options": {}
+      },
+      "id": "cdb85846-7f56-5472-b603-11c2bd3e8077",
+      "name": "X: wczytaj grafikę",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        2500,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/x/2/media/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "media",
+              "inputDataFieldName": "data"
+            },
+            {
+              "parameterType": "formData",
+              "name": "media_category",
+              "value": "tweet_image"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "0276339f-9a6f-54c8-9293-8712b36ad3e1",
+      "name": "X: upload grafiki",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2720,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/x/2/tweets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ text: $('Parsuj draft').first().json.xText }, ($('Parsuj draft').first().json.xWithImage && $json.data && $json.data.id) ? { media: { media_ids: [String($json.data.id)] } } : {})) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "e5a20a17-9557-59e3-b4b5-c62ea179f69d",
+      "name": "X: opublikuj post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2720,
+        1140
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1f4003d3-5ac2-5155-9492-4cbc0ee54bf2",
+              "leftValue": "={{ $('Parsuj draft').first().json.todo.facebook }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "06d34ef2-2975-56d9-96b6-c806f6927436",
+      "name": "Facebook włączony?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2940,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2c10483b-9560-57e6-a72a-29bc5275b58c",
+              "leftValue": "={{ $('Parsuj draft').first().json.fbWithImage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d87e7006-8807-5c17-95aa-e48cdd9010b7",
+      "name": "FB: z grafiką?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3160,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Config').first().json.storageDir }}/{{ $('Parsuj draft').first().json.image.file }}",
+        "options": {}
+      },
+      "id": "91c22728-09a4-5daa-ae84-476e74591137",
+      "name": "FB: wczytaj grafikę",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        3380,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/meta/{{ $('Config').first().json.meta.graphVersion }}/{{ $('Config').first().json.meta.pageId }}/photos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "source",
+              "inputDataFieldName": "data"
+            },
+            {
+              "parameterType": "formData",
+              "name": "message",
+              "value": "={{ $('Parsuj draft').first().json.post_fb_insta }}"
+            },
+            {
+              "parameterType": "formData",
+              "name": "published",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "08b81782-4e0d-5a8d-bdff-e3d1b3741510",
+      "name": "Facebook: opublikuj post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/meta/{{ $('Config').first().json.meta.graphVersion }}/{{ $('Config').first().json.meta.pageId }}/feed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ message: $('Parsuj draft').first().json.post_fb_insta }, $('Parsuj draft').first().json.fbLink ? { link: $('Parsuj draft').first().json.fbLink } : {})) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "bf75d240-2fe0-51c8-84d4-8c37af5b37ea",
+      "name": "Facebook: opublikuj tekst/link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        1140
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Zbiera wyniki publikacji (X / Facebook), aktualizuje plik draftu i buduje raport do Telegrama.\n// --- język (wstawia build.py): tr('tekst po polsku', ...args) zwraca tekst w języku panelu ---\nconst TR_LANG = (() => {\n  try {\n    return $('Config').first().json.lang === 'en' ? 'en' : 'pl';\n  } catch (e) {\n    return 'pl';\n  }\n})();\nconst TR_EN = {\n  \"błąd bez szczegółów – sprawdź konto w panelu i zakładkę Executions w n8n\": \"error without details – check the account in the panel and the Executions tab in n8n\",\n  \"bez grafiki: {0}\": \"without the image: {0}\",\n  \"brak odpowiedzi API\": \"no API response\",\n  \"⏭️ wyłączone w panelu\": \"⏭️ turned off in the panel\",\n  \"⏭️ pominięto – draft bez grafiki\": \"⏭️ skipped – draft without an image\",\n  \"<a href=\\\"{0}\\\">zobacz post</a>\": \"<a href=\\\"{0}\\\">see the post</a>\",\n  \"nie wykonano\": \"not done\",\n  \"✅ <b>Opublikowano</b>\": \"✅ <b>Published</b>\",\n  \"⚠️ <b>Opublikowano częściowo</b>\": \"⚠️ <b>Partly published</b>\",\n  \"❌ <b>Publikacja nieudana</b>\": \"❌ <b>Publishing failed</b>\",\n  \"✅ <b>Zatwierdzono</b> (brak platform do publikacji)\": \"✅ <b>Approved</b> (no platforms to publish to)\",\n  \"akceptacja w Telegramie\": \"approved in Telegram\",\n  \"publikacja z panelu\": \"published from the panel\",\n  \"   ↳ Instagram i TikTok ręcznie: grafika i teksty powyżej\": \"   ↳ Instagram and TikTok by hand: image and texts above\",\n  \"✅ Opublikowano\": \"✅ Published\",\n  \"✅ Zatwierdzono\": \"✅ Approved\",\n  \"🔁 Ponów nieudane\": \"🔁 Retry failed\",\n  \"🗑 Porzuć\": \"🗑 Discard\"\n};\nconst tr = (text, ...args) => {\n  const s = (TR_LANG === 'en' && TR_EN[text]) || text;\n  return args.length ? s.replace(/\\{(\\d+)\\}/g, (m, i) => (args[i] === undefined ? m : String(args[i]))) : s;\n};\n\nconst cfg = $('Config').first().json;\nconst ctx = $('Kontekst publikacji').first().json;\nconst draft = $('Parsuj draft').first().json;\nconst { todo, skipped = {}, alreadyPublished, hasImage, xText, xWithImage, fbWithImage, fbLink, ...base } = draft;\n\nconst out = (name) => {\n  try {\n    return $(name).isExecuted ? $(name).first().json : null;\n  } catch (e) {\n    return null;\n  }\n};\n// Błąd z węzła HTTP (tryb „continue on fail”) bywa zserializowany bez treści – wtedy podajemy wskazówkę.\nconst err = (j) => {\n  if (!j || !('error' in j)) return null;\n  const e = j.error;\n  if (typeof e === 'string') return e.slice(0, 400);\n  const code = e && (e.httpCode || e.status);\n  const msg = (e && e.message) || '';\n  const details = e && [code && !msg.startsWith(String(code)) ? code : null, msg, e.description].filter(Boolean).join(' – ');\n  if (details) return details.slice(0, 400);\n  const raw = JSON.stringify(e || {});\n  return raw === '{}' ? tr('błąd bez szczegółów – sprawdź konto w panelu i zakładkę Executions w n8n') : raw.slice(0, 400);\n};\nconst firstErr = (...names) => {\n  for (const n of names) {\n    const e = err(out(n));\n    if (e) return `${n}: ${e}`;\n  }\n  return null;\n};\n\nconst now = new Date().toISOString();\nconst results = { ...(draft.results || {}) };\n\nif (todo.x) {\n  const post = out('X: opublikuj post');\n  const id = post?.data?.id;\n  const uploadErr = draft.xWithImage ? err(out('X: upload grafiki')) : null;\n  results.x = id\n    ? { ok: true, id, url: `https://x.com/i/status/${id}`, at: now, ...(uploadErr ? { warning: tr('bez grafiki: {0}', uploadErr) } : {}) }\n    : { ok: false, error: firstErr('X: upload grafiki', 'X: opublikuj post') || tr('brak odpowiedzi API'), at: now };\n}\nif (todo.facebook) {\n  // zdjęcie z opisem (/photos) albo post z linkiem (/feed)\n  const fb = out('Facebook: opublikuj post') || out('Facebook: opublikuj tekst/link');\n  const postId = fb && !fb.error ? fb.post_id || fb.id : null;\n  results.facebook = postId\n    ? { ok: true, id: postId, url: `https://www.facebook.com/${postId}`, at: now, ...(draft.fbWithImage ? {} : { kind: 'link' }) }\n    : {\n        ok: false,\n        error: firstErr('FB: wczytaj grafikę', 'Facebook: opublikuj post', 'Facebook: opublikuj tekst/link') || tr('brak odpowiedzi API'),\n        at: now,\n      };\n}\n\n// własny post: w raporcie tylko platformy wybrane w edytorze\nconst manual = draft.mode === 'manual';\nconst chosen = (k) => !Array.isArray(draft.platforms) || draft.platforms.includes(k);\nconst enabled = {\n  x: cfg.enableX && chosen('x'),\n  facebook: cfg.enableFacebook && chosen('facebook'),\n};\n// platformy pominięte z braku grafiki (np. Instagram) nie psują statusu – nie ma czego ponawiać\nconst active = Object.keys(enabled).filter((k) => enabled[k] && !(skipped[k] && !results[k]?.ok));\nconst okCount = active.filter((k) => results[k]?.ok).length;\nconst status = !active.length ? 'approved' : okCount === active.length ? 'published' : okCount ? 'partial' : 'failed';\n\n// --- Raport HTML ---------------------------------------------------------------------------------\nconst esc = (s) =>\n  String(s ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\nconst label = { x: '🐦 X', facebook: '📘 Facebook' };\nconst line = (k) => {\n  if (!enabled[k]) return `${label[k]}: ${tr('⏭️ wyłączone w panelu')}`;\n  const r = results[k];\n  if (skipped[k] && !r?.ok) return `${label[k]}: ${tr('⏭️ pominięto – draft bez grafiki')}`;\n  if (r?.ok) {\n    const what = r.url ? tr('<a href=\"{0}\">zobacz post</a>', esc(r.url)) : esc(r.note || 'OK');\n    return `${label[k]}: ✅ ${what}${r.warning ? ` ⚠️ ${esc(r.warning)}` : ''}`;\n  }\n  return `${label[k]}: ❌ ${esc(r?.error || tr('nie wykonano'))}`;\n};\nconst header = {\n  published: tr('✅ <b>Opublikowano</b>'),\n  partial: tr('⚠️ <b>Opublikowano częściowo</b>'),\n  failed: tr('❌ <b>Publikacja nieudana</b>'),\n  approved: tr('✅ <b>Zatwierdzono</b> (brak platform do publikacji)'),\n}[status];\n\nconst icon = manual ? '✍️' : '📰';\n// kto zatwierdził: osoba w Telegramie albo „Publikuj teraz” w panelu\nconst who = {\n  telegram: `👤 ${esc(ctx.approvedBy)} · ${tr('akceptacja w Telegramie')}`,\n  panel: `✍️ ${tr('publikacja z panelu')}`,\n}[ctx.via];\nconst text = [\n  `${header} · 🤖 ${esc(cfg.botName)} · <code>${esc(draft.draftId)}</code>`,\n  `${icon} ${esc(draft.news?.title || '')}`,\n  '',\n  ...['x', 'facebook'].filter(chosen).map(line),\n  ...(manual ? [] : [tr('   ↳ Instagram i TikTok ręcznie: grafika i teksty powyżej')]),\n  who,\n].join('\\n');\n\nconst done = status === 'published' || status === 'approved';\nconst replyMarkup = done\n  ? { inline_keyboard: [[{ text: status === 'published' ? tr('✅ Opublikowano') : tr('✅ Zatwierdzono'), callback_data: 'noop' }]] }\n  : {\n      inline_keyboard: [\n        [\n          { text: tr('🔁 Ponów nieudane'), callback_data: `pub:${draft.draftId}` },\n          { text: tr('🗑 Porzuć'), callback_data: `rej:${draft.draftId}` },\n        ],\n      ],\n    };\n\nconst updated = { ...base, status, results, lastAttemptAt: now, approvedBy: ctx.approvedBy, publishedVia: ctx.via };\n\nreturn [\n  {\n    json: {\n      draftId: draft.draftId,\n      status,\n      results,\n      panelEvent: { type: 'publish', runId: cfg.runId, botId: cfg.botId, draftId: draft.draftId, status, results },\n      reportBody: {\n        chat_id: ctx.chatId,\n        text,\n        parse_mode: 'HTML',\n        link_preview_options: { is_disabled: true },\n        ...(ctx.messageId ? { reply_parameters: { message_id: ctx.messageId, allow_sending_without_reply: true } } : {}),\n      },\n      markupBody: { chat_id: ctx.chatId, message_id: ctx.messageId, reply_markup: replyMarkup },\n    },\n    binary: {\n      draft: {\n        data: Buffer.from(JSON.stringify(updated, null, 2), 'utf8').toString('base64'),\n        mimeType: 'application/json',\n        fileName: `${draft.draftId}.json`,\n        fileExtension: 'json',\n      },\n    },\n  },\n];\n"
+      },
+      "id": "f896ccf2-c083-56f7-bc5b-6ae375cb13db",
+      "name": "Podsumowanie publikacji",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4040,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.storageDir }}/{{ $json.draftId }}.json",
+        "dataPropertyName": "draft",
+        "options": {}
+      },
+      "id": "af8343cf-b6f9-53a9-a98a-918ce0484ca1",
+      "name": "Zapisz status draftu",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        4260,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Podsumowanie publikacji').first().json.reportBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "4322685a-28c9-5446-95ab-404075a792f5",
+      "name": "Telegram: raport",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4480,
+        1200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gateway }}/telegram/editMessageReplyMarkup",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Podsumowanie publikacji').first().json.markupBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "7f6ae676-2fcc-5bf8-9eff-baf4e1a2157b",
+      "name": "Telegram: aktualizuj przyciski",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4700,
+        1200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.panelUrl }}/internal/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Podsumowanie publikacji').first().json.panelEvent) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "c0f0b90a-96f5-573f-8024-ad8afa877e43",
+      "name": "Panel: zgłoś wynik publikacji",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4920,
+        1200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "8b31a374-4460-5064-9659-3bb5732df2bc",
+      "name": "Błąd workflow",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.POSTER_PANEL_URL || 'http://panel:7081' }}/internal/error",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-poster-token",
+              "value": "={{ $env.PANEL_INTERNAL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "f788159f-385e-5b95-b557-35df25d7de1a",
+      "name": "Panel: zgłoś błąd",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        1900
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "content": "## 🤖 Poster – autonomiczny bot newsowy · autonomous news bot (n8n)\n🇵🇱 **Sterowanie: panel http://IP_NAS:7080** – tam ustawiasz bota (temat, źródła, harmonogram, model AI, platformy), klucze API i konta X / Facebook.\nPanel wywołuje ten workflow webhookiem **„Start: zlecenie z panelu”** z pełną konfiguracją bota:\n• `generate` – wg harmonogramu bota lub „Uruchom teraz”: źródła → deduplikacja → AI (tekst) → grafika → draft na Telegram,\n• `publish` – po kliknięciu ✅ w Telegramie (przyciski odbiera panel): publikacja X / FB.\n• `compose` – ✍️ własny post z panelu (*Nowy post*): teksty na platformy są gotowe (AI dopasowało je w panelu albo to tekst autora) → grafika → draft → Telegram do akceptacji albo publikacja od razu („Publikuj teraz”).\n🔐 n8n nie przechowuje kluczy: tekst i grafikę zamawia **panel** (`/internal/bots/{id}/llm|image`), a zapytania do Telegrama, X, Meta i Apify idą przez **bramkę panelu** (`{gateway}/…`), która dokleja klucze właściwe dla bota. Nagłówek `x-poster-token` = `PANEL_INTERNAL_TOKEN` z `.env`.\n📁 Drafty (JSON + grafika) zapisują się w `data/files` na NAS-ie – panel pokazuje je w zakładce *Drafty*.\n\n🇬🇧 **Control: the panel at http://NAS_IP:7080** – there you set up the bot (topic, sources, schedule, AI model, platforms), API keys and X / Facebook accounts.\nThe panel calls this workflow through the **“Start: zlecenie z panelu”** webhook with the full bot configuration:\n• `generate` – on the bot's schedule or “Run now”: sources → deduplication → AI (text) → image → draft to Telegram,\n• `publish` – after a ✅ click in Telegram (the panel receives the buttons): publishing to X / FB.\n• `compose` – ✍️ own post from the panel (*New post*): the texts for the platforms are ready (AI adapted them in the panel, or it is the author's text) → image → draft → Telegram for approval or publishing at once (“Publish now”).\n🔐 n8n stores no keys: the **panel** orders text and images (`/internal/bots/{id}/llm|image`), and requests to Telegram, X, Meta and Apify go through the **panel gateway** (`{gateway}/…`), which adds the bot's keys. Header `x-poster-token` = `PANEL_INTERNAL_TOKEN` from `.env`.\n📁 Drafts (JSON + image) are saved in `data/files` on the NAS – the panel shows them in the *Drafts* tab.\nNode names are in Polish.",
+        "height": 467,
+        "width": 1150,
+        "color": 7
+      },
+      "id": "79e87267-51f4-58e9-a387-62b187fdcf89",
+      "name": "Sticky Note overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -587
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ▶️ Zlecenie z panelu · Job from the panel\n🇵🇱 Odpowiedź od razu zwraca panelowi ID wykonania (link w historii bota). Zlecenia bez poprawnego tokenu są ignorowane. Własny post (`compose`) omija źródła i AI.\n\n🇬🇧 The response returns the execution ID to the panel at once (a link in the bot's history). Jobs without a valid token are ignored. An own post (`compose`) skips the sources and AI.",
+        "height": 290,
+        "width": 1300,
+        "color": 5
+      },
+      "id": "b5ca04f3-30ef-540b-b5df-d39356802134",
+      "name": "Sticky Note start",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        410
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 1️⃣ Źródła + deduplikacja · Sources + deduplication\n🇵🇱 RSS portali i **profile X przez RSSHub** (wymaga `TWITTER_AUTH_TOKEN` w `.env`) lub **Apify**.\n**Deduplikacja** jest w panelu (reset: panel → bot → Zaawansowane). Tweet → `x:<id>`, artykuł → URL bez `utm_*`.\n\n🇬🇧 News site RSS feeds and **X profiles via RSSHub** (needs `TWITTER_AUTH_TOKEN` in `.env`) or **Apify**.\n**Deduplication** happens in the panel (reset: panel → bot → Advanced). Tweet → `x:<id>`, article → URL without `utm_*`.",
+        "height": 540,
+        "width": 1740,
+        "color": 4
+      },
+      "id": "b0964981-977a-5710-a418-9c912acaefc6",
+      "name": "Sticky Note sources",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1130,
+        -190
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2️⃣ AI: tekst · text (JSON Schema)\n🇵🇱 Panel (`/internal/bots/{id}/llm`) wysyła zapytanie do dostawcy wybranego w bocie – **Gemini** albo API zgodnego z OpenAI (np. **Ollama**). AI wybiera 1 news i pisze `post_x`, `post_fb_insta` i `script_tiktok`. Limity (X 280 zn., FB/IG 2200 zn./30 #) pilnowane w kodzie. **✍️ Własny post**: *Post własny: przygotuj* składa draft z tekstów z panelu (AI dopasowało je już w edytorze).\n\n🇬🇧 The panel (`/internal/bots/{id}/llm`) sends the request to the provider chosen in the bot – **Gemini** or an OpenAI-compatible API (e.g. **Ollama**). AI picks 1 story and writes `post_x`, `post_fb_insta` and `script_tiktok`. Limits (X 280 chars, FB/IG 2200 chars/30 #) are enforced in code. **✍️ Own post**: *Post własny: przygotuj* builds the draft from the texts sent by the panel (AI already adapted them in the editor).",
+        "height": 649,
+        "width": 860,
+        "color": 5
+      },
+      "id": "d828f462-8cf8-5aaf-bc5f-67051504d439",
+      "name": "Sticky Note llm",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3010,
+        -39
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3️⃣ Grafika (wg trybu bota) · Image (by the bot's mode)\n🇵🇱 Panel (`/internal/bots/{id}/image`): **📷 zdjęcie ze źródła** (RSS / og:image artykułu / tweet) albo **bez grafiki**. Tryb **🔗 link** i draft bez zdjęcia: X i FB dostają link z podglądem.\n\n🇬🇧 The panel (`/internal/bots/{id}/image`): **📷 photo from the source** (RSS / the article's og:image / tweet) or **no image**. **🔗 Link** mode and a draft without a photo: X and FB get a link with a preview.",
+        "height": 460,
+        "width": 1080,
+        "color": 6
+      },
+      "id": "7e8250d8-68d4-56db-98cc-691030f81b00",
+      "name": "Sticky Note image",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4010,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4️⃣ Telegram (akceptacja + backup · approval + backup)\n🇵🇱 Grafika (albo sam nagłówek) → teksty postów → skrypt TikTok z przyciskami ✅/❌ (**po kolei**, przyciski zawsze pod ostatnią wiadomością). Publikacja startuje po kliknięciu ✅ (własny post z „Publikuj teraz” – od razu); grafikę i teksty możesz też wrzucić ręcznie na Instagram i TikTok.\n\n🇬🇧 Image (or just the header) → post texts → TikTok script with the ✅/❌ buttons (**one by one**, so the buttons are always under the last message). Publishing starts after a ✅ click (an own post with “Publish now” – at once); you can also post the image and texts to Instagram and TikTok by hand.",
+        "height": 560,
+        "width": 1520,
+        "color": 3
+      },
+      "id": "81a9cdc7-9b56-5d5b-b9e8-8e583235531d",
+      "name": "Sticky Note telegram",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5110,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5️⃣ Publikacja · Publishing: X → Facebook\n🇵🇱 **X**: `POST /2/media/upload` + `POST /2/tweets` (token konta X bota odświeża panel). **FB**: `POST /{page}/photos` (plik binarny). Bez grafiki / tryb link: X – tekst z linkiem, FB – `POST /{page}/feed` z `link`.\nBłąd jednej platformy nie blokuje drugiej; raport w Telegramie ma przycisk 🔁 „Ponów nieudane” (bez dublowania udanych).\n\n🇬🇧 **X**: `POST /2/media/upload` + `POST /2/tweets` (the panel refreshes the bot's X account token). **FB**: `POST /{page}/photos` (binary file). No image / link mode: X – text with a link, FB – `POST /{page}/feed` with `link`.\nAn error on one platform does not block the other; the Telegram report has a 🔁 “Retry failed” button (successful ones are not repeated).",
+        "height": 640,
+        "width": 2620,
+        "color": 2
+      },
+      "id": "4abfc96e-ce84-5275-89df-ea6a722308be",
+      "name": "Sticky Note publish",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1130,
+        710
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 6️⃣ Raport · Report\n🇵🇱 Wyniki platform → plik draftu + wiadomość w Telegramie (🔁 ponawia tylko nieudane) + historia w panelu.\n\n🇬🇧 Platform results → draft file + Telegram message (🔁 retries only the failed ones) + history in the panel.",
+        "height": 340,
+        "width": 1080,
+        "color": 2
+      },
+      "id": "68908939-f073-581f-a576-b8b6f1efc7db",
+      "name": "Sticky Note report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3990,
+        1010
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ❗ Błędy · Errors\n🇵🇱 Workflow jest swoim własnym *Error Workflow* – panel zapisuje błąd w historii bota i wysyła alert na Telegram.\n\n🇬🇧 The workflow is its own *Error Workflow* – the panel saves the error in the bot's history and sends a Telegram alert.",
+        "height": 351,
+        "width": 440,
+        "color": 1
+      },
+      "id": "2987e3f0-65f2-534f-b3ee-2f392fca588c",
+      "name": "Sticky Note errors",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        1699
+      ]
+    }
+  ],
+  "connections": {
+    "Start: zlecenie z panelu": {
+      "main": [
+        [
+          {
+            "node": "Odpowiedz panelowi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Odpowiedz panelowi": {
+      "main": [
+        [
+          {
+            "node": "Token panelu poprawny?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token panelu poprawny?": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Zlecenie: publikacja?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zlecenie: publikacja?": {
+      "main": [
+        [
+          {
+            "node": "Kontekst publikacji",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Zlecenie: własny post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zlecenie: własny post?": {
+      "main": [
+        [
+          {
+            "node": "Post własny: przygotuj",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lista źródeł",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lista źródeł": {
+      "main": [
+        [
+          {
+            "node": "Pobierz RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pobierz RSS": {
+      "main": [
+        [
+          {
+            "node": "Normalizuj RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizuj RSS": {
+      "main": [
+        [
+          {
+            "node": "X przez Apify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X przez Apify?": {
+      "main": [
+        [
+          {
+            "node": "Apify: pobierz tweety",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Filtruj świeże",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify: pobierz tweety": {
+      "main": [
+        [
+          {
+            "node": "Normalizuj Apify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizuj Apify": {
+      "main": [
+        [
+          {
+            "node": "Filtruj świeże",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtruj świeże": {
+      "main": [
+        [
+          {
+            "node": "Deduplikacja w panelu (URL/ID)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplikacja w panelu (URL/ID)": {
+      "main": [
+        [
+          {
+            "node": "Przygotuj prompt LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Przygotuj prompt LLM": {
+      "main": [
+        [
+          {
+            "node": "AI: wybierz news i napisz posty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: wybierz news i napisz posty": {
+      "main": [
+        [
+          {
+            "node": "Parsuj odpowiedź LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsuj odpowiedź LLM": {
+      "main": [
+        [
+          {
+            "node": "Grafika: panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post własny: przygotuj": {
+      "main": [
+        [
+          {
+            "node": "Grafika: panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grafika: panel": {
+      "main": [
+        [
+          {
+            "node": "Grafika: przygotuj",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grafika: przygotuj": {
+      "main": [
+        [
+          {
+            "node": "Jest grafika?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jest grafika?": {
+      "main": [
+        [
+          {
+            "node": "Zapisz grafikę na dysku",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Zapisz draft na dysku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zapisz grafikę na dysku": {
+      "main": [
+        [
+          {
+            "node": "Zapisz draft na dysku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zapisz draft na dysku": {
+      "main": [
+        [
+          {
+            "node": "Telegram: ze zdjęciem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: ze zdjęciem?": {
+      "main": [
+        [
+          {
+            "node": "Telegram: wyślij grafikę",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: wyślij nagłówek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: wyślij grafikę": {
+      "main": [
+        [
+          {
+            "node": "Telegram: przygotuj teksty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: wyślij nagłówek": {
+      "main": [
+        [
+          {
+            "node": "Telegram: przygotuj teksty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: przygotuj teksty": {
+      "main": [
+        [
+          {
+            "node": "Telegram: wyślij teksty postów",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: wyślij teksty postów": {
+      "main": [
+        [
+          {
+            "node": "Telegram: wyślij skrypt i przyciski",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: wyślij skrypt i przyciski": {
+      "main": [
+        [
+          {
+            "node": "Panel: zgłoś draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Panel: zgłoś draft": {
+      "main": [
+        [
+          {
+            "node": "Publikować bez akceptacji?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publikować bez akceptacji?": {
+      "main": [
+        [
+          {
+            "node": "Kontekst publikacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kontekst publikacji": {
+      "main": [
+        [
+          {
+            "node": "Wczytaj draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wczytaj draft": {
+      "main": [
+        [
+          {
+            "node": "Parsuj draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsuj draft": {
+      "main": [
+        [
+          {
+            "node": "Już opublikowany?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Już opublikowany?": {
+      "main": [
+        [
+          {
+            "node": "Telegram: już opublikowany",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X włączony?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: już opublikowany": {
+      "main": [
+        [
+          {
+            "node": "Panel: zgłoś (już opublikowany)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X włączony?": {
+      "main": [
+        [
+          {
+            "node": "X: z grafiką?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook włączony?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X: z grafiką?": {
+      "main": [
+        [
+          {
+            "node": "X: wczytaj grafikę",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X: opublikuj post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X: wczytaj grafikę": {
+      "main": [
+        [
+          {
+            "node": "X: upload grafiki",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X: upload grafiki": {
+      "main": [
+        [
+          {
+            "node": "X: opublikuj post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X: opublikuj post": {
+      "main": [
+        [
+          {
+            "node": "Facebook włączony?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook włączony?": {
+      "main": [
+        [
+          {
+            "node": "FB: z grafiką?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Podsumowanie publikacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB: z grafiką?": {
+      "main": [
+        [
+          {
+            "node": "FB: wczytaj grafikę",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook: opublikuj tekst/link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB: wczytaj grafikę": {
+      "main": [
+        [
+          {
+            "node": "Facebook: opublikuj post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook: opublikuj post": {
+      "main": [
+        [
+          {
+            "node": "Podsumowanie publikacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook: opublikuj tekst/link": {
+      "main": [
+        [
+          {
+            "node": "Podsumowanie publikacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Podsumowanie publikacji": {
+      "main": [
+        [
+          {
+            "node": "Zapisz status draftu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zapisz status draftu": {
+      "main": [
+        [
+          {
+            "node": "Telegram: raport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: raport": {
+      "main": [
+        [
+          {
+            "node": "Telegram: aktualizuj przyciski",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: aktualizuj przyciski": {
+      "main": [
+        [
+          {
+            "node": "Panel: zgłoś wynik publikacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Błąd workflow": {
+      "main": [
+        [
+          {
+            "node": "Panel: zgłoś błąd",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PosterBotMain001"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

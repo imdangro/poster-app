@@ -1,0 +1,137 @@
+# Automatyczne sprawdzanie każdej zmiany (pull request i push do main).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Testy i sprawdzenia
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Składnia JS
+        # node --check sprawdza tylko pierwszy podany plik – stąd pętla
+        run: for f in $(find panel -name '*.js' -not -path '*/node_modules/*'); do node --check "$f" || exit 1; done
+      - name: Formatowanie (prettier)
+        run: npx --yes prettier@3 --check "panel/**/*.{js,css,html}" "workflows/src/**/*.js"
+      - name: Skrypty bash (składnia i shellcheck)
+        # bash -n sprawdza tylko pierwszy podany plik – stąd pętla; SC1111: cudzysłowy „…” w tekstach są celowe
+        run: |
+          for f in scripts/*.sh docs/install.sh; do bash -n "$f" || exit 1; done
+          shellcheck -S warning -e SC1111 scripts/*.sh docs/install.sh
+      - name: Workflow n8n zgodny ze źródłami
+        run: python3 workflows/src/build.py && git diff --exit-code workflows/poster_workflow.json
+      - name: Testy panelu
+        run: node --test panel/test/*.test.js
+      - name: docker compose config
+        run: N8N_ENCRYPTION_KEY=ci PANEL_INTERNAL_TOKEN=ci-token-1234567890 docker compose --env-file /dev/null config -q
+      - name: Obraz panelu
+        run: docker build -t poster-panel:ci panel
+
+  workflow-nodes:
+    name: Węzły workflow względem n8n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Walidacja węzłów (wersja n8n z docker-compose.yml)
+        run: |
+          N8N_VERSION=$(grep -oP 'N8N_VERSION:-\K[0-9.]+' docker-compose.yml)
+          # Zależności n8n takie, jak w dniu wydania tej wersji (+1 dzień zapasu) – nowe, wadliwe wydanie cudzej
+          # biblioteki (np. zależność od wersji, której nie ma w npm) nie psuje sprawdzenia
+          N8N_BEFORE=$(npm view n8n time --json | node -e '
+            const t = JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]];
+            if (!t) throw new Error(`brak daty wydania n8n ${process.argv[1]}`);
+            console.log(new Date(Date.parse(t) + 864e5).toISOString());' "$N8N_VERSION")
+          echo "n8n ${N8N_VERSION}, zależności sprzed ${N8N_BEFORE}"
+          mkdir -p "$RUNNER_TEMP/n8n" && cd "$RUNNER_TEMP/n8n"
+          npm init -y > /dev/null
+          npm i --no-audit --no-fund --ignore-scripts --before="$N8N_BEFORE" "n8n@${N8N_VERSION}"
+          cd "$GITHUB_WORKSPACE"
+          NODE_PATH="$RUNNER_TEMP/n8n/node_modules" node workflows/src/validate.js workflows/poster_workflow.json
+
+  install:
+    name: Instalator (docs/install.sh) na czystym Dockerze
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - name: Funkcje instalatora (adres IP, język, nowy .env)
+        run: |
+          set -euo pipefail
+          # funkcje bez uruchamiania main (ostatnia linia skryptu)
+          eval "$(sed '$d' docs/install.sh)"
+          for ip in 10.0.0.1 192.168.1.50 172.16.0.1 172.31.255.1 100.64.0.1 100.127.255.1; do
+            is_private_ip "$ip" || { echo "adres prywatny: $ip"; exit 1; }
+          done
+          for ip in 172.32.0.1 172.15.0.1 100.128.0.1 100.63.0.1 8.8.8.8 51.68.10.20; do
+            if is_private_ip "$ip"; then echo "adres publiczny: $ip"; exit 1; fi
+          done
+          # każde sprawdzenie w osobnej linii – w łańcuchu „a && b” set -e nie przerywa po błędzie a
+          test "$(detect_lang en)" = en
+          test "$(detect_lang pl)" = pl
+          test "$(LC_ALL='' LC_MESSAGES='' LANG=pl_PL.UTF-8 detect_lang '')" = pl
+          # nowy .env w sieci lokalnej: adres NAS-a, strefa czasowa hosta, zajęty port panelu → następny wolny
+          cp .env.example "$RUNNER_TEMP/.env" && cd "$RUNNER_TEMP"
+          host_ip() { printf '192.168.1.77'; }
+          host_tz() { printf 'Europe/Berlin'; }
+          port_busy() { [ "$1" = 7080 ]; }
+          configure_env
+          grep -qx 'NAS_IP=192.168.1.77' .env
+          grep -qx 'BIND_ADDRESS=0.0.0.0' .env
+          grep -qx 'TZ=Europe/Berlin' .env
+          grep -qx 'PANEL_PORT=7081' .env
+          grep -qx 'N8N_PORT=5678' .env
+          # serwer z publicznym adresem: tylko 127.0.0.1; host w UTC → zostaje Europe/Warsaw
+          cp "$GITHUB_WORKSPACE/.env.example" .env
+          host_ip() { printf '51.68.10.20'; }
+          host_tz() { printf ''; }
+          port_busy() { return 1; }
+          configure_env
+          grep -qx 'NAS_IP=localhost' .env
+          grep -qx 'BIND_ADDRESS=127.0.0.1' .env
+          grep -qx 'TZ=Europe/Warsaw' .env
+          rm .env
+      - name: Instalacja jak „curl … | sudo bash” (repozytorium z tego commita)
+        run: |
+          set -o pipefail
+          cat docs/install.sh | sudo env POSTER_REPO="$GITHUB_WORKSPACE" POSTER_LANG=en bash -s -- --dir "$RUNNER_TEMP/poster" |
+            tee "$RUNNER_TEMP/install.log"
+      - name: Panel z kodem, konto n8n, aktywny workflow
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/install.log"
+          grep -q 'Poster is running' "$log"
+          url="$(grep -oE 'http://[^ ]+:7080' "$log" | head -n1)"
+          code="$(grep -oE '[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}' "$log" | tail -n1)"
+          pass="$(grep -oE 'Pn8-[0-9a-f]{8}-[0-9a-f]{8}' "$log" | tail -n1)"
+          echo "panel: $url"
+          curl -fsS "$url/api/session" | grep -q '"needsSetup":true'
+          curl -fsS -X POST "$url/api/setup" -H 'content-type: application/json' \
+            -d "{\"code\":\"$code\",\"password\":\"ci-password-1234\"}"
+          curl -fsS -o /dev/null -X POST http://127.0.0.1:5678/rest/login -H 'content-type: application/json' \
+            -d "{\"emailOrLdapLoginId\":\"admin@poster.local\",\"password\":\"$pass\"}"
+          cd "$RUNNER_TEMP/poster"
+          sudo docker compose exec -T n8n n8n list:workflow --active=true | grep -q PosterBotMain001
+          # panel → n8n: zlecenie przez webhook workflow
+          sudo docker compose exec -T panel node -e "fetch('http://n8n:5678/webhook/poster', { method: 'POST',
+            headers: { 'content-type': 'application/json' }, body: '{}' }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      - name: Ponowne uruchomienie – instalacja gotowa, podpowiedź aktualizacji
+        run: |
+          set -o pipefail
+          cat docs/install.sh | sudo env POSTER_LANG=en bash -s | tee "$RUNNER_TEMP/again.log"
+          grep -q 'already installed' "$RUNNER_TEMP/again.log"
+      - name: Stan i logi kontenerów (po błędzie)
+        if: failure()
+        run: cd "$RUNNER_TEMP/poster" && sudo docker compose ps -a && sudo docker compose logs --tail=80
