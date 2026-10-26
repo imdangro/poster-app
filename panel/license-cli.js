@@ -10,7 +10,7 @@
 // jest nieważna.
 const fs = require('fs');
 const path = require('path');
-const { polarConfig, renewUrl, activateHere, refresh, readState, readPending, clearPending } = require('./lib/license');
+const { polarConfig, renewUrl, keyEnd, activateHere, refresh, readState, readPending, clearPending } = require('./lib/license');
 const { PRODUCT_URL } = require('./lib/util');
 const { setLanguageSource, lang, tr } = require('./lib/i18n');
 
@@ -20,7 +20,8 @@ const projectDir = process.cwd();
 const dataDir = path.join(projectDir, 'data', 'panel');
 const SSH_KEY = /^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [^\r\n]*)?$/;
 
-function print(out) {
+// key – klucz licencyjny (do linku przedłużenia z jego końcówką), gdy jest znany
+function print(out, key) {
   const until = out.expiresAt ? Date.parse(out.expiresAt) : NaN;
   const lines = {
     result: out.result,
@@ -28,7 +29,7 @@ function print(out) {
     updates_until: out.expiresAt ? out.expiresAt.slice(0, 10) : '',
     days_left: Number.isFinite(until) ? Math.ceil((until - Date.now()) / 86400000) : '',
     limit: out.limit ?? '',
-    renew_url: renewUrl(lang()),
+    renew_url: renewUrl(lang(), keyEnd(key)),
     product_url: `${PRODUCT_URL}?lang=${lang()}`,
     detail: out.detail,
   };
@@ -62,9 +63,12 @@ async function main() {
     if (!SSH_KEY.test(sshKey)) return print({ result: 'error', detail: tr('nieprawidłowy klucz SSH NAS-a: {0}', pubFile) });
     const out = await activateHere(cfg, { projectDir, dataDir, key, label, sshKey });
     if (fromPanel && CLEAR_PENDING.includes(out.result)) clearPending(dataDir);
-    return print(out);
+    return print(out, key);
   }
-  if (cmd === 'refresh') return print(await refresh(cfg, { projectDir, dataDir }));
+  if (cmd === 'refresh') {
+    const st = readState(projectDir);
+    return print(await refresh(cfg, { projectDir, dataDir }), st && st.key);
+  }
   console.error('usage: node panel/license-cli.js activate <label> <key.pub> [--pending | --saved] | refresh');
   process.exitCode = 2;
 }

@@ -216,8 +216,8 @@ module.exports = {
   'Nieznany klucz licencyjny – skopiuj go w całości ze strony zamówienia (przycisk „Access purchase” w e-mailu od Polara).':
     'Unknown license key – copy the whole key from the order page (the “Access purchase” button in the email from Polar).',
   'Ta licencja jest nieaktywna (np. po zwrocie płatności).': 'This license is inactive (e.g. after a refund).',
-  'Ta licencja nie obejmuje już aktualizacji – przedłużysz ją na stronie produktu.':
-    'This license no longer includes updates – you can renew it on the product page.',
+  'Ta licencja nie obejmuje już aktualizacji – przedłuż ją, a potem sprawdź klucz ponownie.':
+    'This license no longer includes updates – renew it, then check the key again.',
   'Sprzedaż wersji PRO jeszcze nie ruszyła.': 'PRO sales have not started yet.',
   'Brak połączenia z serwerem licencji (Polar) – sprawdź internet na NAS-ie i spróbuj ponownie.':
     "No connection to the license server (Polar) – check the NAS's internet connection and try again.",

@@ -52,7 +52,7 @@ pro_pull_failed() {
       "The PRO license is inactive (e.g. after a refund) – PRO updates are not available. Questions: $LIC_PRODUCT")" ;;
     invalid) die "$(m "Ten NAS nie jest już aktywowany na licencji PRO (np. zwolnione urządzenie). Aktywujesz go ponownie: sudo bash scripts/upgrade-to-pro.sh" \
       "This NAS is no longer activated on the PRO license (e.g. the device was released). To activate it again: sudo bash scripts/upgrade-to-pro.sh")" ;;
-    ok) die "$(m "Licencja PRO jest ważna, ale repozytorium PRO nie odpowiada. Jeśli właśnie przedłużyłeś licencję, dostęp wróci w ciągu kilku minut – spróbuj ponownie. Zapora sieci musi przepuszczać ruch na github.com:22 (SSH)." \
+    ok) die "$(m "Licencja PRO jest ważna, ale repozytorium PRO nie odpowiada. Tuż po przedłużeniu licencji dostęp wraca w ciągu kilku minut – spróbuj ponownie. Zapora sieci musi przepuszczać ruch na github.com:22 (SSH)." \
       "The PRO license is valid, but the PRO repository does not respond. If you have just renewed the license, access comes back within a few minutes – try again. The firewall must allow traffic to github.com:22 (SSH).")" ;;
   esac
 }
@@ -75,8 +75,23 @@ if [ "$PULL" -eq 1 ]; then
   # Zawsze git z kontenera alpine/git: w nim działa klucz z scripts/setup-deploy-key.sh (ścieżki /git/...).
   # safe.directory: w kontenerze git działa jako root, a katalog projektu może należeć do innego
   # użytkownika NAS-a – bez tego git przerywa z błędem „detected dubious ownership”
-  # shellcheck disable=SC2086
-  if ! docker run --rm $TTY -v "$PWD":/git alpine/git -c safe.directory=/git pull --ff-only; then
+  pull() {
+    # shellcheck disable=SC2086
+    docker run --rm $1 -v "$PWD":/git alpine/git -c safe.directory=/git pull --ff-only
+  }
+  # licencja wygasła albo jest nieaktywna: repozytorium PRO zwykle już odmawia dostępu – zamiast surowego błędu gita
+  # („Permission denied (publickey)”) tylko nasz komunikat; gdy dostęp jeszcze jest, pobieramy jak zwykle
+  QUIET=0
+  if [ "$LICENSED" -eq 1 ]; then
+    case "$LIC_RESULT" in expired | inactive | invalid) QUIET=1 ;; esac
+  fi
+  if [ "$QUIET" -eq 1 ]; then
+    if OUT="$(pull "" 2>&1)"; then
+      printf '%s\n' "$OUT"
+    else
+      pro_pull_failed
+    fi
+  elif ! pull "$TTY"; then
     [ "$LICENSED" -eq 1 ] && pro_pull_failed
     die "$(m "Nie udało się pobrać nowej wersji (komunikat gita powyżej)." "Could not download the new version (git message above).")"
   fi

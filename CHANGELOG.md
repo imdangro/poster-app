@@ -7,6 +7,11 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.1.0 – 2026-10-27
+
+- *PRO edition* card: for a key that no longer includes updates, *Renew the license* opens the renewal checkout with
+  that key's ending.
+
 ## 1.0.1 – 2026-10-24
 
 - The *Copy* button (e.g. next to the PRO upgrade command in *Settings*) also works when the panel is opened via

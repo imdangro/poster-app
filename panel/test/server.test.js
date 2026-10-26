@@ -270,7 +270,8 @@ test('licencja PRO tego NAS-a: koniec aktualizacji na Pulpicie i w Ustawieniach 
   const overview = async () => (await (await json('GET', '/api/overview')).json()).license;
   assert.equal((await overview()) ?? null, null, 'bez licencji (np. wdrożenie) – nic do pokazania');
   const until = new Date(Date.now() + 20 * 86400000).toISOString();
-  fs.writeFileSync(file, JSON.stringify({ state: 'active', updatesUntil: until, checkedAt: new Date().toISOString() }));
+  const summary = { state: 'active', updatesUntil: until, checkedAt: new Date().toISOString(), keyEnd: 'ABC123' };
+  fs.writeFileSync(file, JSON.stringify(summary));
   const l = await overview();
   const settings = await (await json('GET', '/api/settings')).json();
   fs.rmSync(file);

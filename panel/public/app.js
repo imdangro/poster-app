@@ -3890,7 +3890,14 @@
             { class: 'alert bad', style: { marginTop: '12px', alignItems: 'center' } },
             icon('alert'),
             h('div', { class: 'grow' }, r.message),
-            r.result === 'expired' ? pricing(tr('Przedłuż licencję')) : null,
+            r.result === 'expired'
+              ? h(
+                  'a',
+                  { class: 'btn sm', href: r.renewUrl || lk.pricingUrl, target: '_blank', rel: 'noopener' },
+                  icon('ext'),
+                  tr('Przedłuż licencję'),
+                )
+              : null,
           ),
         );
       });
@@ -4001,11 +4008,16 @@
       icon('key'),
       tr('Podaj nowy klucz licencyjny'),
     );
-    return card(
-      [...head, ...cardHead(tr('Licencja PRO'), status, l.state === 'expired' ? pricing(tr('Przedłuż licencję')) : null)],
-      p ? pending : h('div', null, change, form),
-      foot,
-    );
+    // przedłużenie: kasa Polara z wpisaną końcówką klucza – po wygaśnięciu i 30 dni przed końcem (jak na Pulpicie)
+    const days = l.updatesUntil ? Math.ceil((Date.parse(l.updatesUntil) - Date.now()) / 86400000) : null;
+    const renew =
+      l.state === 'expired' || (l.state === 'active' && days !== null && days <= 30)
+        ? h('a', { class: 'btn sm', href: l.renewUrl, target: '_blank', rel: 'noopener' }, icon('ext'), tr('Przedłuż licencję'))
+        : null;
+    const keyLine = l.keyEnd
+      ? h('div', { class: 'muted', style: { marginBottom: '12px' } }, tr('Klucz licencyjny: ••••{0}', l.keyEnd))
+      : null;
+    return card([...head, ...cardHead(tr('Licencja PRO'), status, renew)], p ? pending : h('div', null, keyLine, change, form), foot);
   }
 
   function passwordCard() {

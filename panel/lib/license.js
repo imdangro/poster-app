@@ -23,7 +23,12 @@ const POLAR_ORGANIZATION_ID = '939057b9-df4e-4656-8136-ace9ae0bdf8b';
 const STATE_FILE = path.join('.git', 'poster-pro-license.json'); // względem katalogu projektu
 const SUMMARY_FILE = 'license.json'; // w katalogu danych panelu (data/panel)
 const PANEL_UID = 1000; // użytkownik kontenera panelu (scripts/init-nas.sh)
-// Przedłużenie licencji: cennik na stronie produktu w języku panelu
+// Przedłużenie licencji: kasa Polara z produktem „Poster PRO – przedłużenie” i polem license_key przy zakupie – link
+// wpisuje w nie końcówkę klucza tego NAS-a, a panel sprzedaży po niej przedłuża ten sam klucz
+// (tools/sales/renewals.js). Pusty adres kasy = cennik na stronie produktu w języku panelu.
+const RENEW_CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_vNtQIQOE3mI5Ezkicv6CYnBd7hZ5v5aJ3AJ5x1ngNPZ';
+const RENEW_FIELD = 'license_key';
+const KEY_END = 6; // tyle końcowych znaków klucza pokazuje Polar (****-XXXXXX)
 const RENEW_ANCHOR = { pl: '?lang=pl#pricing-pl', en: '?lang=en#pricing' };
 
 // Wynik sprawdzenia licencji – na jego podstawie skrypty wypisują komunikat:
@@ -33,7 +38,20 @@ const RENEW_ANCHOR = { pl: '?lang=pl#pricing-pl', en: '?lang=en#pricing' };
 //   chwilowa awaria; error – inna odpowiedź Polara (szczegóły w `detail`); none – ten NAS nie ma licencji PRO
 const RESULTS = ['ok', 'expired', 'inactive', 'invalid', 'limit', 'config', 'network', 'error', 'none'];
 
-const renewUrl = (language) => PRODUCT_URL + (RENEW_ANCHOR[language] || RENEW_ANCHOR.en);
+// Końcówka klucza licencyjnego (nie sekret – Polar pokazuje ją w skrócie klucza); '' bez klucza albo przy kluczu
+// krótszym niż dwie końcówki – nigdy nie odsłania większości klucza (klucze Polara mają ponad 40 znaków)
+function keyEnd(key) {
+  const k = typeof key === 'string' ? key.replace(/\s+/g, '') : '';
+  return k.length >= 2 * KEY_END ? k.slice(-KEY_END) : '';
+}
+
+// Cennik na stronie produktu w języku panelu (zakup PRO)
+const pricingUrl = (language) => PRODUCT_URL + (RENEW_ANCHOR[language] || RENEW_ANCHOR.en);
+
+const renewUrl = (language, end = '') =>
+  RENEW_CHECKOUT_URL
+    ? RENEW_CHECKOUT_URL + (end ? `?custom_field_data.${RENEW_FIELD}=${encodeURIComponent(end)}` : '')
+    : pricingUrl(language);
 
 function polarConfig(env = process.env) {
   return {
@@ -122,12 +140,12 @@ function readState(projectDir) {
 }
 
 // Podsumowanie bez klucza: state – active | expired | inactive, updatesUntil – koniec aktualizacji (null = bez końca
-// albo jeszcze nieznany)
+// albo jeszcze nieznany), keyEnd – końcówka klucza (karta licencji i link do przedłużenia)
 function summaryOf(st, result) {
   let state = 'active';
   if (result === 'expired') state = 'expired';
   else if (result === 'inactive' || result === 'invalid') state = 'inactive';
-  return { state, updatesUntil: st.expiresAt || null, checkedAt: st.checkedAt };
+  return { state, updatesUntil: st.expiresAt || null, checkedAt: st.checkedAt, keyEnd: keyEnd(st.key) };
 }
 
 // Zapisuje stan (tylko root) i podsumowanie dla panelu (użytkownik kontenera panelu musi je przeczytać)
@@ -245,7 +263,7 @@ function checkMessage(v) {
   if (v.result === 'invalid')
     return tr('Nieznany klucz licencyjny – skopiuj go w całości ze strony zamówienia (przycisk „Access purchase” w e-mailu od Polara).');
   if (v.result === 'inactive') return tr('Ta licencja jest nieaktywna (np. po zwrocie płatności).');
-  if (v.result === 'expired') return tr('Ta licencja nie obejmuje już aktualizacji – przedłużysz ją na stronie produktu.');
+  if (v.result === 'expired') return tr('Ta licencja nie obejmuje już aktualizacji – przedłuż ją, a potem sprawdź klucz ponownie.');
   if (v.result === 'config') return tr('Sprzedaż wersji PRO jeszcze nie ruszyła.');
   if (v.result === 'network') return tr('Brak połączenia z serwerem licencji (Polar) – sprawdź internet na NAS-ie i spróbuj ponownie.');
   return tr('Serwer licencji odpowiedział błędem: {0}', v.detail || v.result);
@@ -261,7 +279,7 @@ function createLicenseKey(dataDir, { cfg = polarConfig(), now = () => Date.now()
       pending: p && { hint: mask(p.key), checkedAt: p.checkedAt || null, expiresAt: p.expiresAt || null, limit: p.limit ?? null },
       command: upgradeCommand(projectDir),
       projectDir,
-      pricingUrl: renewUrl(lang()),
+      pricingUrl: pricingUrl(lang()),
     };
   };
   return {
@@ -275,7 +293,8 @@ function createLicenseKey(dataDir, { cfg = polarConfig(), now = () => Date.now()
       checks.push(t);
       const v = await checkKey(cfg, key, t);
       if (v.result === 'ok') savePending(dataDir, key, v, t);
-      return { result: v.result, message: v.result === 'ok' ? '' : checkMessage(v), ...view() };
+      const renew = v.result === 'expired' ? { renewUrl: renewUrl(lang(), keyEnd(key)) } : {};
+      return { result: v.result, message: v.result === 'ok' ? '' : checkMessage(v), ...renew, ...view() };
     },
     clear() {
       clearPending(dataDir);
@@ -298,13 +317,15 @@ function readSummary(dataDir, now = Date.now()) {
   const updatesUntil = isoOrNull(s.updatesUntil);
   let state = ['active', 'expired', 'inactive'].includes(s.state) ? s.state : 'active';
   if (state === 'active' && updatesUntil && Date.parse(updatesUntil) <= now) state = 'expired';
-  return { state, updatesUntil, checkedAt: isoOrNull(s.checkedAt) };
+  // podsumowanie sprzed tej zmiany nie ma końcówki – pojawi się po najbliższym scripts/update.sh
+  const end = typeof s.keyEnd === 'string' && /^[A-Za-z0-9-]{1,12}$/.test(s.keyEnd) ? s.keyEnd : '';
+  return { state, updatesUntil, checkedAt: isoOrNull(s.checkedAt), keyEnd: end };
 }
 
-// Licencja w odpowiedziach API panelu PRO: podsumowanie i link do przedłużenia w języku zapytania
+// Licencja w odpowiedziach API panelu PRO: podsumowanie i link do przedłużenia (z końcówką klucza)
 function licenseInfo(dataDir, now) {
   const s = readSummary(dataDir, now);
-  return s && { ...s, renewUrl: renewUrl(lang()) };
+  return s && { ...s, renewUrl: renewUrl(lang(), s.keyEnd) };
 }
 
 module.exports = {
@@ -315,7 +336,9 @@ module.exports = {
   INSTALL_FILE,
   RESULTS,
   polarConfig,
+  pricingUrl,
   renewUrl,
+  keyEnd,
   activateHere,
   refresh,
   checkKey,

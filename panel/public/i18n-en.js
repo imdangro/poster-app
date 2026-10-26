@@ -660,4 +660,5 @@ window.POSTER_I18N.en = {
   'Aktywna · aktualizacje do {0}': 'Active · updates until {0}',
   'Podaj nowy klucz licencyjny': 'Enter a new license key',
   'Licencja PRO': 'PRO license',
+  'Klucz licencyjny: ••••{0}': 'License key: ••••{0}',
 };

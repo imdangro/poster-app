@@ -3,7 +3,8 @@
   Strona produktu Poster (GitHub Pages z katalogu docs/ repozytorium poster-app). Jeden plik, bez zewnętrznych skryptów
   i czcionek. Dwa języki: <main lang="en"> i <main lang="pl">, wybór: ?lang=… → zapamiętany → język przeglądarki
   (zapamiętuje tylko kliknięcie przełącznika – w localStorage, bez plików cookie, więc bez banera zgody).
-  Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (etap 6; pusty = przycisk „Wkrótce”),
+  Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (etap 6; pusty = przycisk „Wkrótce”), RENEW_URL –
+  przedłużenie licencji (link z Polara do produktu „przedłużenie”; pusty = bez linków przedłużenia),
   CONTACT_URL – kontakt w sprawie wdrożenia (e-mail kontakt@posterapp.pl, ten sam co w stopce), LITE_RELEASED – czy
   kod LITE jest już w repozytorium (false ustawia tools/publish-site.sh: przyciski „Pobierz” → „wkrótce”, bez linków
   do plików repozytorium w stopce i bez polecenia instalacji – docs/install.sh trafia na stronę dopiero z wersją LITE).
@@ -1095,7 +1096,9 @@
               <ul class="pro-list">
                 <li>All PRO features</li>
                 <li>12 months of updates and support</li>
-                <li>Renewal: $49 (€45) per year – optional</li>
+                <li>
+                  Renewal: $49 (€45) per year – optional<span data-renew-wrap> · <a data-renew href="#pricing">renew</a></span>
+                </li>
               </ul>
               <a class="btn pro" data-buy href="#pricing">Buy PRO</a>
             </div>
@@ -1169,7 +1172,13 @@
           </details>
           <details>
             <summary>What happens when the 12 months of PRO updates end?</summary>
-            <p>Your installation keeps working with no time limit. Only updates stop until you renew the licence.</p>
+            <p>
+              Your installation keeps working with no time limit. Only updates stop until you renew the licence – with the
+              <em>Renew the license</em> button in the Poster panel (Settings → PRO license), which fills in your key for you<span
+                data-renew-wrap
+                >, or <a data-renew href="#pricing">here</a></span
+              >. A renewal bought before the end date adds 12 months to it; after expiry you get 12 months from the purchase.
+            </p>
           </details>
           <details>
             <summary>Can I move from LITE to PRO later?</summary>
@@ -1674,7 +1683,9 @@
               <ul class="pro-list">
                 <li>Wszystkie funkcje PRO</li>
                 <li>12 miesięcy aktualizacji i wsparcia</li>
-                <li>Przedłużenie: 199 zł za rok – opcjonalnie</li>
+                <li>
+                  Przedłużenie: 199 zł za rok – opcjonalnie<span data-renew-wrap> · <a data-renew href="#pricing-pl">przedłuż</a></span>
+                </li>
               </ul>
               <a class="btn pro" data-buy href="#pricing-pl">Kup PRO</a>
             </div>
@@ -1751,6 +1762,9 @@
             <summary>Co się dzieje po 12 miesiącach aktualizacji PRO?</summary>
             <p>
               Twoja instalacja działa dalej, bez ograniczeń czasowych. Do czasu przedłużenia licencji nie dostajesz tylko nowych wersji.
+              Przedłużysz ją przyciskiem <em>Przedłuż licencję</em> w panelu Postera (Ustawienia → Licencja PRO), który sam wpisze Twój
+              klucz<span data-renew-wrap>, albo <a data-renew href="#pricing-pl">tutaj</a></span
+              >. Przedłużenie kupione przed końcem dodaje 12 miesięcy do daty końca, a po wygaśnięciu daje 12 miesięcy od zakupu.
             </p>
           </details>
           <details>
@@ -1793,6 +1807,8 @@
       (function () {
         // Adres zakupu PRO – pusty = sprzedaż jeszcze nie ruszyła, przycisk pokazuje „wkrótce”
         var CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_1OpoOfXoW2LE1lZJFQfLt1bDQSSCy5F9mo5D21vJlQ3';
+        // Przedłużenie licencji PRO – pusty = bez linków przedłużenia
+        var RENEW_URL = 'https://buy.polar.sh/polar_cl_vNtQIQOE3mI5Ezkicv6CYnBd7hZ5v5aJ3AJ5x1ngNPZ';
         // Kontakt w sprawie wdrożenia (przyciski „Kontakt” w cenniku)
         var CONTACT_URL = 'mailto:kontakt@posterapp.pl';
         // Kod LITE jest już w repozytorium poster-app? Publikacja samej strony (tools/publish-site.sh) ustawia false.
@@ -1840,6 +1856,10 @@
         });
         document.querySelectorAll('[data-contact]').forEach(function (a) {
           a.href = CONTACT_URL;
+        });
+        document.querySelectorAll('[data-renew]').forEach(function (a) {
+          if (RENEW_URL) a.href = RENEW_URL;
+          else a.closest('[data-renew-wrap]').remove();
         });
         document.querySelectorAll('[data-buy]').forEach(function (a) {
           if (CHECKOUT_URL) {

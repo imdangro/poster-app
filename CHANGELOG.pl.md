@@ -7,6 +7,11 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.1.0 – 2026-10-27
+
+- Karta *Wersja PRO*: dla klucza, który nie obejmuje już aktualizacji, przycisk *Przedłuż licencję* otwiera kasę
+  przedłużenia z końcówką tego klucza.
+
 ## 1.0.1 – 2026-10-24
 
 - Przycisk *Kopiuj* (np. przy poleceniu przejścia na PRO w *Ustawieniach*) działa także w panelu otwartym przez

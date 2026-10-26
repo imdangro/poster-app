@@ -11,6 +11,7 @@ const license = require('../lib/license');
 
 const ORG = 'org-test';
 const DAY = 86400000;
+const CHECKOUT = 'https://buy.polar.sh/polar_cl_vNtQIQOE3mI5Ezkicv6CYnBd7hZ5v5aJ3AJ5x1ngNPZ'; // kasa przedłużenia
 const SSH = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEtestkeyonlyfortests0000000000000000000 poster-pro';
 const SSH2 = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEsecondkeyfortests000000000000000000000 poster-pro';
 
@@ -100,7 +101,8 @@ test('aktywacja: klucz SSH NAS-a w aktywacji, stan tylko dla roota, podsumowanie
   assert.equal(st.key, 'KEY-A');
   assert.equal(st.activationId, a.id);
   const sum = summary(p.dataDir);
-  assert.deepEqual(Object.keys(sum).sort(), ['checkedAt', 'state', 'updatesUntil']);
+  assert.deepEqual(Object.keys(sum).sort(), ['checkedAt', 'keyEnd', 'state', 'updatesUntil']);
+  assert.equal(sum.keyEnd, '', 'krótki klucz – bez końcówki (nie odsłaniamy większości klucza)');
   assert.equal(sum.state, 'active');
   assert.equal(sum.updatesUntil, k.expires_at);
   assert.ok(!JSON.stringify(sum).includes('KEY-A'), 'podsumowanie dla panelu bez klucza licencyjnego');
@@ -205,14 +207,28 @@ test('podsumowanie dla panelu: stan z daty, brak pliku albo uszkodzony plik = br
   assert.equal(license.readSummary(dir), null);
   const until = new Date(Date.now() + 5 * DAY).toISOString();
   fs.writeFileSync(path.join(dir, license.SUMMARY_FILE), JSON.stringify({ state: 'active', updatesUntil: until }));
-  assert.deepEqual(license.readSummary(dir), { state: 'active', updatesUntil: until, checkedAt: null });
+  assert.deepEqual(license.readSummary(dir), { state: 'active', updatesUntil: until, checkedAt: null, keyEnd: '' });
   assert.equal(license.readSummary(dir, Date.now() + 6 * DAY).state, 'expired', 'po dacie końca – wygasły');
-  assert.equal(license.renewUrl('pl'), 'https://posterapp.pl/?lang=pl#pricing-pl');
-  assert.equal(license.renewUrl('en'), 'https://posterapp.pl/?lang=en#pricing');
+  assert.equal(license.licenseInfo(dir).renewUrl, CHECKOUT, 'podsumowanie sprzed zmiany – kasa bez końcówki');
+  fs.writeFileSync(path.join(dir, license.SUMMARY_FILE), JSON.stringify({ state: 'active', updatesUntil: until, keyEnd: '00A1B2' }));
+  assert.equal(license.readSummary(dir).keyEnd, '00A1B2');
+  assert.equal(license.licenseInfo(dir).renewUrl, `${CHECKOUT}?custom_field_data.license_key=00A1B2`);
+  fs.writeFileSync(path.join(dir, license.SUMMARY_FILE), JSON.stringify({ state: 'active', keyEnd: '<b>"x' }));
+  assert.equal(license.readSummary(dir).keyEnd, '', 'dziwna końcówka – pominięta');
+
+  // przedłużenie: kasa Polara z końcówką klucza w polu license_key; cennik – strona produktu
+  assert.equal(license.renewUrl('pl'), CHECKOUT);
+  assert.equal(license.renewUrl('en', 'A1B2C3'), `${CHECKOUT}?custom_field_data.license_key=A1B2C3`);
+  assert.equal(license.keyEnd(' POSTER-1B2C3D4E-0000-4000-8000-00000000A1B2 '), '00A1B2');
+  assert.equal(license.keyEnd(undefined), '');
+  assert.equal(license.keyEnd('KEY-SHORT1'), '', 'krótki klucz – bez końcówki');
+  assert.equal(license.pricingUrl('pl'), 'https://posterapp.pl/?lang=pl#pricing-pl');
+  assert.equal(license.pricingUrl('en'), 'https://posterapp.pl/?lang=en#pricing');
 });
 
 test('license-cli.js: aktywacja i odświeżanie z wynikiem w liniach klucz=wartość', async () => {
-  const k = addKey('KEY-CLI', { days: 30 });
+  const KEY = 'POSTER-5E6F7A8B-0000-4000-8000-000000ABC123';
+  const k = addKey(KEY, { days: 30 });
   const { projectDir } = project();
   fs.writeFileSync(path.join(projectDir, '.git', 'poster-pro-key.pub'), SSH + '\n');
   const cli = path.join(__dirname, '..', 'license-cli.js');
@@ -233,17 +249,22 @@ test('license-cli.js: aktywacja i odświeżanie z wynikiem w liniach klucz=warto
       });
       child.stdin.end(input);
     });
-  const a = await run(['activate', 'my-nas', '.git/poster-pro-key.pub'], ' KEY-CLI \n');
+  const a = await run(['activate', 'my-nas', '.git/poster-pro-key.pub'], ` ${KEY} \n`);
   assert.equal(a.result, 'ok');
   assert.equal(a.status, 'granted');
   assert.equal(a.updates_until, k.expires_at.slice(0, 10));
   assert.equal(a.limit, '2');
-  assert.equal(a.renew_url, license.renewUrl('en'));
+  assert.equal(a.renew_url, `${CHECKOUT}?custom_field_data.license_key=ABC123`, 'kasa z końcówką klucza');
+  const sum = summary(path.join(projectDir, 'data', 'panel'));
+  assert.equal(sum.keyEnd, 'ABC123', 'końcówka klucza w podsumowaniu dla panelu');
+  assert.ok(!JSON.stringify(sum).includes(KEY), 'bez klucza');
   assert.equal([...k.activations.values()][0].label, 'my-nas');
-  assert.equal((await run(['refresh'])).result, 'ok');
+  const fresh = await run(['refresh']);
+  assert.equal(fresh.result, 'ok');
+  assert.equal(fresh.renew_url, a.renew_url, 'klucz z zapisanego stanu');
   assert.equal((await run(['activate', 'my-nas', '.git/poster-pro-key.pub'], '\n')).result, 'invalid');
   fs.writeFileSync(path.join(projectDir, 'bad.pub'), 'not a key');
-  const bad = await run(['activate', 'my-nas', 'bad.pub'], 'KEY-CLI');
+  const bad = await run(['activate', 'my-nas', 'bad.pub'], KEY);
   assert.equal(bad.result, 'error');
   assert.match(bad.detail, /invalid SSH key/);
 });
@@ -280,7 +301,9 @@ test('klucz z panelu: sprawdzenie bez aktywacji, plik 0600 bez klucza w widoku, 
   addKey('KEY-PANEL-OLD', { days: -1 });
   const old = await desk.check('KEY-PANEL-OLD');
   assert.equal(old.result, 'expired');
-  assert.equal(old.pricingUrl, license.renewUrl('pl'));
+  assert.equal(old.pricingUrl, license.pricingUrl('pl'));
+  assert.equal(old.renewUrl, `${CHECKOUT}?custom_field_data.license_key=EL-OLD`, 'przedłużenie tego klucza');
+  assert.equal(r.renewUrl, undefined, 'ważny klucz – bez linku przedłużenia');
   const offline = license.createLicenseKey(dir, { cfg: { ...cfg, api: 'http://127.0.0.1:9' } });
   const net = await offline.check('KEY-PANEL-1');
   assert.equal(net.result, 'network');
