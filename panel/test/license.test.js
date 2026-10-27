@@ -302,6 +302,8 @@ test('klucz z panelu: sprawdzenie bez aktywacji, plik 0600 bez klucza w widoku, 
   const old = await desk.check('KEY-PANEL-OLD');
   assert.equal(old.result, 'expired');
   assert.equal(old.pricingUrl, license.pricingUrl('pl'));
+  assert.equal(old.termsUrl, 'https://posterapp.pl/license.html?lang=pl', 'warunki licencji – zwrot przed aktywacją');
+  assert.equal(license.termsUrl('en'), 'https://posterapp.pl/license.html?lang=en');
   assert.equal(old.renewUrl, `${CHECKOUT}?custom_field_data.license_key=EL-OLD`, 'przedłużenie tego klucza');
   assert.equal(r.renewUrl, undefined, 'ważny klucz – bez linku przedłużenia');
   const offline = license.createLicenseKey(dir, { cfg: { ...cfg, api: 'http://127.0.0.1:9' } });

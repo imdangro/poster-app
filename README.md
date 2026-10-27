@@ -108,6 +108,10 @@ waits for access to the PRO repository (usually a few minutes) and switches the 
 script again a few minutes later – it will not use a second device. The license covers 2 devices and 12 months of
 updates; after that the installed version keeps working, and renewing the license brings the updates back.
 
+**Refund.** Within 14 days of the purchase you can return the license without giving a reason, as long as you have not
+activated it – only `upgrade-to-pro.sh` activates it (checking the key in the panel does not). Write to
+kontakt@posterapp.pl. Details: [PRO license terms](https://posterapp.pl/license.html?lang=en).
+
 ## Repository contents
 
 ```

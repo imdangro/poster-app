@@ -1,5 +1,3 @@
-<!-- WERSJA ROBOCZA: przed publikacją repozytorium do przejrzenia przez prawnika (etap 6 planu). -->
-
 # Umowa licencyjna dla współtwórców (CLA)
 
 Umowa dotyczy wkładu – kodu, dokumentacji, grafik i innych materiałów – który przesyłasz do projektu Poster

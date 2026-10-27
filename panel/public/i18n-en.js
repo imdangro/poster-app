@@ -661,4 +661,7 @@ window.POSTER_I18N.en = {
   'Podaj nowy klucz licencyjny': 'Enter a new license key',
   'Licencja PRO': 'PRO license',
   'Klucz licencyjny: ••••{0}': 'License key: ••••{0}',
+  'Aktywacja kończy prawo do zwrotu bez podania przyczyny – do tego czasu możesz zwrócić licencję w ciągu 14 dni od zakupu. ':
+    'Activation ends the right to a refund without giving a reason – until then you can return the license within 14 days of the purchase. ',
+  'Warunki licencji PRO': 'PRO license terms',
 };

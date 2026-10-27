@@ -3964,6 +3964,13 @@
           ],
           'full',
         ),
+        // zwrot bez podania przyczyny tylko przed aktywacją (warunki licencji PRO, pkt 5)
+        h(
+          'div',
+          { class: 'muted', style: { marginTop: '10px' } },
+          tr('Aktywacja kończy prawo do zwrotu bez podania przyczyny – do tego czasu możesz zwrócić licencję w ciągu 14 dni od zakupu. '),
+          h('a', { href: lk.termsUrl, target: '_blank', rel: 'noopener' }, tr('Warunki licencji PRO')),
+        ),
       );
     const remove = (btn) =>
       busy(btn, async () => {

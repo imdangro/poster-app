@@ -48,6 +48,9 @@ function keyEnd(key) {
 // Cennik na stronie produktu w języku panelu (zakup PRO)
 const pricingUrl = (language) => PRODUCT_URL + (RENEW_ANCHOR[language] || RENEW_ANCHOR.en);
 
+// Warunki licencji PRO na stronie produktu (docs/license.html, z tools/licenses) – m.in. zwrot przed aktywacją
+const termsUrl = (language) => `${PRODUCT_URL}license.html?lang=${language === 'pl' ? 'pl' : 'en'}`;
+
 const renewUrl = (language, end = '') =>
   RENEW_CHECKOUT_URL
     ? RENEW_CHECKOUT_URL + (end ? `?custom_field_data.${RENEW_FIELD}=${encodeURIComponent(end)}` : '')
@@ -280,6 +283,7 @@ function createLicenseKey(dataDir, { cfg = polarConfig(), now = () => Date.now()
       command: upgradeCommand(projectDir),
       projectDir,
       pricingUrl: pricingUrl(lang()),
+      termsUrl: termsUrl(lang()),
     };
   };
   return {
@@ -337,6 +341,7 @@ module.exports = {
   RESULTS,
   polarConfig,
   pricingUrl,
+  termsUrl,
   renewUrl,
   keyEnd,
   activateHere,

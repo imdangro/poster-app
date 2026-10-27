@@ -7,6 +7,12 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.1.1 – 2026-10-27
+
+- Next to the PRO upgrade command (*Settings*, after checking the license key) the panel reminds you that until the
+  license is activated (`upgrade-to-pro.sh`) it can be returned within 14 days of the purchase, and links to the PRO
+  license terms on posterapp.pl.
+
 ## 1.1.0 – 2026-10-27
 
 - *PRO edition* card: for a key that no longer includes updates, *Renew the license* opens the renewal checkout with

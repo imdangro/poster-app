@@ -7,6 +7,12 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.1.1 – 2026-10-27
+
+- Przy poleceniu przejścia na PRO (*Ustawienia*, po sprawdzeniu klucza licencyjnego) panel przypomina, że do
+  aktywacji licencji (`upgrade-to-pro.sh`) można ją zwrócić w ciągu 14 dni od zakupu, i linkuje do warunków licencji
+  PRO na posterapp.pl.
+
 ## 1.1.0 – 2026-10-27
 
 - Karta *Wersja PRO*: dla klucza, który nie obejmuje już aktualizacji, przycisk *Przedłuż licencję* otwiera kasę

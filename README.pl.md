@@ -108,6 +108,10 @@ repozytorium PRO (zwykle kilka minut) i przełącza instalację na PRO. Gdy dost
 kilka minut – nie zajmie drugiego urządzenia. Licencja obejmuje 2 urządzenia i 12 miesięcy aktualizacji; potem
 zainstalowana wersja działa dalej, a przedłużenie licencji przywraca aktualizacje.
 
+**Zwrot.** W ciągu 14 dni od zakupu możesz zwrócić licencję bez podania przyczyny, dopóki jej nie aktywujesz –
+aktywuje ją dopiero `upgrade-to-pro.sh` (sprawdzenie klucza w panelu nie). Napisz na kontakt@posterapp.pl.
+Szczegóły: [warunki licencji PRO](https://posterapp.pl/license.html?lang=pl).
+
 ## Zawartość repozytorium
 
 ```
