@@ -29,6 +29,11 @@ const TEXT_PROVIDERS = {
   },
 };
 const TRANSIENT = new Set([408, 425, 429, 500, 502, 503, 504]);
+// Przerwa między próbami (POSTER_AI_RETRY_MS – krótsza w testach). Przebieg bota przy przeciążeniu dostawcy: kolejne
+// rundy po 4×, 8× i 15× tej przerwy (16, 32 i 60 s – razem ok. 2 min), ale nie dłużej niż PATIENT_MAX_MS od startu.
+const retryMs = () => Number(process.env.POSTER_AI_RETRY_MS) || 4000;
+const PATIENT_ROUNDS = [4, 8, 15];
+const PATIENT_MAX_MS = 5 * 60 * 1000;
 
 class AI {
   constructor(store) {
@@ -64,32 +69,50 @@ class AI {
   }
 
   // ------------------------------------------------------------------ tekst
-  async generateText(bot, { system, user, schema, maxTokens = 8192 }) {
+  // patient – przebieg bota (n8n czeka na tekst do 20 min): gdy dostawca jest przeciążony albo ma limit zapytań
+  // (HTTP 429/5xx), kolejne rundy prób z rosnącymi przerwami, zanim przyjdzie alert. Edytor, /post z Telegrama
+  // i seria postów dostają błąd od razu – mają własne wyjście (tekst autora albo teksty z planu).
+  async generateText(bot, { system, user, schema, maxTokens = 8192 }, { patient = false } = {}) {
     const c = bot.content;
-    const chain = [{ provider: c.textProvider || 'gemini', model: c.textModel }];
-    const errors = [];
-    for (let i = 0; i < chain.length; i++) {
-      const { provider, model } = chain[i];
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          if (!model) throw new HttpError(400, tr('nie wybrano modelu (panel → bot → Tekst i grafika)'));
-          const text =
-            provider === 'gemini'
-              ? await this.geminiText({ model, system, user, schema, maxTokens, thinking: c.thinking })
-              : await this.openaiText({ provider, model, system, user, schema, maxTokens });
-          return { text, provider, model, fallbackUsed: i > 0, errors };
-        } catch (e) {
-          const label = `${(TEXT_PROVIDERS[provider] || {}).label || provider} (${model || '?'})`;
-          const retry = attempt === 1 && (e.transient || e.status === 502);
-          if (!retry) {
-            errors.push(`${label}: ${e.message}`);
-            break;
+    let chain = [{ provider: c.textProvider || 'gemini', model: c.textModel }];
+    const waits = patient ? PATIENT_ROUNDS.map((x) => x * retryMs()) : [];
+    const started = Date.now();
+    const lasting = []; // błędy, których ponowienie nie naprawi (klucz, model) – zostają w opisie
+    for (let round = 0; ; round++) {
+      const errors = [...lasting];
+      const again = []; // dostawcy z chwilowym błędem – próbujemy ich w kolejnej rundzie
+      for (const step of chain) {
+        const { provider, model } = step;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            if (!model) throw new HttpError(400, tr('nie wybrano modelu (panel → bot → Tekst i grafika)'));
+            const text =
+              provider === 'gemini'
+                ? await this.geminiText({ model, system, user, schema, maxTokens, thinking: c.thinking })
+                : await this.openaiText({ provider, model, system, user, schema, maxTokens });
+            return { text, provider, model, fallbackUsed: !!step.fallback, errors };
+          } catch (e) {
+            const label = `${(TEXT_PROVIDERS[provider] || {}).label || provider} (${model || '?'})`;
+            const retry = attempt === 1 && (e.transient || e.status === 502);
+            if (!retry) {
+              errors.push(`${label}: ${e.message}`);
+              if (e.transient) again.push(step);
+              else lasting.push(errors.at(-1));
+              break;
+            }
+            await sleep(retryMs());
           }
-          await sleep(Number(process.env.POSTER_AI_RETRY_MS) || 4000);
         }
       }
+      const why = errors.join(' · ');
+      if (round >= waits.length || !again.length || Date.now() - started > PATIENT_MAX_MS) {
+        if (!round) throw new HttpError(502, tr('AI nie wygenerowało tekstu – {0}', why));
+        const min = Math.max(1, Math.round((Date.now() - started) / 60000));
+        throw new HttpError(502, tr('AI nie wygenerowało tekstu mimo ponawiania przez {0} min – {1}', min, why));
+      }
+      await sleep(waits[round]);
+      chain = again;
     }
-    throw new HttpError(502, tr('AI nie wygenerowało tekstu – {0}', errors.join(' · ')));
   }
 
   async geminiText({ model, system, user, schema, maxTokens, thinking }) {

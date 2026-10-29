@@ -7,6 +7,26 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.2.0 – 2026-10-29
+
+- **Instalator na czystym serwerze:** na Ubuntu albo Debianie bez Dockera instalator jednym poleceniem sam instaluje
+  Docker Engine i Docker Compose v2 z oficjalnego repozytorium Dockera (zwykle 1–3 min) i dalej instaluje Postera –
+  wcześniej kończył się komunikatem „Brak Dockera”. Gdy system akurat instaluje aktualizacje, instalator na nie czeka,
+  a przy źle ustawionym zegarze serwera (apt odrzuca wtedy listy pakietów – częste w maszynie wirtualnej) podpowiada,
+  jak ustawić czas. Na NAS-ie Docker instalujesz jak dotąd z centrum aplikacji.
+- Skrypt wideo TikToka w drafcie bota, który pisze w innym języku niż polski, ma angielskie nazwy sekcji (np. *DETAILS*,
+  *ON-SCREEN TEXT*) – wcześniej AI przepisywało z wzoru polskie „ROZWINIĘCIE” i „NAPISY NA EKRANIE”.
+- **AI chwilowo przeciążone:** gdy dostawca tekstu odpowiada, że jest przeciążony albo skończył się limit zapytań (np.
+  Gemini: HTTP 503 „high demand”, HTTP 429), przebieg bota ponawia zapytanie z rosnącymi przerwami (16, 32 i 60 s)
+  przez ok. 2 minuty, zanim wyśle alert do Telegrama – alert podaje, jak długo Poster próbował. Edytor własnego posta,
+  jak dotąd, pokazuje błąd od razu.
+- *Ustawienia → Dostawcy AI*: przycisk *Zapisz i sprawdź* jest pod polami swojego dostawcy – w nagłówku łatwo było
+  kliknąć przycisk następnej karty (np. *Własny* zamiast *Ollama*). Po udanym sprawdzeniu plakietka od razu zmienia się
+  na „skonfigurowany”, a opis karty i komunikat podpowiadają, że model (np. `gemma4:12b` w Ollamie) wybierasz w bocie:
+  *Tekst i grafika → Model* albo *Model zapasowy*.
+- Panel po angielsku: podpowiedź do klucza API Gemini w *Ustawieniach* zaczyna się od „From” zamiast polskiego „Z”,
+  a tytuły w cudzysłowie (np. w wyniku testu kanału RSS) mają angielskie cudzysłowy.
+
 ## 1.1.1 – 2026-10-27
 
 - Przy poleceniu przejścia na PRO (*Ustawienia*, po sprawdzeniu klucza licencyjnego) panel przypomina, że do

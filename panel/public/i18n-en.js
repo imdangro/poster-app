@@ -182,6 +182,7 @@ window.POSTER_I18N.en = {
   'Sprawdź kanał': 'Check the feed',
   Test: 'Test',
   Usuń: 'Remove',
+  '„{0}”': '“{0}”',
   ' · najnowszy: {0}': ' · newest: {0}',
   'Dodaj kanał RSS': 'Add RSS feed',
   'Dodaj wyszukiwanie Google News': 'Add a Google News search',
@@ -446,6 +447,7 @@ window.POSTER_I18N.en = {
     'API keys and program settings. You connect social media accounts in the bot (Accounts tab).',
   'Model AI, który wybiera newsy i pisze posty.': 'The AI model that picks news and writes the posts.',
   'Klucz API': 'API key',
+  'Z ': 'From ',
   '. Klucz z projektu bez billingu = teksty za 0 zł w darmowym limicie Google.':
     ". A key from a project without billing = free texts within Google's free quota.",
   'Dostawcy AI – tekst': 'AI providers – text',
@@ -613,8 +615,8 @@ window.POSTER_I18N.en = {
   'Wersja PRO publikuje na TikToku wideo z grafiki posta (animacja, 0 zł).':
     'The PRO version publishes video to TikTok made from the post image (an animation, free).',
   'Wideo z grafiki posta (animacja) – w wersji PRO.': 'Video from the post image (an animation) – in the PRO version.',
-  'Alternatywa dla Gemini: model na Twoim sprzęcie albo inne API zgodne z OpenAI. Wybierasz go w bocie: zakładka Tekst i grafika.':
-    'An alternative to Gemini: a model on your own hardware or another OpenAI-compatible API. You choose it in the bot: Text & images tab.',
+  'Alternatywa dla Gemini: model na Twoim sprzęcie albo inne API zgodne z OpenAI. Dostawcę i model (np. gemma4:12b w Ollamie) wybierasz w bocie: zakładka Tekst i grafika.':
+    'An alternative to Gemini: a model on your own hardware or another OpenAI-compatible API. You pick the provider and the model (e.g. gemma4:12b in Ollama) in the bot: Text & images tab.',
   'Własna strona i kanał YouTube': 'Your website and YouTube channel',
   'W wersji PRO bot może ogłaszać każdy nowy artykuł z Twojej strony albo każdy nowy film z Twojego kanału YouTube.':
     'In the PRO version the bot can announce every new article from your website or every new video from your YouTube channel.',

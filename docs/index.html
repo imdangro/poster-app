@@ -1127,16 +1127,18 @@
           <details>
             <summary>What do I need to run Poster?</summary>
             <p>
-              A NAS or a Linux server with Docker and Docker Compose v2, about 1 GB of free RAM and a Telegram bot. The guide uses a UGREEN
-              NAS with UGOS as the example, but any Docker host works.
+              A NAS or a Linux server with Docker and Docker Compose v2, about 1 GB of free RAM and a Telegram bot. On a clean Ubuntu or
+              Debian server the installer sets up Docker itself. The guide uses a UGREEN NAS with UGOS as the example, but any Docker host
+              works.
             </p>
           </details>
           <details data-repo-doc>
             <summary>How do I install it?</summary>
             <p>
               Log in to your NAS or server over SSH and run <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>. The
-              installer checks Docker, downloads Poster, prepares the configuration, starts the containers and shows the panel address with
-              a one-time code for your password – you set everything else in the browser. Prefer to do it by hand? The
+              installer checks Docker (on Ubuntu or Debian it installs it if missing), downloads Poster, prepares the configuration, starts
+              the containers and shows the panel address with a one-time code for your password – you set everything else in the browser.
+              Prefer to do it by hand? The
               <a href="https://github.com/imdangro/poster-app#-step-by-step-installation-nas-or-a-server-with-docker">README</a> has a
               step-by-step guide.
             </p>
@@ -1726,16 +1728,18 @@
           <details>
             <summary>Czego potrzebuję, żeby uruchomić Postera?</summary>
             <p>
-              NAS-a albo serwera z Linuksem, Dockerem i Docker Compose v2, ok. 1 GB wolnej pamięci RAM oraz bota w Telegramie. Instrukcja
-              pokazuje NAS UGREEN z UGOS, ale działa każdy host z Dockerem.
+              NAS-a albo serwera z Linuksem, Dockerem i Docker Compose v2, ok. 1 GB wolnej pamięci RAM oraz bota w Telegramie. Na czystym
+              serwerze z Ubuntu albo Debianem Dockera zainstaluje sam instalator. Instrukcja pokazuje NAS UGREEN z UGOS, ale działa każdy
+              host z Dockerem.
             </p>
           </details>
           <details data-repo-doc>
             <summary>Jak zainstalować Postera?</summary>
             <p>
               Zaloguj się na NAS albo serwer przez SSH i uruchom <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>.
-              Instalator sprawdzi Dockera, pobierze Postera, przygotuje konfigurację, uruchomi kontenery i pokaże adres panelu z
-              jednorazowym kodem do ustawienia hasła – resztę ustawiasz w przeglądarce. Wolisz krok po kroku? Instrukcję znajdziesz w
+              Instalator sprawdzi Dockera (na Ubuntu i Debianie w razie potrzeby go zainstaluje), pobierze Postera, przygotuje konfigurację,
+              uruchomi kontenery i pokaże adres panelu z jednorazowym kodem do ustawienia hasła – resztę ustawiasz w przeglądarce. Wolisz
+              krok po kroku? Instrukcję znajdziesz w
               <a href="https://github.com/imdangro/poster-app/blob/main/README.pl.md#-instalacja-krok-po-kroku-nas-lub-serwer-z-dockerem"
                 >README</a
               >.

@@ -61,6 +61,29 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           NODE_PATH="$RUNNER_TEMP/n8n/node_modules" node workflows/src/validate.js workflows/poster_workflow.json
 
+  install-docker:
+    name: Instalator – Docker na czystym ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04', 'debian:12', 'debian:13']
+    steps:
+      - uses: actions/checkout@v6
+      - name: Docker Engine i Compose v2 z repozytorium Dockera (bez demona – kontener nie ma systemd)
+        run: |
+          docker run --rm -v "$PWD/docs:/src:ro" '${{ matrix.image }}' bash -c '
+            set -euo pipefail
+            eval "$(sed "\$d" /src/install.sh)"
+            distro="$(docker_distro)"
+            install_docker "$distro"
+            docker --version
+            docker compose version
+            docker buildx version
+            grep -q "^deb \[arch=.* signed-by=/etc/apt/keyrings/docker.asc\] https://download.docker.com/linux/$distro " /etc/apt/sources.list.d/docker.list
+          '
+
   install:
     name: Instalator (docs/install.sh) na czystym Dockerze
     runs-on: ubuntu-latest
@@ -103,6 +126,22 @@ jobs:
           grep -qx 'BIND_ADDRESS=127.0.0.1' .env
           grep -qx 'TZ=Europe/Warsaw' .env
           rm .env
+          # instalacja Dockera: zły zegar → podpowiedź; zajęty apt → jedna informacja; błąd → koniec wyjścia apt i kod
+          apt-get() { echo 'E: Release file for http://deb.debian.org/debian/dists/trixie/InRelease is not valid yet (invalid for another 4h 2min 1s).'; return 100; }
+          out="$( (apt_get update) 2>&1 || true)"
+          grep -q 'timedatectl set-ntp true' <<<"$out"
+          apt-get() { for s in 5 10 15; do echo "Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 2049 (unattended-upgr)... ${s}s"; done; }
+          out="$(apt_get install docker-ce 2>&1)"
+          test "$(grep -c 'waiting for it to finish' <<<"$out")" = 1
+          apt-get() { echo 'E: Unable to locate package docker-ce'; return 100; }
+          rc=0
+          out="$(apt_get install docker-ce 2>&1)" || rc=$?
+          test "$rc" = 100
+          grep -q 'Unable to locate package' <<<"$out"
+          unset -f apt-get
+          # NAS (wolumin /volume1): Docker z centrum aplikacji, instalator go nie instaluje
+          is_nas() { return 0; }
+          if docker_distro; then echo 'NAS: bez instalacji Dockera'; exit 1; fi
       - name: Instalacja jak „curl … | sudo bash” (repozytorium z tego commita)
         run: |
           set -o pipefail

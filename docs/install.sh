@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Poster – instalacja jednym poleceniem (SSH na NAS-ie z UGOS albo serwerze Linux z Dockerem):
+# Poster – instalacja jednym poleceniem (SSH na NAS-ie z UGOS albo serwerze Linux; na Ubuntu i Debianie bez Dockera
+# instalator sam go zainstaluje):
 #   curl -fsSL https://posterapp.pl/install.sh | sudo bash
 # Opcje: curl -fsSL https://posterapp.pl/install.sh | sudo bash -s -- --dir /opt/poster --lang en
 #   --dir  katalog projektu (domyślnie <wolumin>/docker/poster na NAS-ie, na serwerze /opt/poster; też POSTER_DIR),
 #   --lang język komunikatów: pl albo en (też POSTER_LANG; domyślnie z języka systemu i strefy czasowej).
-# Kroki: 1) Docker i Docker Compose v2, 2) pobranie Postera (git w kontenerze alpine/git – bez instalowania gita),
+# Kroki: 1) Docker i Docker Compose v2 (na Ubuntu i Debianie bez Dockera – instalacja z repozytorium Dockera),
+#        2) pobranie Postera (git w kontenerze alpine/git – bez instalowania gita),
 #        3) scripts/init-nas.sh (.env, klucze, katalogi data/), a w nowym .env adres IP, strefa czasowa i wolne porty,
 #        4) docker compose up -d --build, 5) konto właściciela n8n (losowe hasło) i scripts/import-to-n8n.sh,
 #        6) adres panelu i jednorazowy kod do ustawienia hasła z logów panelu.
@@ -59,7 +61,7 @@ detect_lang() {
 usage() {
   if [ "$UI_LANG" = en ]; then
     cat <<'EOF'
-Poster – installation with one command (NAS or Linux server with Docker):
+Poster – installation with one command (NAS or Linux server; on Ubuntu and Debian it installs Docker if needed):
   curl -fsSL https://posterapp.pl/install.sh | sudo bash
 Options (after "sudo bash -s --"):
   --dir <directory>   project directory (default <volume>/docker/poster on a NAS, /opt/poster on a server)
@@ -67,7 +69,7 @@ Options (after "sudo bash -s --"):
 EOF
   else
     cat <<'EOF'
-Poster – instalacja jednym poleceniem (NAS albo serwer Linux z Dockerem):
+Poster – instalacja jednym poleceniem (NAS albo serwer Linux; na Ubuntu i Debianie w razie potrzeby zainstaluje Dockera):
   curl -fsSL https://posterapp.pl/install.sh | sudo bash
 Opcje (po „sudo bash -s --”):
   --dir <katalog>     katalog projektu (domyślnie <wolumin>/docker/poster na NAS-ie, /opt/poster na serwerze)
@@ -140,18 +142,95 @@ free_port() {
   printf '%s' "$1"
 }
 
+# NAS (UGOS, Synology…) ma woluminy /volume1, /volume2… – tam Docker instaluje się z centrum aplikacji, nie przez apt
+is_nas() {
+  local d
+  for d in /volume[0-9]*; do [ -d "$d" ] && return 0; done
+  return 1
+}
+
+# Serwer z Ubuntu albo Debianem (nie NAS) – tu instalator sam doinstaluje Dockera; wypisuje ubuntu albo debian
+docker_distro() {
+  local id
+  if is_nas || ! command -v apt-get >/dev/null 2>&1; then return 1; fi
+  id="$(. /etc/os-release 2>/dev/null && printf '%s' "${ID:-}")" || return 1
+  case "$id" in ubuntu | debian) printf '%s' "$id" ;; *) return 1 ;; esac
+}
+
+# apt-get bez pytań (też needrestart) i z komunikatami po angielsku (rozpoznanie błędu). Wyjście trafia do pliku –
+# przy błędzie instalator pokazuje jego koniec. Świeży serwer często instaluje akurat aktualizacje (unattended-upgrades):
+# apt czeka wtedy na blokadę do 10 min, a instalator mówi raz, na co czeka.
+apt_get() {
+  local log rc=0 busy
+  log="$(mktemp)"
+  busy="$(info "$(m "apt jest zajęty – system instaluje teraz aktualizacje; czekam, aż skończy (do 10 min)..." \
+    "apt is busy – the system is installing updates right now; waiting for it to finish (up to 10 min)...")")"
+  LC_ALL=C DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -y -q -o DPkg::Lock::Timeout=600 "$@" 2>&1 |
+    tee "$log" | awk -v msg="$busy" '/Waiting for cache lock/ && !s { s = 1; print msg; fflush() }' || rc=$?
+  # zegar serwera w tyle (częste w maszynie wirtualnej): listy pakietów mają datę „z przyszłości” i apt je odrzuca
+  if grep -qE 'not valid yet|invalid for another' "$log"; then
+    rm -f "$log"
+    die "$(m "Zegar serwera jest źle ustawiony ($(date '+%Y-%m-%d %H:%M')), więc apt odrzuca listy pakietów. Włącz synchronizację czasu: sudo timedatectl set-ntp true – albo ustaw czas ręcznie: sudo date -s 'RRRR-MM-DD GG:MM' – i uruchom instalator ponownie." \
+      "The server clock is wrong ($(date '+%Y-%m-%d %H:%M')), so apt rejects the package lists. Turn on time sync: sudo timedatectl set-ntp true – or set the time by hand: sudo date -s 'YYYY-MM-DD HH:MM' – and run the installer again.")"
+  fi
+  [ "$rc" -eq 0 ] || tail -n 15 "$log" | sed 's/^/    /' >&2
+  rm -f "$log"
+  return "$rc"
+}
+
+# Docker Engine i Compose v2 z oficjalnego repozytorium Dockera, jak w https://docs.docker.com/engine/install/ubuntu/
+# (i …/debian/): klucz w /etc/apt/keyrings/docker.asc, źródło w /etc/apt/sources.list.d/docker.list
+install_docker() {
+  local distro="$1" codename list=/etc/apt/sources.list.d/docker.list
+  codename="$(. /etc/os-release 2>/dev/null && printf '%s' "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}" || true)"
+  [ -n "$codename" ] || die "$(m "Nie rozpoznaję wersji systemu ($distro) – zainstaluj Dockera według https://docs.docker.com/engine/install/ i uruchom instalator ponownie." \
+    "Cannot tell the system version ($distro) – install Docker following https://docs.docker.com/engine/install/ and run the installer again.")"
+  info "$(m "Brak Dockera – instaluję Docker Engine i Compose v2 z repozytorium Dockera ($distro $codename), zwykle 1–3 min..." \
+    "Docker is missing – installing Docker Engine and Compose v2 from Docker's repository ($distro $codename), usually 1–3 min...")"
+  apt_get update || die "$(m "apt-get update się nie powiódł (komunikat powyżej)." "apt-get update failed (message above).")"
+  apt_get install --no-install-recommends ca-certificates curl || die "$(m "Nie udało się zainstalować curl (komunikat powyżej)." \
+    "Could not install curl (message above).")"
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL "https://download.docker.com/linux/$distro/gpg" -o /etc/apt/keyrings/docker.asc ||
+    die "$(m "Nie udało się pobrać klucza repozytorium Dockera (download.docker.com) – sprawdź połączenie z internetem i zegar serwera (date)." \
+      "Could not download the key of Docker's repository (download.docker.com) – check the internet connection and the server clock (date).")"
+  chmod a+r /etc/apt/keyrings/docker.asc
+  # źródło dodane wcześniej ręcznie według dokumentacji Dockera (format deb822) zostaje bez zmian
+  [ -f /etc/apt/sources.list.d/docker.sources ] ||
+    printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
+      "$(dpkg --print-architecture)" "$distro" "$codename" >"$list"
+  if ! apt_get update; then
+    rm -f "$list" # bez tego każde następne „apt update” kończyłoby się tym samym błędem
+    die "$(m "Repozytorium Dockera nie działa dla $distro $codename (komunikat powyżej) – zainstaluj Dockera według https://docs.docker.com/engine/install/ i uruchom instalator ponownie." \
+      "Docker's repository does not work for $distro $codename (message above) – install Docker following https://docs.docker.com/engine/install/ and run the installer again.")"
+  fi
+  apt_get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin ||
+    die "$(m "Instalacja Dockera się nie powiodła (komunikat powyżej)." "Docker installation failed (message above).")"
+  if command -v systemctl >/dev/null 2>&1; then systemctl enable --now docker >/dev/null 2>&1 || true; fi
+  info "$(m "Zainstalowany: $(docker --version)" "Installed: $(docker --version)")"
+}
+
 check_docker() {
-  command -v docker >/dev/null 2>&1 || die "$(m "Brak Dockera. NAS z UGOS: App Center → Docker. Serwer Linux: https://docs.docker.com/engine/install/" \
-    "Docker is missing. NAS with UGOS: App Center → Docker. Linux server: https://docs.docker.com/engine/install/")"
-  docker info >/dev/null 2>&1 || die "$(m "Docker nie działa. NAS z UGOS: otwórz aplikację Docker. Serwer Linux: sudo systemctl start docker" \
-    "Docker is not running. NAS with UGOS: open the Docker app. Linux server: sudo systemctl start docker")"
-  docker compose version >/dev/null 2>&1 || die "$(m "Brak 'docker compose' (v2). NAS z UGOS: zaktualizuj aplikację Docker. Serwer Linux: zainstaluj wtyczkę docker-compose-plugin." \
-    "'docker compose' (v2) is missing. NAS with UGOS: update the Docker app. Linux server: install the docker-compose-plugin package.")"
+  # najpierw procesor – bez 64 bitów nie ma sensu instalować Dockera
   case "$(uname -m)" in
     x86_64 | amd64 | aarch64 | arm64) ;;
     *) die "$(m "n8n działa tylko na procesorach 64-bitowych (x86-64 albo ARM64), a ten ma architekturę $(uname -m)." \
       "n8n runs only on 64-bit processors (x86-64 or ARM64), this one is $(uname -m).")" ;;
   esac
+  if ! command -v docker >/dev/null 2>&1; then
+    local distro
+    distro="$(docker_distro)" || die "$(m "Brak Dockera. NAS z UGOS: App Center → Docker. Serwer Linux: https://docs.docker.com/engine/install/" \
+      "Docker is missing. NAS with UGOS: App Center → Docker. Linux server: https://docs.docker.com/engine/install/")"
+    install_docker "$distro"
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    # serwer z systemd: Docker zainstalowany, ale zatrzymany – jedna próba uruchomienia
+    if ! is_nas && command -v systemctl >/dev/null 2>&1; then systemctl start docker >/dev/null 2>&1 || true; fi
+    docker info >/dev/null 2>&1 || die "$(m "Docker nie działa. NAS z UGOS: otwórz aplikację Docker. Serwer Linux: sudo systemctl start docker" \
+      "Docker is not running. NAS with UGOS: open the Docker app. Linux server: sudo systemctl start docker")"
+  fi
+  docker compose version >/dev/null 2>&1 || die "$(m "Brak 'docker compose' (v2). NAS z UGOS: zaktualizuj aplikację Docker. Serwer Linux: zainstaluj wtyczkę docker-compose-plugin." \
+    "'docker compose' (v2) is missing. NAS with UGOS: update the Docker app. Linux server: install the docker-compose-plugin package.")"
   # obrazy n8n, RSSHub i panelu zajmują ok. 3 GB w katalogu Dockera
   local root free
   root="$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || true)"

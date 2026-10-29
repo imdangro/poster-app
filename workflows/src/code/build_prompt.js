@@ -16,13 +16,17 @@ if (!candidates.length) {
 
 const fmt = (iso) => DateTime.fromISO(iso).setZone($now.zoneName).toFormat('dd.LL HH:mm');
 
+// Nazwy sekcji skryptu model przepisuje dosłownie, więc są w języku postów: po polsku polskie, w innych językach
+// angielskie (HOOK, CTA i B-ROLL to i tak nazwy z branży).
+const polishPosts = /^(pol|pl$)/i.test(String(cfg.language || '').trim());
+const [DETAILS, ON_SCREEN] = polishPosts ? ['ROZWINIĘCIE', 'NAPISY NA EKRANIE'] : ['DETAILS', 'ON-SCREEN TEXT'];
 const SCRIPT_FORMAT = `
   🎣 HOOK (0–3 s): ...
   📰 NEWS (3–10 s): ...
-  🔎 ROZWINIĘCIE (10–45 s): ...
+  🔎 ${DETAILS} (10–45 s): ...
   📣 CTA (45–60 s): ...
   🎥 B-ROLL: 3–5 punktów z sugestiami ujęć/materiałów
-  💬 NAPISY NA EKRANIE: 3–5 krótkich haseł`;
+  💬 ${ON_SCREEN}: 3–5 krótkich haseł`;
 
 const instructionsBlock = cfg.instructions
   ? `\nDODATKOWE WYTYCZNE WŁAŚCICIELA PROFILU (stosuj je, o ile nie łamią zasad powyżej):\n${cfg.instructions}\n`

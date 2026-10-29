@@ -22,7 +22,7 @@ You set everything up in the panel at **`http://NAS_IP:7080`**, without SSH and 
 > AI providers with a fallback provider –
 > [edition comparison](#-pro-version) and the [product page](https://posterapp.pl/).
 
-**Installation** is one command pasted over SSH on a NAS or a server with Docker: `curl -fsSL https://posterapp.pl/install.sh | sudo bash`
+**Installation** is one command pasted over SSH on a NAS with Docker or a Linux server – on a clean Ubuntu or Debian the installer installs Docker itself: `curl -fsSL https://posterapp.pl/install.sh | sudo bash`
 (details: [“🚀 Installation in one command”](#-installation-in-one-command)).
 
 ![Poster dashboard: the bot card, service status and recent activity](docs/img/lite-dashboard-en.webp)
@@ -162,7 +162,7 @@ Installing from a private copy of the repository (e.g. your own fork)? Updating 
 
 ## 🚀 Installation in one command
 
-On a NAS or a Linux server with Docker and Docker Compose v2 (see “Step 0”), log in over SSH (see “How to connect to the
+On a NAS with Docker and Docker Compose v2 (see “Step 0”) or a Linux server, log in over SSH (see “How to connect to the
 NAS over SSH”) and paste:
 
 ```bash
@@ -170,7 +170,9 @@ curl -fsSL https://posterapp.pl/install.sh | sudo bash
 ```
 
 The installer, in order:
-1. checks Docker and Docker Compose v2;
+1. checks Docker and Docker Compose v2. On an Ubuntu or Debian server without Docker it installs Docker itself from
+   Docker's official repository (usually 1–3 min). When the server clock is wrong (common in a virtual machine), apt
+   rejects the package lists – the installer then tells you how to set the time;
 2. downloads Poster into the NAS's `docker` folder – `/volume1/docker/poster`, or e.g. `/volume2/docker/poster` when
    that folder is on another volume – or to `/opt/poster` (server). Choose another place with `--dir` (below). Git runs
    in the `alpine/git` container, so you do not need to install it;
@@ -207,7 +209,7 @@ Prefer to do everything by hand? The step-by-step guide is below.
 
 ### Step 0. Preparing the NAS or server (once)
 
-1. **Docker with Docker Compose v2**: on UGOS *App Center* → install **Docker**. On a Linux server install Docker Engine with the `docker compose` plugin.
+1. **Docker with Docker Compose v2**: on UGOS *App Center* → install **Docker**. On an Ubuntu or Debian server the [one-command installer](#-installation-in-one-command) installs it, on another Linux install Docker Engine with the `docker compose` plugin.
 2. **SSH**: on UGOS *Control Panel → Terminal* → enable **SSH** (port 22). Log in with an administrator account.
 3. **Fixed IP address**: reserve a DHCP address for the NAS in your router (e.g. `192.168.1.50`). You will use it in `NAS_IP` and in the browser.
 4. **Time zone**: on UGOS *Control Panel → Date & Time* → your time zone (e.g. `Europe/Warsaw`) + NTP sync.
@@ -498,7 +500,8 @@ Google News links do not lead straight to the article – for photos add the por
 You create the key in [Google AI Studio](https://aistudio.google.com/apikey) and paste it in **panel → Settings → Google Gemini**.
 A key from a project **without billing** is enough – texts then fit within Google's free quota. You choose the model
 in *Bot → Text & images* (suggestions from the list fetched for your key). Choose stable names (e.g. `gemini-3.8-flash`).
-Aliases like `gemini-flash-latest` return 503 more often.
+Aliases like `gemini-flash-latest` return 503 more often. When the model is temporarily overloaded (503) or the request
+limit is used up (429), a bot run retries with growing pauses for about 2 minutes and only then sends an alert.
 
 ### X (publishing via API v2)
 You need an X developer app to publish.

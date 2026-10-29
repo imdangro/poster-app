@@ -61,6 +61,7 @@ module.exports = {
   '{0}: brak adresu API (panel → Ustawienia → Dostawcy AI)': '{0}: no API address (panel → Settings → AI providers)',
   '{0}: brak klucza API (panel → Ustawienia → Dostawcy AI)': '{0}: no API key (panel → Settings → AI providers)',
   'AI nie wygenerowało tekstu – {0}': 'AI did not generate the text – {0}',
+  'AI nie wygenerowało tekstu mimo ponawiania przez {0} min – {1}': 'AI did not generate the text despite retrying for {0} min – {1}',
   'brak klucza Google Gemini (Ustawienia)': 'no Google Gemini key (Settings)',
   brak: 'none',
   'pusta odpowiedź (powód: {0})': 'empty response (reason: {0})',
@@ -80,7 +81,8 @@ module.exports = {
   'Zbyt długa wartość': 'Value too long',
   'Google odrzucił klucz: {0}': 'Google rejected the key: {0}',
   'klucz działa ({0} modeli)': 'the key works ({0} models)',
-  'Działa – dostępnych modeli: {0}': 'Works – models available: {0}',
+  'Działa – dostępnych modeli: {0}. Model wybierasz w bocie: zakładka Tekst i grafika.':
+    'Works – models available: {0}. You pick the model in the bot: Text & images tab.',
   'Podaj ID czatu (albo kliknij „Wykryj”)': 'Enter the chat ID (or click “Detect”)',
   '✅ <b>Poster</b>: test połączenia z panelu{0}. Drafty będą przychodzić tutaj.':
     '✅ <b>Poster</b>: connection test from the panel{0}. Drafts will arrive here.',

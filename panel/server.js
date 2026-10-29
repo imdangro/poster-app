@@ -241,7 +241,7 @@ const internalServer = http.createServer(async (req, res) => {
       const bot = store.requireBot(am[1]);
       if (am[2] === 'llm') {
         if (!body.system || !body.user) throw new HttpError(400, tr('Brak treści zapytania do AI'));
-        return sendJson(res, 200, await ai.generateText(bot, body));
+        return sendJson(res, 200, await ai.generateText(bot, body, { patient: true }));
       }
       if (am[2] === 'image') {
         // własny post (✍️ Nowy post): zdjęcie wgrane w panelu albo grafika wybrana w edytorze

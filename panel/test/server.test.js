@@ -18,6 +18,11 @@ let dataDir;
 let mock;
 const mockHits = [];
 const n8nJobs = []; // zlecenia panelu do n8n (webhook „poster”)
+// atrapa Gemini: tyle kolejnych zapytań dostaje HTTP 503 (przeciążony model), geminiBadKey – HTTP 400 (zły klucz);
+// licznik wszystkich zapytań
+let geminiBusy = 0;
+let geminiBadKey = false;
+let geminiCalls = 0;
 // atrapa kanału RSS YouTube (bot „kanał YouTube”, PRO): ID filmów od najnowszego
 const YT_CHANNEL = 'UCabcdefghijklmnopqrstuv';
 const ytVideos = ['vidA0000001', 'vidA0000002'];
@@ -62,6 +67,18 @@ before(async () => {
       }
       // Gemini: wersje posta – pola ze schematu odpowiedzi
       if (/:generateContent$/.test(req.url)) {
+        geminiCalls++;
+        if (geminiBadKey) {
+          res.writeHead(400, { 'content-type': 'application/json' });
+          return res.end(JSON.stringify({ error: { code: 400, message: 'API key not valid.', status: 'INVALID_ARGUMENT' } }));
+        }
+        if (geminiBusy > 0) {
+          geminiBusy--;
+          res.writeHead(503, { 'content-type': 'application/json' });
+          return res.end(
+            JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand.', status: 'UNAVAILABLE' } }),
+          );
+        }
         const keys = Object.keys(JSON.parse(body).generationConfig.responseSchema.properties);
         const text = JSON.stringify(Object.fromEntries(keys.map((k) => [k, `AI ${k} #test`])));
         return send({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] });
@@ -98,6 +115,7 @@ before(async () => {
       PANEL_PORT_INTERNAL: String(ui),
       PANEL_INTERNAL_PORT: String(internal),
       PANEL_DISABLE_WORKERS: '1',
+      POSTER_AI_RETRY_MS: '20',
       UPSTREAM_TELEGRAM: `http://127.0.0.1:${mock.address().port}`,
       UPSTREAM_GEMINI: `http://127.0.0.1:${mock.address().port}`,
       N8N_INTERNAL_URL: `http://127.0.0.1:${mock.address().port}`,
@@ -447,6 +465,59 @@ test('bot kanału YouTube (PRO): test kanału, pierwsze sprawdzenie, film z kole
   const test = await json('POST', '/api/test/youtube', { channel: YT_CHANNEL });
   assert.equal(bot.mode, 'news', 'LITE: bez bota kanału YouTube');
   assert.equal(test.status, 404);
+  assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
+});
+
+test('AI przeciążone (503): przebieg bota ponawia w kolejnych rundach, edytor dostaje błąd od razu', async () => {
+  const headers = { 'x-poster-token': TOKEN, 'content-type': 'application/json' };
+  const settings = { global: { telegram: { chatId: '-100123' } }, secrets: { geminiApiKey: 'AIza-test-key' } };
+  assert.equal((await json('PUT', '/api/settings', settings)).status, 200);
+  const { bot } = await (await json('POST', '/api/bots', { name: 'Przeciążenie' })).json();
+  assert.equal((await json('PUT', `/api/bots/${bot.id}`, { publishing: { x: true } })).status, 200);
+  const llm = { system: 'Napisz post', user: 'Temat', schema: { type: 'OBJECT', properties: { post_x: { type: 'STRING' } } } };
+  const ask = () =>
+    fetch(`http://127.0.0.1:${internal}/internal/bots/${bot.id}/llm`, { method: 'POST', headers, body: JSON.stringify(llm) });
+
+  // runda 1 i 2: po dwie odpowiedzi 503, runda 3: jedna 503 i tekst
+  geminiBusy = 5;
+  let calls = geminiCalls;
+  const ok = await ask();
+  assert.equal(ok.status, 200);
+  const out = await ok.json();
+  assert.equal(JSON.parse(out.text).post_x, 'AI post_x #test');
+  assert.equal(out.fallbackUsed, false);
+  assert.equal(geminiCalls - calls, 6);
+
+  // przeciążenie dłuższe niż wszystkie rundy: 4 rundy po 2 próby, potem błąd z informacją o ponawianiu
+  geminiBusy = 100;
+  calls = geminiCalls;
+  const fail = await ask();
+  assert.equal(fail.status, 502);
+  assert.match(
+    (await fail.json()).error.message,
+    /mimo ponawiania przez 1 min – Google Gemini \(gemini-3\.8-flash\): HTTP 503 – This model/,
+  );
+  assert.equal(geminiCalls - calls, 8);
+
+  // edytor własnego posta: bez rund – dwie próby i od razu błąd
+  calls = geminiCalls;
+  const adapt = await json('POST', `/api/bots/${bot.id}/compose/adapt`, { text: 'Test', platforms: ['x'] });
+  assert.equal(adapt.status, 502);
+  assert.match((await adapt.json()).error.message, /^AI nie wygenerowało tekstu – Google Gemini/);
+  assert.equal(geminiCalls - calls, 2);
+
+  // błąd, którego ponowienie nie naprawi (zły klucz – HTTP 400): jedna próba, bez kolejnych rund
+  geminiBusy = 0;
+  geminiBadKey = true;
+  calls = geminiCalls;
+  const bad = await ask();
+  geminiBadKey = false;
+  assert.equal(bad.status, 502);
+  assert.match(
+    (await bad.json()).error.message,
+    /^AI nie wygenerowało tekstu – Google Gemini \(gemini-3\.8-flash\): HTTP 400 – API key not valid/,
+  );
+  assert.equal(geminiCalls - calls, 1);
   assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
 });
 

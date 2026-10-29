@@ -1767,6 +1767,10 @@ table.list td .msg {
   gap: 10px;
   flex-wrap: wrap;
 }
+.provider-foot {
+  display: flex;
+  justify-content: flex-end;
+}
 @media (max-width: 900px) {
   .cost-row {
     grid-template-columns: auto minmax(0, 1fr);

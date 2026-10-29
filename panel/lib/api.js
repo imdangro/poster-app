@@ -292,7 +292,10 @@ function createApi(ctx) {
   route('POST', '/api/test/provider', async (req, res, p, body) => {
     const provider = String(body.provider || '');
     const models = await listModels(provider, true);
-    return { ok: true, message: tr('Działa – dostępnych modeli: {0}', (models.text || []).length) };
+    return {
+      ok: true,
+      message: tr('Działa – dostępnych modeli: {0}. Model wybierasz w bocie: zakładka Tekst i grafika.', (models.text || []).length),
+    };
   });
 
   route('POST', '/api/test/telegram', async (req, res, p, body) => {

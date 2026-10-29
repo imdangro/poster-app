@@ -1470,7 +1470,7 @@
                 'div',
                 { class: `res ${res.ok ? 'ok' : 'bad'}` },
                 res.ok
-                  ? `✓ ${res.message}${res.newest ? tr(' · najnowszy: {0}', fmtWhen(res.newest)) : ''}${res.titles && res.titles[0] ? ` · „${res.titles[0]}”` : ''}`
+                  ? `✓ ${res.message}${res.newest ? tr(' · najnowszy: {0}', fmtWhen(res.newest)) : ''}${res.titles && res.titles[0] ? ` · ${tr('„{0}”', res.titles[0])}` : ''}`
                   : `✗ ${res.message}`,
               )
             : null,
@@ -3428,14 +3428,15 @@
         await loadOverview().catch(() => {});
         pageSettings();
       });
-    // „Zapisz i sprawdź” dostawcy AI: zapis adresów i klucza, potem test połączenia
-    const testProvider = (btn, provider, secretKeys) =>
+    // „Zapisz i sprawdź” dostawcy AI: zapis adresów i klucza, potem test połączenia (onOk – np. plakietka dostawcy)
+    const testProvider = (btn, provider, secretKeys, onOk) =>
       busy(btn, async () => {
         const secrets = {};
         for (const k of secretKeys) if (sec[k]) secrets[k] = sec[k];
         S.settings = await api('PUT', '/api/settings', { global: { ai: g.ai }, secrets });
         resetModels();
         toast((await api('POST', '/api/test/provider', { provider })).message, 'ok', 6000);
+        if (onOk) onOk();
       });
     const clearSecret = (key, label) =>
       h(
@@ -3530,7 +3531,7 @@
               h(
                 'span',
                 null,
-                'Z ',
+                tr('Z '),
                 h('a', { href: 'https://aistudio.google.com/apikey', target: '_blank', rel: 'noopener' }, 'aistudio.google.com/apikey'),
                 tr('. Klucz z projektu bez billingu = teksty za 0 zł w darmowym limicie Google.'),
               ),
@@ -3557,7 +3558,7 @@
             ...cardHead(
               tr('Dostawcy AI – tekst'),
               tr(
-                'Alternatywa dla Gemini: model na Twoim sprzęcie albo inne API zgodne z OpenAI. Wybierasz go w bocie: zakładka Tekst i grafika.',
+                'Alternatywa dla Gemini: model na Twoim sprzęcie albo inne API zgodne z OpenAI. Dostawcę i model (np. gemma4:12b w Ollamie) wybierasz w bocie: zakładka Tekst i grafika.',
               ),
             ),
           ],
@@ -3567,26 +3568,19 @@
             TEXT_PROVIDER_SETUP.map(([id, secret, keyLink, desc, basePh]) => {
               const info = (st.options.textProviders || []).find((p) => p.id === id) || { label: id, defaultBase: '' };
               const conf = (g.ai.providers[id] = g.ai.providers[id] || { baseUrl: '' });
+              const badge = h(
+                'span',
+                { class: `badge ${info.configured ? 'ok' : ''}` },
+                info.configured ? tr('skonfigurowany') : tr('nieskonfigurowany'),
+              );
+              const configured = () => {
+                badge.className = 'badge ok';
+                badge.textContent = tr('skonfigurowany');
+              };
               return h(
                 'div',
                 { class: 'provider' },
-                h(
-                  'div',
-                  { class: 'provider-head' },
-                  h('b', null, info.label),
-                  h(
-                    'span',
-                    { class: `badge ${info.configured ? 'ok' : ''}` },
-                    info.configured ? tr('skonfigurowany') : tr('nieskonfigurowany'),
-                  ),
-                  h('span', { class: 'grow' }),
-                  h(
-                    'button',
-                    { class: 'btn sm', onclick: (e) => testProvider(e.currentTarget, id, [secret]) },
-                    icon('zap'),
-                    tr('Zapisz i sprawdź'),
-                  ),
-                ),
+                h('div', { class: 'provider-head' }, h('b', null, info.label), badge),
                 h('div', { class: 'muted small' }, desc),
                 h(
                   'div',
@@ -3607,6 +3601,17 @@
                       oninput: (e) => (conf.baseUrl = e.target.value.trim()),
                     }),
                     info.defaultBase ? tr('Puste = adres domyślny.') : tr('Adres zgodny z OpenAI, zwykle kończy się na /v1.'),
+                  ),
+                ),
+                // przycisk pod polami swojego dostawcy – w nagłówku wyglądał jak przycisk karty powyżej
+                h(
+                  'div',
+                  { class: 'provider-foot' },
+                  h(
+                    'button',
+                    { class: 'btn sm', onclick: (e) => testProvider(e.currentTarget, id, [secret], configured) },
+                    icon('zap'),
+                    tr('Zapisz i sprawdź'),
                   ),
                 ),
               );

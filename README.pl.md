@@ -22,7 +22,7 @@ Wszystko ustawiasz w panelu **`http://IP_NAS:7080`**, bez SSH i bez edycji `.env
 > dostawców AI z dostawcą zapasowym –
 > [porównanie wersji](#-wersja-pro) i [strona produktu](https://posterapp.pl/).
 
-**Instalacja** to jedno polecenie wklejone przez SSH na NAS-ie albo serwerze z Dockerem: `curl -fsSL https://posterapp.pl/install.sh | sudo bash`
+**Instalacja** to jedno polecenie wklejone przez SSH na NAS-ie z Dockerem albo serwerze z Linuksem – na czystym Ubuntu i Debianie instalator sam zainstaluje Dockera: `curl -fsSL https://posterapp.pl/install.sh | sudo bash`
 (szczegóły: [„🚀 Instalacja jednym poleceniem”](#-instalacja-jednym-poleceniem)).
 
 ![Pulpit Postera: karta bota, stan usług i ostatnie działania](docs/img/lite-dashboard-pl.webp)
@@ -162,7 +162,7 @@ Instalujesz z prywatnej kopii repozytorium (np. własnego forka)? Aktualizacje b
 
 ## 🚀 Instalacja jednym poleceniem
 
-Na NAS-ie albo serwerze Linux z Dockerem i Docker Compose v2 (patrz „Krok 0”) zaloguj się przez SSH (patrz „Jak
+Na NAS-ie z Dockerem i Docker Compose v2 (patrz „Krok 0”) albo serwerze z Linuksem zaloguj się przez SSH (patrz „Jak
 połączyć się z NAS-em przez SSH”) i wklej:
 
 ```bash
@@ -170,7 +170,9 @@ curl -fsSL https://posterapp.pl/install.sh | sudo bash
 ```
 
 Instalator po kolei:
-1. sprawdza Dockera i Docker Compose v2;
+1. sprawdza Dockera i Docker Compose v2. Na serwerze z Ubuntu albo Debianem bez Dockera instaluje go sam z oficjalnego
+   repozytorium Dockera (zwykle 1–3 min). Gdy zegar serwera jest źle ustawiony (częste w maszynie wirtualnej), apt odrzuca
+   listy pakietów – instalator podpowiada wtedy, jak ustawić czas;
 2. pobiera Postera do folderu `docker` na NAS-ie – `/volume1/docker/poster`, a gdy ten folder jest na innym woluminie,
    np. `/volume2/docker/poster` – albo do `/opt/poster` (serwer). Inne miejsce wybierzesz opcją `--dir` (niżej). Git
    działa w kontenerze `alpine/git`, więc nie trzeba go instalować;
@@ -207,7 +209,7 @@ Wolisz zrobić wszystko ręcznie? Instrukcja krok po kroku jest poniżej.
 
 ### Krok 0. Przygotowanie NAS-a lub serwera (jednorazowo)
 
-1. **Docker z Docker Compose v2**: na UGOS *App Center (Centrum aplikacji)* → zainstaluj **Docker**. Na serwerze Linux zainstaluj Docker Engine z wtyczką `docker compose`.
+1. **Docker z Docker Compose v2**: na UGOS *App Center (Centrum aplikacji)* → zainstaluj **Docker**. Na serwerze z Ubuntu albo Debianem zainstaluje go [instalator jednym poleceniem](#-instalacja-jednym-poleceniem), a na innym Linuksie zainstaluj Docker Engine z wtyczką `docker compose`.
 2. **SSH**: na UGOS *Panel sterowania → Terminal* → włącz **SSH** (port 22). Loguj się kontem administratora.
 3. **Stały adres IP**: w routerze zarezerwuj adres DHCP dla NAS-a (np. `192.168.1.50`). Tego adresu użyjesz w `NAS_IP` i w przeglądarce.
 4. **Strefa czasowa**: na UGOS *Panel sterowania → Data i godzina* → `Europe/Warsaw` + synchronizacja NTP.
@@ -497,7 +499,8 @@ Linki Google News nie prowadzą wprost do artykułu – dla zdjęć dodaj bezpo�
 Klucz utworzysz w [Google AI Studio](https://aistudio.google.com/apikey) i wklejasz w **panelu → Ustawienia → Google Gemini**.
 Wystarczy klucz z projektu **bez billingu** – teksty mieszczą się wtedy w darmowym limicie Google. Model wybierasz
 w *Bot → Tekst i grafika* (podpowiedzi z listy pobranej dla Twojego klucza). Wybieraj stabilne nazwy (np. `gemini-3.8-flash`).
-Aliasy typu `gemini-flash-latest` częściej zwracają 503.
+Aliasy typu `gemini-flash-latest` częściej zwracają 503. Gdy model jest chwilowo przeciążony (503) albo skończy się
+limit zapytań (429), przebieg bota ponawia zapytanie z rosnącymi przerwami przez ok. 2 minuty i dopiero potem wysyła alert.
 
 ### X (publikacja przez API v2)
 Do publikacji potrzebujesz aplikacji deweloperskiej X.
