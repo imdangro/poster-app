@@ -600,8 +600,8 @@
   }
 
   // Funkcje wersji PRO: w LITE zamiast nich kafelek z opisem i linkiem do strony produktu (kodu tych funkcji tu nie ma)
-  // strona produktu w języku panelu (?lang=en|pl)
-  const productUrl = () => (S.about && S.about.productUrl ? `${S.about.productUrl}?lang=${LANG}` : '#');
+  // strona produktu w języku panelu: polska pod adresem głównym, angielska pod /en/
+  const productUrl = () => (S.about && S.about.productUrl ? `${S.about.productUrl}${LANG === 'pl' ? '' : 'en/'}` : '#');
   const proLink = (label = 'PRO') => h('a', { class: 'badge pro', href: productUrl(), target: '_blank', rel: 'noopener' }, label);
   const proButton = () =>
     h('a', { class: 'btn primary', href: productUrl(), target: '_blank', rel: 'noopener' }, icon('ext'), tr('Poznaj wersję PRO'));

@@ -8,6 +8,8 @@ const { tr } = require('./i18n');
 const PROJECT_URL = 'https://github.com/imdangro/poster-app';
 // Strona produktu: opis wersji LITE i PRO, zakup PRO (link przy funkcjach PRO w wersji LITE)
 const PRODUCT_URL = 'https://posterapp.pl/';
+// Strona produktu w języku panelu: polska pod adresem głównym, angielska (też dla innych języków) pod /en/
+const productUrl = (language) => (language === 'pl' ? PRODUCT_URL : `${PRODUCT_URL}en/`);
 // Wersja programu: LITE (publiczna, AGPL) albo PRO (płatna) – obie powstają z jednego źródła (tools/export.js)
 const EDITION = 'lite';
 
@@ -161,6 +163,7 @@ const mask = (s) => (s ? `••••${String(s).slice(-4)}` : '');
 module.exports = {
   PROJECT_URL,
   PRODUCT_URL,
+  productUrl,
   EDITION,
   HttpError,
   readJson,

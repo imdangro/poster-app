@@ -20,7 +20,7 @@ You set everything up in the panel at **`http://NAS_IP:7080`**, without SSH and 
 > ⭐ **The PRO version** adds multiple bots, a website/blog mode, a YouTube channel bot, Instagram, Threads, Bluesky, a Telegram channel, TikTok with video, a
 > brand image, scheduling your own posts (also on repeat) with a content calendar, an autopilot (publishing news without approval) and more
 > AI providers with a fallback provider –
-> [edition comparison](#-pro-version) and the [product page](https://posterapp.pl/).
+> [edition comparison](#-pro-version) and the [product page](https://posterapp.pl/en/).
 
 **Installation** is one command pasted over SSH on a NAS with Docker or a Linux server – on a clean Ubuntu or Debian the installer installs Docker itself: `curl -fsSL https://posterapp.pl/install.sh | sudo bash`
 (details: [“🚀 Installation in one command”](#-installation-in-one-command)).
@@ -94,7 +94,7 @@ Poster LITE is free and open source (AGPL). The PRO version is the same program 
 | Monthly AI usage counter | – | ✅ |
 | PL/EN panel, drafts, history, alerts, cost per post | ✅ | ✅ |
 
-Details and price: **[posterapp.pl](https://posterapp.pl/)**.
+Details and price: **[posterapp.pl](https://posterapp.pl/en/)**.
 
 **After the purchase** open the order page (the *Access purchase* button in the email from Polar), copy the license key,
 paste it in the panel (*Settings → PRO edition*) and click *Check the key*. The panel checks it and shows one command to run over SSH – your bots, keys and history stay unchanged:

@@ -7,6 +7,12 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.2.1 – 2026-10-29
+
+- Strona produktu: polska wersja jest pod [posterapp.pl](https://posterapp.pl/), angielska pod
+  [posterapp.pl/en](https://posterapp.pl/en/). Panel po angielsku, instalator i angielskie README linkują od razu do
+  angielskiej strony, a stare linki (np. z paneli 1.0–1.2) dalej prowadzą do właściwej wersji.
+
 ## 1.2.0 – 2026-10-29
 
 - **Instalator na czystym serwerze:** na Ubuntu albo Debianie bez Dockera instalator jednym poleceniem sam instaluje

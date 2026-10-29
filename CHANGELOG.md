@@ -7,6 +7,12 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.2.1 – 2026-10-29
+
+- Product page: the Polish version is at [posterapp.pl](https://posterapp.pl/) and the English one at
+  [posterapp.pl/en](https://posterapp.pl/en/). The panel in English, the installer and the English README link straight
+  to the English page, and old links (e.g. from panels 1.0–1.2) still lead to the right version.
+
 ## 1.2.0 – 2026-10-29
 
 - **Installer on a clean server:** on Ubuntu or Debian without Docker the one-command installer now installs Docker

@@ -19,6 +19,7 @@ set -euo pipefail
 
 REPO="${POSTER_REPO:-https://github.com/imdangro/poster-app.git}"
 PRODUCT_URL="https://posterapp.pl/"
+PRODUCT_URL_EN="https://posterapp.pl/en/"
 N8N_EMAIL="admin@poster.local"
 # kod z logów panelu (panel/lib/auth.js): XXXX-XXXX-XXXX bez znaków, które się mylą
 CODE_CHARS='[ABCDEFGHJKMNPQRSTUVWXYZ23456789]'
@@ -258,7 +259,7 @@ clone_repo() {
   if ! is_poster_dir "$DIR"; then
     rm -rf -- "$DIR"
     die "$(m "W repozytorium nie ma jeszcze programu – wersja LITE nie została wydana. Szczegóły: $PRODUCT_URL" \
-      "The repository does not contain the program yet – Poster LITE has not been released. Details: $PRODUCT_URL")"
+      "The repository does not contain the program yet – Poster LITE has not been released. Details: $PRODUCT_URL_EN")"
   fi
 }
 
@@ -382,7 +383,7 @@ summary() {
     fi
     printf '\n  Project directory: %s\n' "$DIR"
     printf '  Update:            sudo bash %s/scripts/update.sh\n' "$DIR"
-    printf '  PRO edition:       after buying a license (%s) paste the key in the panel: Settings → PRO edition\n' "$PRODUCT_URL"
+    printf '  PRO edition:       after buying a license (%s) paste the key in the panel: Settings → PRO edition\n' "$PRODUCT_URL_EN"
   else
     printf '\n\033[1;32m✅ Poster działa\033[0m (instalacja: %s min).\n\n' "$minutes"
     [ -z "$tunnel" ] || printf '  Serwer w internecie – połącz się ze swojego komputera tunelem SSH:\n    %s\n\n' "$tunnel"
@@ -434,7 +435,7 @@ main() {
   [ "$(id -u)" -eq 0 ] || die "$(m "Uruchom przez sudo: curl -fsSL https://posterapp.pl/install.sh | sudo bash" \
     "Run it with sudo: curl -fsSL https://posterapp.pl/install.sh | sudo bash")"
 
-  step "$(m "Poster – instalacja ($PRODUCT_URL)" "Poster – installation ($PRODUCT_URL)")"
+  step "$(m "Poster – instalacja ($PRODUCT_URL)" "Poster – installation ($PRODUCT_URL_EN)")"
   step "1/6 Docker"
   check_docker
   info "$(m "Docker i Docker Compose v2: OK" "Docker and Docker Compose v2: OK")"

@@ -4,9 +4,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { sleep, HttpError, PRODUCT_URL } = require('./util');
+const { sleep, HttpError, productUrl } = require('./util');
 const { UPSTREAM } = require('./accounts');
-const { tr } = require('./i18n');
+const { tr, lang } = require('./i18n');
 
 // /post albo /post@nazwa_bota na początku wiadomości albo podpisu zdjęcia
 const POST_COMMAND = /^\/post(?:@[A-Za-z0-9_]+)?(?=\s|$)/i;
@@ -216,7 +216,7 @@ class Telegram {
         }
         return this.try('sendMessage', {
           chat_id: msg.chat.id,
-          text: tr('✍️ Post z Telegrama (/post) jest w wersji PRO: {0}', PRODUCT_URL),
+          text: tr('✍️ Post z Telegrama (/post) jest w wersji PRO: {0}', productUrl(lang())),
         });
       }
       return;

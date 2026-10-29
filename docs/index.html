@@ -1,31 +1,34 @@
 <!doctype html>
-<!--
-  Strona produktu Poster (GitHub Pages z katalogu docs/ repozytorium poster-app). Jeden plik, bez zewnętrznych skryptów
-  i czcionek. Dwa języki: <main lang="en"> i <main lang="pl">, wybór: ?lang=… → zapamiętany → język przeglądarki
-  (zapamiętuje tylko kliknięcie przełącznika – w localStorage, bez plików cookie, więc bez banera zgody).
-  Ustawienia w skrypcie na dole: CHECKOUT_URL – adres zakupu PRO (etap 6; pusty = przycisk „Wkrótce”), RENEW_URL –
-  przedłużenie licencji (link z Polara do produktu „przedłużenie”; pusty = bez linków przedłużenia),
-  CONTACT_URL – kontakt w sprawie wdrożenia (e-mail kontakt@posterapp.pl, ten sam co w stopce), LITE_RELEASED – czy
-  kod LITE jest już w repozytorium (false ustawia tools/publish-site.sh: przyciski „Pobierz” → „wkrótce”, bez linków
-  do plików repozytorium w stopce i bez polecenia instalacji – docs/install.sh trafia na stronę dopiero z wersją LITE).
-  Ceny w sekcji „Pricing / Cennik” są zatwierdzone: PLN w polskiej wersji, USD i EUR w angielskiej (walutę kasy Polar
-  dobiera do kraju kupującego). W Polarze PRO ma cenę regularną, a cenę startową daje rabat z limitem 20 użyć
-  przypięty do linku zakupu – po ich wyczerpaniu Polar sam go pomija, a tu usuń cenę startową
-  (tools/PUBLIKACJA.md → „Polar”).
--->
-<html lang="en" data-lang="en">
+<!-- Strona produktu Poster (PL, https://posterapp.pl/) – plik generowany przez tools/site/build.js z tools/site/index.html. Nie edytuj ręcznie. -->
+<html lang="pl" data-lang="pl">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Poster – social media automation on your own server</title>
-    <meta
-      name="description"
-      content="Poster automates your social media from your own NAS or server: it follows news on your topic, drafts posts with AI, adapts your own posts to every platform and publishes them to X and Facebook. Free LITE edition (AGPL) and PRO."
-    />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%23f97316'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-family='Arial,sans-serif' font-size='38' font-weight='700' fill='white'%3EP%3C/text%3E%3C/svg%3E"
-    />
+    <title>Poster – automatyzacja social mediów na Twoim serwerze</title>
+    <meta name="description" content="Automatyzacja social mediów na Twoim NAS-ie lub serwerze: AI pisze posty z newsów z Twojej branży, a Ty akceptujesz je w Telegramie. Darmowa wersja LITE i PRO." />
+    <link rel="canonical" href="https://posterapp.pl/" />
+    <link rel="alternate" hreflang="pl" href="https://posterapp.pl/" />
+    <link rel="alternate" hreflang="en" href="https://posterapp.pl/en/" />
+    <link rel="alternate" hreflang="x-default" href="https://posterapp.pl/en/" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0e1a" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Poster" />
+    <meta property="og:url" content="https://posterapp.pl/" />
+    <meta property="og:title" content="Poster – automatyzacja social mediów na Twoim serwerze" />
+    <meta property="og:description" content="Automatyzacja social mediów na Twoim NAS-ie lub serwerze: AI pisze posty z newsów z Twojej branży, a Ty akceptujesz je w Telegramie. Darmowa wersja LITE i PRO." />
+    <meta property="og:image" content="https://posterapp.pl/og-pl.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Poster – panel botów, które przygotowują i publikują posty w social mediach" />
+    <meta property="og:locale" content="pl_PL" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://posterapp.pl/#organization","name":"Poster","url":"https://posterapp.pl/","logo":"https://posterapp.pl/icon-512.png","email":"kontakt@posterapp.pl"},{"@type":"WebSite","@id":"https://posterapp.pl/#website","url":"https://posterapp.pl/","name":"Poster","inLanguage":["pl","en"],"publisher":{"@id":"https://posterapp.pl/#organization"}},{"@type":"SoftwareApplication","@id":"https://posterapp.pl/#software","name":"Poster","url":"https://posterapp.pl/","description":"Automatyzacja social mediów na Twoim NAS-ie lub serwerze: AI pisze posty z newsów z Twojej branży, a Ty akceptujesz je w Telegramie. Darmowa wersja LITE i PRO.","inLanguage":"pl","applicationCategory":"BusinessApplication","operatingSystem":"Linux, Docker","image":"https://posterapp.pl/og-pl.png","publisher":{"@id":"https://posterapp.pl/#organization"},"offers":[{"@type":"Offer","name":"Poster LITE","price":"0","priceCurrency":"PLN"},{"@type":"Offer","name":"Poster PRO","price":"399","priceCurrency":"PLN"}]}]}</script>
     <style>
       :root {
         --bg: #f6f7fb;
@@ -70,10 +73,6 @@
         color: var(--text);
         font: 16px/1.6 var(--font);
         -webkit-font-smoothing: antialiased;
-      }
-      html[data-lang='en'] [lang='pl'],
-      html[data-lang='pl'] [lang='en'] {
-        display: none !important;
       }
       a {
         color: var(--primary);
@@ -142,17 +141,75 @@
         border-radius: 999px;
         overflow: hidden;
       }
-      .langs button {
-        border: 0;
-        background: transparent;
+      .nav .langs a {
         color: var(--muted);
         font: 600 13px var(--font);
         padding: 6px 12px;
-        cursor: pointer;
+        text-decoration: none;
       }
-      .langs button[aria-pressed='true'] {
+      .nav .langs a[aria-current='page'] {
         background: var(--primary);
         color: #fff;
+      }
+      /* karta u dołu: propozycja wersji w języku przeglądarki (tekst w tamtym języku) */
+      .langbar {
+        position: fixed;
+        z-index: 30;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        max-width: 420px;
+        margin-left: auto;
+        padding: 18px 20px;
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        font-size: 15px;
+      }
+      .langbar[hidden] {
+        display: none;
+      }
+      .langbar strong {
+        display: block;
+        font-size: 17px;
+        margin-right: 40px;
+      }
+      .langbar p {
+        margin: 6px 0 16px;
+        color: var(--muted);
+      }
+      .langbar-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .langbar-flags {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+      }
+      .langbar-flags svg {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px var(--border);
+      }
+      .langbar-x {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        font: 400 22px/1 var(--font);
+        cursor: pointer;
       }
       /* sekcje */
       section {
@@ -573,7 +630,8 @@
         .feature.flip > :first-child {
           order: 0;
         }
-        .nav a {
+        /* na telefonie w menu zostaje tylko przełącznik języka */
+        .nav > a {
           display: none;
         }
         section {
@@ -596,618 +654,19 @@
       <div class="wrap">
         <a class="logo" href="#"><span class="mark">P</span>Poster</a>
         <nav class="nav">
-          <a href="#how" lang="en">How it works</a>
           <a href="#how-pl" lang="pl">Jak to działa</a>
-          <a href="#pro" lang="en">PRO</a>
           <a href="#pro-pl" lang="pl">PRO</a>
-          <a href="#pricing" lang="en">Pricing</a>
           <a href="#pricing-pl" lang="pl">Cennik</a>
-          <a href="#faq" lang="en">FAQ</a>
           <a href="#faq-pl" lang="pl">Pytania</a>
           <a href="https://github.com/imdangro/poster-app">GitHub</a>
-          <div class="langs" role="group" aria-label="Language / Język">
-            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
-            <button type="button" data-set-lang="pl" aria-pressed="false">PL</button>
+          <div class="langs" role="group" aria-label="Język / Language">
+            <a href="./" hreflang="pl" data-set-lang="pl" aria-current="page">PL</a>
+            <a href="en/" hreflang="en" data-set-lang="en">EN</a>
           </div>
         </nav>
       </div>
     </header>
 
-    <!-- ===================================================================================== ENGLISH -->
-    <main lang="en">
-      <section class="hero">
-        <div class="wrap center">
-          <span class="eyebrow">Self-hosted · open source · no subscription</span>
-          <h1>Social media on autopilot – on your own server</h1>
-          <p class="lead">
-            Poster runs 24/7 on your NAS or server and keeps your profiles busy: it follows the news on your topic (RSS feeds, Google News,
-            X), lets AI pick the best story and draft the posts – and publishes them to X and Facebook after your ✅ in Telegram. Got
-            something of your own to say? Write it once – AI adapts it to every platform.
-          </p>
-          <div class="btns">
-            <a class="btn primary" href="https://github.com/imdangro/poster-app#readme" data-lite="Free LITE – coming soon"
-              >Download free LITE</a
-            >
-            <a class="btn" href="#pro">See what PRO adds</a>
-          </div>
-          <p class="note">LITE is free under the AGPL-3.0 license. Docker on a NAS or a Linux server is all you need.</p>
-          <div class="install" data-repo-doc>
-            <p class="note">Install it with one command over SSH:</p>
-            <div class="cmd">
-              <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>
-              <button type="button" data-copy="Copied ✓">Copy</button>
-            </div>
-          </div>
-          <div class="shot">
-            <img
-              src="img/lite-dashboard-en.webp"
-              width="1280"
-              height="860"
-              alt="Poster dashboard: bot card, service status and recent activity"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section id="how">
-        <div class="wrap">
-          <div class="center">
-            <h2>How it works</h2>
-            <p class="lead">You set the topic and the sources once. Poster does the rest on its schedule.</p>
-          </div>
-          <div class="steps">
-            <div class="card">
-              <div class="icon">📰</div>
-              <div class="num">1 · SOURCES</div>
-              <h3>Fresh news</h3>
-              <p>RSS feeds of news sites, Google News and X profiles. Duplicates and old stories are filtered out.</p>
-            </div>
-            <div class="card">
-              <div class="icon">🤖</div>
-              <div class="num">2 · AI</div>
-              <h3>Picked and written</h3>
-              <p>Gemini or a model on your own hardware (Ollama) picks the most important story and writes the posts.</p>
-            </div>
-            <div class="card">
-              <div class="icon">✅</div>
-              <div class="num">3 · TELEGRAM</div>
-              <h3>You approve</h3>
-              <p>The draft with the article photo lands in Telegram. One tap on ✅ publishes it, ❌ rejects it.</p>
-            </div>
-            <div class="card">
-              <div class="icon">🚀</div>
-              <div class="num">4 · PUBLISHING</div>
-              <h3>Posted</h3>
-              <p>X and Facebook get the post and you get a report. A failed platform is retried with one tap on 🔁.</p>
-            </div>
-          </div>
-
-          <div class="feature">
-            <div>
-              <h2>Write once, post everywhere</h2>
-              <p class="lead">
-                Your own news – a promotion, an event, an opinion? Write the post your way and AI adapts it to every platform.
-              </p>
-              <ul>
-                <li>A separate version for X (within 280 characters) and for Facebook – AI keeps your facts and adds none</li>
-                <li>A photo straight from your phone's camera and a link at the end of the post</li>
-                <li>Edit the versions, then publish right away or send them for approval in Telegram</li>
-              </ul>
-            </div>
-            <div class="shot">
-              <img
-                src="img/lite-compose-en.webp"
-                width="1280"
-                height="860"
-                alt="New post: your text and its versions for X and Facebook"
-                loading="lazy"
-              />
-            </div>
-          </div>
-          <div class="feature flip">
-            <div>
-              <h2>A schedule that looks human</h2>
-              <p class="lead">Every few hours or at the hours you pick – on the days you choose.</p>
-              <ul>
-                <li>Preview of the next runs before you save</li>
-                <li>Random offset of up to 45 minutes, so posts do not go out to the minute</li>
-                <li>Pause, resume and “Run now” in one click</li>
-              </ul>
-            </div>
-            <div class="shot">
-              <img src="img/lite-schedule-en.webp" width="1280" height="860" alt="Bot schedule settings" loading="lazy" />
-            </div>
-          </div>
-          <div class="feature">
-            <div>
-              <h2>Costs under control</h2>
-              <p class="lead">The “Cost of one post” card shows what costs money with the current settings.</p>
-              <ul>
-                <li>Images cost nothing – the photo from the article or a post with a link</li>
-                <li>AI text usually fits in a free quota (a Gemini key without billing) or runs on your own hardware</li>
-                <li>The approximate X API cost of a post is shown before you turn publishing on</li>
-              </ul>
-            </div>
-            <div class="shot">
-              <img src="img/lite-ai-en.webp" width="1280" height="860" alt="Cost of one post and the AI settings" loading="lazy" />
-            </div>
-          </div>
-          <div class="feature flip">
-            <div>
-              <h2>Every draft archived</h2>
-              <p class="lead">Images and texts of all posts stay on your NAS – ready to copy, download or post by hand.</p>
-              <ul>
-                <li>Texts for X and Facebook, plus a TikTok script</li>
-                <li>Publishing results with links to the posts</li>
-                <li>Why AI picked the story</li>
-              </ul>
-            </div>
-            <div class="shot">
-              <img
-                src="img/lite-draft-en.webp"
-                width="1280"
-                height="860"
-                alt="Draft details: image, post texts and TikTok script"
-                loading="lazy"
-              />
-            </div>
-          </div>
-
-          <div class="grid3">
-            <div class="card">
-              <div class="icon">🔐</div>
-              <h3>Your keys stay home</h3>
-              <p>API keys and account tokens are stored only in the panel on your NAS. No cloud account, no tracking.</p>
-            </div>
-            <div class="card">
-              <div class="icon">🏠</div>
-              <h3>No open ports</h3>
-              <p>The panel polls Telegram, so the NAS does not have to be exposed to the internet.</p>
-            </div>
-            <div class="card">
-              <div class="icon">📱</div>
-              <h3>English and Polish</h3>
-              <p>The panel, Telegram messages and the docs in both languages. The panel works on a phone too.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="pro" class="pro">
-        <div class="wrap">
-          <div class="center">
-            <span class="eyebrow">Poster PRO</span>
-            <h2>For those who run more than one profile</h2>
-            <p class="lead">The same program with more bots, more platforms and more automation – plus a year of updates and support.</p>
-          </div>
-          <div class="feature">
-            <ul class="pro-list">
-              <li><b>Multiple bots</b> – each with its own topic, accounts, schedule and Telegram chat; duplicate a bot in one click</li>
-              <li>
-                <b>Instagram and TikTok</b> – photo posts on Instagram and an 8-second vertical TikTok video made from the post image (a
-                free animation rendered on your server, no AI)
-              </li>
-              <li>
-                <b>Threads and Bluesky</b> – text with a link card or a photo; news posts reuse the X text, so there is no extra AI cost
-              </li>
-              <li>
-                <b>Your Telegram channel</b> – the Telegram bot that sends you the drafts also posts to your channel: a photo with a caption
-                or a post with a link preview
-              </li>
-              <li><b>Your website or blog</b> – every new article becomes posts on all platforms, with an AI teaser or a free template</li>
-              <li>
-                <b>Your YouTube channel</b> – every new video announced on all platforms with its thumbnail and a link, no YouTube login
-              </li>
-              <li>
-                <b>Brand image</b> when the article has no photo (or for every post, if you choose) – your own picture, e.g. a logo on a
-                background
-              </li>
-              <li>
-                <b>Your own posts on all seven platforms</b> – Instagram, Threads, Bluesky, Telegram channel and TikTok versions too, with
-                your photo or the brand image
-              </li>
-              <li>
-                <b>Scheduled and recurring posts</b> – your own post goes out at the date and time you choose or on repeat (e.g. every
-                Monday at 9:00, in fresh words every time), for one bot or several at once
-              </li>
-              <li><b>Content calendar</b> – a month or a week of published and scheduled posts, series and bot runs, also on your phone</li>
-              <li>
-                <b>Posts from Telegram</b> – send the bot <code>/post</code> with your text or a photo from your phone; the draft with
-                versions for every platform comes back with ✅
-              </li>
-              <li><b>Autopilot</b> – publishing news without approval</li>
-              <li><b>More AI providers</b> – Groq, OpenRouter, Mistral and a fallback provider; a monthly AI usage counter</li>
-            </ul>
-            <div class="shot">
-              <img src="img/pro-dashboard-en.webp" width="1280" height="860" alt="PRO dashboard with four bots" loading="lazy" />
-            </div>
-          </div>
-          <div class="feature flip">
-            <div>
-              <h2>A content calendar</h2>
-              <p class="lead">See what went out and what is coming – your own posts, recurring series and the bots' runs.</p>
-              <ul>
-                <li>A month or a week with the details of every day – also on your phone</li>
-                <li>Recurring posts: daily, weekly on chosen days or monthly – AI rewrites the text before every repeat</li>
-                <li>Skip one date, send a post right away or move the whole series</li>
-              </ul>
-            </div>
-            <div class="shot">
-              <img
-                src="img/pro-calendar-en.webp"
-                width="1280"
-                height="860"
-                alt="Calendar: published and scheduled posts, a series and bot runs"
-                loading="lazy"
-              />
-            </div>
-          </div>
-          <div class="feature">
-            <div>
-              <h2>For YouTube creators</h2>
-              <p class="lead">
-                Published a new video? Poster announces it on X, Facebook, Instagram, Threads, Bluesky, your Telegram channel and TikTok –
-                usually 15–30 minutes later.
-              </p>
-              <ul>
-                <li>Paste your channel link – no YouTube login and no API keys</li>
-                <li>An AI teaser or a free template, the video thumbnail and a youtu.be link</li>
-                <li>You choose: videos, Shorts, live stream recordings – a premiere waits until it starts</li>
-              </ul>
-            </div>
-            <div class="shot fade">
-              <img
-                src="img/pro-zoom-youtube-en.webp"
-                width="1420"
-                height="1066"
-                alt="YouTube channel bot: the channel check and its latest videos"
-                loading="lazy"
-              />
-            </div>
-          </div>
-          <div class="zooms">
-            <figure class="card zoom">
-              <div class="zoom-img">
-                <img
-                  src="img/pro-zoom-platforms-en.webp"
-                  width="1420"
-                  height="1066"
-                  alt="Platforms tab: switches for X, Facebook, Instagram, Threads, Bluesky, Telegram channel and TikTok"
-                  loading="lazy"
-                />
-              </div>
-              <figcaption>
-                <h3>Seven platforms</h3>
-                <p>
-                  X, Facebook, Instagram, Threads, Bluesky, a Telegram channel and TikTok – one switch each, with approval in Telegram or
-                  fully automatic.
-                </p>
-              </figcaption>
-            </figure>
-            <figure class="card zoom">
-              <div class="zoom-img">
-                <img
-                  src="img/pro-zoom-compose-en.webp"
-                  width="1420"
-                  height="1066"
-                  alt="New post: Instagram, Threads and Bluesky versions with character counters"
-                  loading="lazy"
-                />
-              </div>
-              <figcaption>
-                <h3>Your own post on every platform</h3>
-                <p>
-                  Next to the X and Facebook versions, AI writes the Instagram, Threads and Bluesky versions within each platform's limit –
-                  and the TikTok caption with the animation headline.
-                </p>
-              </figcaption>
-            </figure>
-            <figure class="card zoom">
-              <div class="zoom-img">
-                <img
-                  src="img/pro-zoom-site-en.webp"
-                  width="1420"
-                  height="1066"
-                  alt="Website bot: an AI teaser or a template without AI"
-                  loading="lazy"
-                />
-              </div>
-              <figcaption>
-                <h3>Your website or blog</h3>
-                <p>Every new article turns into posts – with an AI teaser or a free template that adds nothing of its own.</p>
-              </figcaption>
-            </figure>
-            <figure class="card zoom">
-              <div class="zoom-img">
-                <img
-                  src="img/pro-zoom-image-en.webp"
-                  width="1420"
-                  height="1066"
-                  alt="Post image: photo from the article, post with a link, brand image or no image"
-                  loading="lazy"
-                />
-              </div>
-              <figcaption>
-                <h3>An image for every post</h3>
-                <p>
-                  No photo in the article? The bot uses your brand image – or the brand image for every post, without photos from other
-                  websites.
-                </p>
-              </figcaption>
-            </figure>
-          </div>
-
-          <div class="compare">
-            <table>
-              <thead>
-                <tr>
-                  <th>Feature</th>
-                  <th>LITE</th>
-                  <th>PRO</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Bots</td>
-                  <td>1</td>
-                  <td>unlimited</td>
-                </tr>
-                <tr>
-                  <td>Sources: RSS, Google News, X profiles</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Schedule, pause, “Run now”</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Draft approval in Telegram</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Publishing news without approval (autopilot)</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Your own post adapted by AI, “Publish now”</td>
-                  <td>X, Facebook</td>
-                  <td>all 7 platforms</td>
-                </tr>
-                <tr>
-                  <td>Scheduling your own posts, several bots at once</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Recurring posts and a content calendar</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Your own post from Telegram (<code>/post</code>)</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>X and Facebook</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Instagram</td>
-                  <td>by hand</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Threads and Bluesky</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Telegram channel</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>TikTok video from the post image (animation)</td>
-                  <td>script only</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Website / blog mode</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>YouTube channel mode (new videos → posts)</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>AI text: Gemini, Ollama, any OpenAI-compatible API</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Groq, OpenRouter, Mistral and a fallback provider</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Photo from the article, post with a link</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Brand image</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Monthly AI usage counter</td>
-                  <td class="no">–</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Drafts, history, alerts, cost per post, EN/PL panel</td>
-                  <td class="yes">✓</td>
-                  <td class="yes">✓</td>
-                </tr>
-                <tr>
-                  <td>Updates and support</td>
-                  <td>community</td>
-                  <td>12 months</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section id="pricing">
-        <div class="wrap">
-          <div class="center">
-            <h2>Pricing</h2>
-            <p class="lead">One payment, no subscription. Your installation keeps working after the update period.</p>
-          </div>
-          <div class="prices">
-            <div class="card price">
-              <h3>LITE</h3>
-              <div class="amount">Free</div>
-              <p>Open source under AGPL-3.0.</p>
-              <ul class="pro-list">
-                <li>1 bot, X and Facebook</li>
-                <li>Approval in Telegram</li>
-                <li>Your own posts adapted by AI</li>
-                <li>Updates from GitHub</li>
-              </ul>
-              <a class="btn primary" href="https://github.com/imdangro/poster-app#readme" data-lite="Coming soon">Download on GitHub</a>
-            </div>
-            <div class="card price best">
-              <h3>PRO <span class="badge">launch price</span></h3>
-              <div class="amount">
-                $79 <small><s>$99</s> · one-time</small>
-              </div>
-              <p>Launch price for the first 20 licences – the discount is applied at checkout. Euro area: €69 instead of €89.</p>
-              <ul class="pro-list">
-                <li>All PRO features</li>
-                <li>12 months of updates and support</li>
-                <li>
-                  Renewal: $49 (€45) per year – optional<span data-renew-wrap> · <a data-renew href="#pricing">renew</a></span>
-                </li>
-              </ul>
-              <a class="btn pro" data-buy href="#pricing">Buy PRO</a>
-            </div>
-            <div class="card price">
-              <h3>Installation service</h3>
-              <div class="amount"><small>Coming soon</small></div>
-              <p>Poster PRO installed and set up for you.</p>
-              <ul class="pro-list">
-                <li>Installation on your NAS or server</li>
-                <li>X, Meta, Threads and TikTok developer apps</li>
-                <li>Your first bot, ready to publish</li>
-              </ul>
-              <a class="btn" href="mailto:kontakt@posterapp.pl" data-contact>Contact</a>
-            </div>
-          </div>
-          <p class="note center">
-            Payments are handled by Polar as the merchant of record: it takes the payment and handles taxes. Refund within 14 days, as long
-            as you have not activated the license – <a href="license.html?lang=en">PRO license terms</a>.
-          </p>
-        </div>
-      </section>
-
-      <section id="faq">
-        <div class="wrap">
-          <h2 class="center">FAQ</h2>
-          <details>
-            <summary>What do I need to run Poster?</summary>
-            <p>
-              A NAS or a Linux server with Docker and Docker Compose v2, about 1 GB of free RAM and a Telegram bot. On a clean Ubuntu or
-              Debian server the installer sets up Docker itself. The guide uses a UGREEN NAS with UGOS as the example, but any Docker host
-              works.
-            </p>
-          </details>
-          <details data-repo-doc>
-            <summary>How do I install it?</summary>
-            <p>
-              Log in to your NAS or server over SSH and run <code>curl -fsSL https://posterapp.pl/install.sh | sudo bash</code>. The
-              installer checks Docker (on Ubuntu or Debian it installs it if missing), downloads Poster, prepares the configuration, starts
-              the containers and shows the panel address with a one-time code for your password – you set everything else in the browser.
-              Prefer to do it by hand? The
-              <a href="https://github.com/imdangro/poster-app#-step-by-step-installation-nas-or-a-server-with-docker">README</a> has a
-              step-by-step guide.
-            </p>
-          </details>
-          <details>
-            <summary>How much does running it cost?</summary>
-            <p>
-              Poster LITE is free. AI text usually fits in a free quota (a Gemini key from a project without billing) or runs on your own
-              hardware with Ollama. Publishing through the X API is billed by X: in 2026 about USD 0.015 for a post with a photo and about
-              USD 0.20 for a post with a link.
-            </p>
-          </details>
-          <details>
-            <summary>Can I publish my own posts, not only news?</summary>
-            <p>
-              Yes. In <b>New post</b> you write the text (optionally with a link and a photo), AI adapts it to every platform, and you
-              publish right away or after approval in Telegram. LITE posts to X and Facebook, PRO also to Instagram, Threads, Bluesky, a
-              Telegram channel and TikTok. In PRO you can also send the bot <code>/post</code> with your text or a photo in Telegram – the
-              draft comes back with ✅ – and schedule posts once or on repeat, with everything in a content calendar.
-            </p>
-          </details>
-          <details>
-            <summary>Does Poster work with my YouTube channel?</summary>
-            <p>
-              Yes, in PRO. Paste the channel link into a “YouTube channel” bot – Poster checks the public RSS feed of your videos every few
-              minutes, so you need no YouTube login and no API key. Every new video gets a post with its thumbnail and a link on all
-              platforms of the bot.
-            </p>
-          </details>
-          <details>
-            <summary>Do I have to expose my NAS to the internet?</summary>
-            <p>
-              No. The panel polls Telegram for button clicks and talks to the social media APIs with outgoing connections only. For remote
-              access a VPN such as Tailscale is the simplest option.
-            </p>
-          </details>
-          <details>
-            <summary>What happens when the 12 months of PRO updates end?</summary>
-            <p>
-              Your installation keeps working with no time limit. Only updates stop until you renew the licence – with the
-              <em>Renew the license</em> button in the Poster panel (Settings → PRO license), which fills in your key for you<span
-                data-renew-wrap
-                >, or <a data-renew href="#pricing">here</a></span
-              >. A renewal bought before the end date adds 12 months to it; after expiry you get 12 months from the purchase.
-            </p>
-          </details>
-          <details>
-            <summary>Can I move from LITE to PRO later?</summary>
-            <p>
-              Yes. After the purchase copy the license key from the order page (<i>Access purchase</i> in the email from Polar) and paste it
-              in the panel (<i>Settings → PRO edition</i>) – the panel checks it and shows one command to run over SSH:
-              <code>sudo bash scripts/upgrade-to-pro.sh</code>. PRO uses the same data directory, so your bot, keys and history stay where
-              they are.
-            </p>
-          </details>
-          <details>
-            <summary>Can I get a refund for PRO?</summary>
-            <p>
-              Yes – within 14 days of the purchase, as long as you have not activated the license. Checking the key in the panel does not
-              activate it; <code>upgrade-to-pro.sh</code> does, as it gives you the PRO code – from then on there is no refund without a
-              reason (problems with how Poster works are handled as usual). Write to
-              <a href="mailto:kontakt@posterapp.pl">kontakt@posterapp.pl</a>. Details: <a href="license.html?lang=en">PRO license terms</a>.
-            </p>
-          </details>
-        </div>
-      </section>
-    </main>
-
-    <!-- ===================================================================================== POLSKI -->
     <main lang="pl">
       <section class="hero">
         <div class="wrap center">
@@ -1813,24 +1272,34 @@
           >© 2026 Daniel Grodowski, Kraków · <a href="mailto:kontakt@posterapp.pl">kontakt@posterapp.pl</a> · Poster LITE: AGPL-3.0</span
         >
         <span>
-          <a href="https://github.com/imdangro/poster-app"><span lang="en">Source code</span><span lang="pl">Kod źródłowy</span></a>
-          · <a href="privacy.html?lang=en" lang="en">Privacy policy</a><a href="privacy.html?lang=pl" lang="pl">Polityka prywatności</a> ·
-          <a href="license.html?lang=en" lang="en">PRO license</a><a href="license.html?lang=pl" lang="pl">Licencja PRO</a>
+          <a href="https://github.com/imdangro/poster-app"><span lang="pl">Kod źródłowy</span></a>
+          · <a href="privacy.html?lang=pl" lang="pl">Polityka prywatności</a> ·
+          <a href="license.html?lang=pl" lang="pl">Licencja PRO</a>
           <span data-repo-doc
             >·
             <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.md"
-              ><span lang="en">Security</span><span lang="pl">Bezpieczeństwo</span></a
+              ><span lang="pl">Bezpieczeństwo</span></a
             ></span
           >
           <span data-repo-doc
             >·
             <a href="https://github.com/imdangro/poster-app/blob/main/CONTRIBUTING.md"
-              ><span lang="en">Contributing</span><span lang="pl">Współpraca</span></a
+              ><span lang="pl">Współpraca</span></a
             ></span
           >
         </span>
       </div>
     </footer>
+
+    <aside id="langbar" class="langbar" lang="en" aria-label="Language" hidden>
+      <button type="button" class="langbar-x" data-close aria-label="Close">×</button>
+      <strong>Choose your language</strong>
+      <p>This page is in Polish. Would you like to see it in English?</p>
+      <div class="langbar-row">
+        <span class="langbar-flags" aria-hidden="true"><svg viewBox="0 0 16 16" role="img"><rect width="16" height="8" fill="#fff"/><rect y="8" width="16" height="8" fill="#dc143c"/></svg>›<svg viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice" role="img"><clipPath id="langbar-uk"><path d="M30,15h30v15zv15h-30zh-30v-15zv-15h30z"/></clipPath><path d="M0,0v30h60v-30z" fill="#012169"/><path d="M0,0L60,30M60,0L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0L60,30M60,0L0,30" clip-path="url(#langbar-uk)" stroke="#c8102e" stroke-width="4"/><path d="M30,0v30M0,15h60" stroke="#fff" stroke-width="10"/><path d="M30,0v30M0,15h60" stroke="#c8102e" stroke-width="6"/></svg></span>
+        <a class="btn primary" href="en/" hreflang="en" data-set-lang="en">Switch to English</a>
+      </div>
+    </aside>
 
     <script>
       (function () {
@@ -1842,47 +1311,56 @@
         var CONTACT_URL = 'mailto:kontakt@posterapp.pl';
         // Kod LITE jest już w repozytorium poster-app? Publikacja samej strony (tools/publish-site.sh) ustawia false.
         var LITE_RELEASED = true;
-        var META = {
-          en: {
-            title: 'Poster – social media automation on your own server',
-            soon: 'Coming soon',
-          },
-          pl: {
-            title: 'Poster – automatyzacja social mediów na Twoim serwerze',
-            soon: 'Wkrótce',
-          },
-        };
-        var root = document.documentElement;
-        function store(lang) {
-          try {
-            localStorage.setItem('poster-site-lang', lang);
-          } catch (e) {}
+        var SOON = { en: 'Coming soon', pl: 'Wkrótce' };
+        // Strona jest w jednym języku: polska pod /, angielska pod /en/. Kotwice sekcji po polsku mają końcówkę -pl.
+        var LANG = document.documentElement.lang === 'pl' ? 'pl' : 'en';
+        var OTHER = LANG === 'pl' ? 'en' : 'pl';
+        var HOME = { pl: '/', en: '/en/' };
+        var SECTIONS = ['how', 'pro', 'pricing', 'faq'];
+        function hashFor(lang) {
+          var id = location.hash.slice(1).replace(/-pl$/, '');
+          return SECTIONS.indexOf(id) < 0 ? '' : '#' + id + (lang === 'pl' ? '-pl' : '');
         }
-        function saved() {
+        function saved(key) {
           try {
-            return localStorage.getItem('poster-site-lang');
+            return localStorage.getItem(key);
           } catch (e) {
             return null;
           }
         }
-        function setLang(lang, remember) {
-          if (!META[lang]) lang = 'en';
-          root.setAttribute('data-lang', lang);
-          root.lang = lang;
-          document.title = META[lang].title;
-          document.querySelectorAll('[data-set-lang]').forEach(function (b) {
-            b.setAttribute('aria-pressed', String(b.getAttribute('data-set-lang') === lang));
-          });
-          if (remember) store(lang);
+        function save(key, value) {
+          try {
+            localStorage.setItem(key, value);
+          } catch (e) {}
         }
+        // stare linki ?lang=pl|en (panel 1.0–1.2, README) i język wybrany wcześniej przełącznikiem → właściwa strona
         var param = new URLSearchParams(location.search).get('lang');
-        var browser = (navigator.language || '').toLowerCase().indexOf('pl') === 0 ? 'pl' : 'en';
-        setLang(META[param] ? param : saved() || browser, false);
-        document.querySelectorAll('[data-set-lang]').forEach(function (b) {
-          b.addEventListener('click', function () {
-            setLang(b.getAttribute('data-set-lang'), true);
+        var chosen = saved('poster-site-lang');
+        if (param === OTHER || (!param && chosen === OTHER)) {
+          location.replace(HOME[OTHER] + hashFor(OTHER));
+          return;
+        }
+        // przełącznik i karta wyboru języka: zapamiętany wybór, ta sama sekcja na drugiej stronie
+        document.querySelectorAll('[data-set-lang]').forEach(function (a) {
+          a.addEventListener('click', function (e) {
+            var lang = a.getAttribute('data-set-lang');
+            save('poster-site-lang', lang);
+            if (lang === LANG) return;
+            e.preventDefault();
+            location.href = HOME[lang] + hashFor(lang);
           });
         });
+        // karta u dołu, gdy przeglądarka jest w drugim języku (na polskiej: w innym niż polski) i nikt nie wybrał języka
+        var bar = document.getElementById('langbar');
+        var browser = ((navigator.languages && navigator.languages[0]) || navigator.language || '').toLowerCase();
+        var suggest = LANG === 'pl' ? browser.indexOf('pl') !== 0 : browser.indexOf('pl') === 0;
+        if (bar && suggest && !chosen && !saved('poster-site-langbar')) {
+          bar.hidden = false;
+          bar.querySelector('[data-close]').addEventListener('click', function () {
+            save('poster-site-langbar', 'closed');
+            bar.hidden = true;
+          });
+        }
         document.querySelectorAll('[data-contact]').forEach(function (a) {
           a.href = CONTACT_URL;
         });
@@ -1895,7 +1373,7 @@
             a.href = CHECKOUT_URL;
             return;
           }
-          a.textContent = a.closest('[lang]').getAttribute('lang') === 'pl' ? META.pl.soon : META.en.soon;
+          a.textContent = SOON[LANG];
           a.setAttribute('aria-disabled', 'true');
           a.addEventListener('click', function (e) {
             e.preventDefault();

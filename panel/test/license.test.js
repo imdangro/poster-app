@@ -222,8 +222,8 @@ test('podsumowanie dla panelu: stan z daty, brak pliku albo uszkodzony plik = br
   assert.equal(license.keyEnd(' POSTER-1B2C3D4E-0000-4000-8000-00000000A1B2 '), '00A1B2');
   assert.equal(license.keyEnd(undefined), '');
   assert.equal(license.keyEnd('KEY-SHORT1'), '', 'krótki klucz – bez końcówki');
-  assert.equal(license.pricingUrl('pl'), 'https://posterapp.pl/?lang=pl#pricing-pl');
-  assert.equal(license.pricingUrl('en'), 'https://posterapp.pl/?lang=en#pricing');
+  assert.equal(license.pricingUrl('pl'), 'https://posterapp.pl/#pricing-pl');
+  assert.equal(license.pricingUrl('en'), 'https://posterapp.pl/en/#pricing');
 });
 
 test('license-cli.js: aktywacja i odświeżanie z wynikiem w liniach klucz=wartość', async () => {

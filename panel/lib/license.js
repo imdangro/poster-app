@@ -12,7 +12,7 @@
 // samym kluczem licencyjnym, bez tokenu. Ścieżki i pola API Polara są tylko w tym pliku.
 const fs = require('fs');
 const path = require('path');
-const { PROJECT_URL, PRODUCT_URL, HttpError, fetchJson, writeJsonAtomic, mask } = require('./util');
+const { PROJECT_URL, PRODUCT_URL, productUrl, HttpError, fetchJson, writeJsonAtomic, mask } = require('./util');
 const { tr, lang } = require('./i18n');
 
 // Polar: produkcja; piaskownica (próba zakupu): POLAR_API_URL=https://sandbox-api.polar.sh
@@ -29,7 +29,7 @@ const PANEL_UID = 1000; // użytkownik kontenera panelu (scripts/init-nas.sh)
 const RENEW_CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_vNtQIQOE3mI5Ezkicv6CYnBd7hZ5v5aJ3AJ5x1ngNPZ';
 const RENEW_FIELD = 'license_key';
 const KEY_END = 6; // tyle końcowych znaków klucza pokazuje Polar (****-XXXXXX)
-const RENEW_ANCHOR = { pl: '?lang=pl#pricing-pl', en: '?lang=en#pricing' };
+const RENEW_ANCHOR = { pl: '#pricing-pl', en: '#pricing' };
 
 // Wynik sprawdzenia licencji – na jego podstawie skrypty wypisują komunikat:
 //   ok – licencja ważna; expired – aktualizacje wygasły; inactive – licencja cofnięta (np. po zwrocie) albo wyłączona;
@@ -46,7 +46,7 @@ function keyEnd(key) {
 }
 
 // Cennik na stronie produktu w języku panelu (zakup PRO)
-const pricingUrl = (language) => PRODUCT_URL + (RENEW_ANCHOR[language] || RENEW_ANCHOR.en);
+const pricingUrl = (language) => productUrl(language) + (RENEW_ANCHOR[language] || RENEW_ANCHOR.en);
 
 // Warunki licencji PRO na stronie produktu (docs/license.html, z tools/licenses) – m.in. zwrot przed aktywacją
 const termsUrl = (language) => `${PRODUCT_URL}license.html?lang=${language === 'pl' ? 'pl' : 'en'}`;
