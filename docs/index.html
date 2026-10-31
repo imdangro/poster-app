@@ -599,20 +599,59 @@
         border-radius: 6px;
         padding: 1px 6px;
       }
+      /* stopka: kolumny z linkami i dolny pasek; na telefonie po dwie kolumny */
       footer {
         border-top: 1px solid var(--border);
-        padding: 32px 0 48px;
+        background: var(--surface-2);
         color: var(--muted);
         font-size: 14px;
       }
-      footer .wrap {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px 22px;
-        justify-content: space-between;
+      .foot {
+        display: grid;
+        grid-template-columns: 1.7fr repeat(4, 1fr);
+        gap: 32px;
+        padding: 52px 0 40px;
+      }
+      .foot-brand p {
+        margin: 14px 0 18px;
+        max-width: 320px;
+        line-height: 1.55;
+      }
+      .foot-h {
+        margin: 6px 0 12px;
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
       footer a {
         color: var(--muted);
+        text-decoration: none;
+      }
+      footer a:hover {
+        color: var(--text);
+      }
+      .foot-col a,
+      .foot-mail {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 0;
+      }
+      footer svg {
+        width: 18px;
+        height: 18px;
+        flex: none;
+      }
+      .foot-bottom {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 24px;
+        justify-content: space-between;
+        padding: 18px 0 32px;
+        border-top: 1px solid var(--border);
+        font-size: 13px;
       }
       @media (max-width: 900px) {
         .steps {
@@ -633,6 +672,13 @@
         /* na telefonie w menu zostaje tylko przełącznik języka */
         .nav > a {
           display: none;
+        }
+        .foot {
+          grid-template-columns: 1fr 1fr;
+          gap: 28px 24px;
+        }
+        .foot-brand {
+          grid-column: 1 / -1;
         }
         section {
           padding: 52px 0;
@@ -1268,26 +1314,63 @@
 
     <footer>
       <div class="wrap">
-        <span
-          >© 2026 Daniel Grodowski, Kraków · <a href="mailto:kontakt@posterapp.pl">kontakt@posterapp.pl</a> · Poster LITE: AGPL-3.0</span
-        >
-        <span>
-          <a href="https://github.com/imdangro/poster-app"><span lang="pl">Kod źródłowy</span></a>
-          · <a href="https://www.youtube.com/@posterapp_pl">YouTube</a> · <a href="privacy.html?lang=pl" lang="pl">Polityka prywatności</a> ·
-          <a href="license.html?lang=pl" lang="pl">Licencja PRO</a>
-          <span data-repo-doc
-            >·
-            <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.md"
-              ><span lang="pl">Bezpieczeństwo</span></a
-            ></span
-          >
-          <span data-repo-doc
-            >·
-            <a href="https://github.com/imdangro/poster-app/blob/main/CONTRIBUTING.md"
-              ><span lang="pl">Współpraca</span></a
-            ></span
-          >
-        </span>
+        <div class="foot">
+          <div class="foot-brand">
+            <a class="logo" href="#"><span class="mark">P</span>Poster</a>
+            <p lang="pl">
+              Automatyzacja social mediów na Twoim NAS-ie albo serwerze: AI pisze posty z newsów z Twojej branży, a Ty akceptujesz je w
+              Telegramie.
+            </p>
+            <a class="foot-mail" href="mailto:kontakt@posterapp.pl"
+              ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                <path d="m4 7 8 6 8-6" /></svg
+              >kontakt@posterapp.pl</a
+            >
+          </div>
+          <div class="foot-col">
+            <p class="foot-h" lang="pl">Produkt</p>
+            <a href="#how-pl" lang="pl">Jak to działa</a>
+            <a href="#pro-pl" lang="pl">PRO</a>
+            <a href="#pricing-pl" lang="pl">Cennik</a>
+            <a href="#faq-pl" lang="pl">Pytania</a>
+          </div>
+          <div class="foot-col">
+            <p class="foot-h">Open source</p>
+            <a href="https://github.com/imdangro/poster-app" lang="pl">Kod źródłowy</a>
+            <a href="https://github.com/imdangro/poster-app/blob/main/README.pl.md" lang="pl" data-repo-doc>Dokumentacja</a>
+            <a href="https://github.com/imdangro/poster-app/blob/main/CHANGELOG.pl.md" lang="pl" data-repo-doc>Historia zmian</a>
+            <a href="https://github.com/imdangro/poster-app/blob/main/SECURITY.pl.md" lang="pl" data-repo-doc>Bezpieczeństwo</a>
+            <a href="https://github.com/imdangro/poster-app/blob/main/CONTRIBUTING.pl.md" lang="pl" data-repo-doc>Współpraca</a>
+          </div>
+          <div class="foot-col">
+            <p class="foot-h" lang="pl">Dokumenty</p>
+            <a href="privacy.html?lang=pl" lang="pl">Polityka prywatności</a>
+            <a href="license.html?lang=pl" lang="pl">Licencja PRO</a>
+          </div>
+          <div class="foot-col">
+            <p class="foot-h" lang="pl">Obserwuj</p>
+            <a href="https://www.youtube.com/@posterapp_pl"
+              ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  fill-rule="evenodd"
+                  d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4a2.5 2.5 0 0 0-1.8 1.8C2 8.8 2 12 2 12s0 3.2.4 4.8a2.5 2.5 0 0 0 1.8 1.8c1.6.4 7.8.4 7.8.4s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8c.4-1.6.4-4.8.4-4.8s0-3.2-.4-4.8ZM10 15V9l5.2 3L10 15Z"
+                /></svg
+              >YouTube</a
+            >
+            <a href="https://github.com/imdangro/poster-app"
+              ><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+                /></svg
+              >GitHub</a
+            >
+          </div>
+        </div>
+        <div class="foot-bottom">
+          <span>© 2026 Daniel Grodowski, Kraków</span>
+          <span lang="pl">Poster LITE: AGPL-3.0 · Poster PRO: licencja komercyjna</span>
+        </div>
       </div>
     </footer>
 
