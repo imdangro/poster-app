@@ -617,6 +617,18 @@
         max-width: 320px;
         line-height: 1.55;
       }
+      /* wpisy w katalogach programów (zwykłe linki, bez obrazków z cudzych serwerów) */
+      .foot-brand .foot-listed {
+        margin: 12px 0 0;
+        font-size: 13px;
+      }
+      .foot-listed a {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .foot-listed span {
+        white-space: nowrap;
+      }
       .foot-h {
         margin: 6px 0 12px;
         color: var(--text);
@@ -1327,6 +1339,13 @@
                 <path d="m4 7 8 6 8-6" /></svg
               >kontakt@posterapp.pl</a
             >
+            <p class="foot-listed" lang="pl">
+              Znajdziesz nas też na:
+              <span
+                ><a href="https://alternativeto.net/software/poster-app/">AlternativeTo</a> ·
+                <a href="https://www.saashub.com/poster-app">SaaSHub</a></span
+              >
+            </p>
           </div>
           <div class="foot-col">
             <p class="foot-h" lang="pl">Produkt</p>

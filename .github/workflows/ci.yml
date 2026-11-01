@@ -9,9 +9,51 @@ on:
 permissions:
   contents: read
 
+# Nowy commit w PR przerywa sprawdzanie poprzedniego; push do main – zawsze do końca (grupa z SHA)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
+  # Zakres zmian – oszczędność minut GitHub Actions: strona (docs/), dokumenty (.md) i narzędzia wewnętrzne (tools/)
+  # nie uruchamiają testów kodu ani instalatora, walidacja węzłów n8n rusza tylko przy zmianie workflow lub wersji
+  # n8n, a test instalacji Dockera – przy zmianie docs/install.sh. Bez punktu odniesienia albo przy błędzie – wszystko.
+  changes:
+    name: Zakres zmian
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+      n8n: ${{ steps.scope.outputs.n8n }}
+      installer: ${{ steps.scope.outputs.installer }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Zmienione pliki
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          code=true n8n=true installer=true
+          if [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] &&
+            git fetch -q --depth=1 origin "$BASE" && files="$(git diff --name-only "$BASE" HEAD)"; then
+            code=false n8n=false installer=false
+            while IFS= read -r f; do
+              case "$f" in
+                '') ;;
+                .github/*) code=true n8n=true installer=true ;;
+                docs/install.sh) code=true installer=true ;;
+                workflows/* | docker-compose.yml) code=true n8n=true ;;
+                docs/* | tools/* | *.md) : ;;
+                *) code=true ;;
+              esac
+            done <<<"$files"
+            printf '%s\n' "$files"
+          fi
+          printf 'code=%s\nn8n=%s\ninstaller=%s\n' "$code" "$n8n" "$installer" | tee -a "$GITHUB_OUTPUT"
+
   checks:
     name: Testy i sprawdzenia
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -39,6 +81,8 @@ jobs:
 
   workflow-nodes:
     name: Węzły workflow względem n8n
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.n8n == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -63,6 +107,8 @@ jobs:
 
   install-docker:
     name: Instalator – Docker na czystym ${{ matrix.image }}
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.installer == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -86,6 +132,8 @@ jobs:
 
   install:
     name: Instalator (docs/install.sh) na czystym Dockerze
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
