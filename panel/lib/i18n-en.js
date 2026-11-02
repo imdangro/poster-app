@@ -118,6 +118,7 @@ module.exports = {
   'Bot {0} nie istnieje (usunięty w panelu?)': 'Bot {0} does not exist (deleted in the panel?)',
   'Konto platformy wymaga ID bota': 'A platform account requires a bot ID',
   'Panel nie może połączyć się z {0}: {1}': 'The panel cannot connect to {0}: {1}',
+  'Brak odpowiedzi od {0}: {1}': 'No response from {0}: {1}',
   'Zbyt wiele przekierowań': 'Too many redirects',
   'brak odpowiedniego zdjęcia w źródle': 'no suitable photo in the source',
   'link Google News nie prowadzi wprost do artykułu – dodaj bezpośredni kanał RSS portalu':
@@ -165,6 +166,7 @@ module.exports = {
   'AI pominęło publikację: {0}': 'AI skipped publishing: {0}',
   'draft czeka na akceptację w Telegramie': 'draft waiting for approval in Telegram',
   'błąd{0}': 'error{0}',
+  'nie wiadomo{0}': 'unknown{0}',
   'nieznany błąd': 'unknown error',
   '❗ <b>Poster{0}</b>: błąd workflow': '❗ <b>Poster{0}</b>: workflow error',
   'Węzeł: {0}': 'Node: {0}',
@@ -193,6 +195,7 @@ module.exports = {
     "another program is receiving this bot's messages (e.g. an old n8n workflow polling every minute – import the new one)",
   'Brak tokenu bota Telegram': 'No Telegram bot token',
   'Brak połączenia z Telegramem: {0}': 'No connection to Telegram: {0}',
+  'Brak odpowiedzi od Telegrama: {0}': 'No response from Telegram: {0}',
   'Telegram poller zatrzymany:': 'Telegram poller stopped:',
   'Obsługa aktualizacji Telegrama:': 'Handling a Telegram update:',
   '👋 To jest bot <b>Poster</b>.\nID tego czatu: <code>{0}</code>\nWpisz je w panelu: <b>Ustawienia → Telegram → ID czatu</b> (albo kliknij „Wykryj”).':
@@ -203,6 +206,7 @@ module.exports = {
   '❌ Odrzucono': '❌ Rejected',
   '❌ Odrzucono ({0})': '❌ Rejected ({0})',
   '⏳ Publikuję…': '⏳ Publishing…',
+  '⏳ Zapisuję…': '⏳ Saving…',
   '🔁 Spróbuj ponownie': '🔁 Try again',
   '❌ Odrzuć': '❌ Reject',
   '❗ Nie udało się uruchomić publikacji: {0}': '❗ Could not start publishing: {0}',

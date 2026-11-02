@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { sleep, HttpError, productUrl } = require('./util');
+const { sleep, HttpError, noAnswer, productUrl } = require('./util');
 const { UPSTREAM } = require('./accounts');
 const { tr, lang } = require('./i18n');
 
@@ -79,10 +79,12 @@ class Telegram {
       });
     } catch (e) {
       if (e.name === 'AbortError' && signal && signal.aborted) throw e;
-      throw new HttpError(
-        502,
-        tr('Brak połączenia z Telegramem: {0}', e.name === 'TimeoutError' ? tr('przekroczono czas') : e.cause?.code || e.message),
-      );
+      const reason = e.name === 'TimeoutError' ? tr('przekroczono czas') : e.cause?.code || e.message;
+      if (!noAnswer(e)) throw new HttpError(502, tr('Brak połączenia z Telegramem: {0}', reason));
+      // wiadomość mogła dotrzeć (np. post na kanale) – publikacja pokaże „nie wiadomo” zamiast błędu
+      const err = new HttpError(502, tr('Brak odpowiedzi od Telegrama: {0}', reason));
+      err.noAnswer = true;
+      throw err;
     }
     const data = await res.json().catch(() => null);
     if (!data || data.ok !== true) {
@@ -90,6 +92,7 @@ class Telegram {
         res.status === 401 || res.status === 404 ? 400 : 502,
         `Telegram: ${(data && data.description) || `HTTP ${res.status}`}`,
       );
+      if (res.status === 504) err.noAnswer = true;
       err.code = data && data.error_code;
       err.description = (data && data.description) || '';
       err.retryAfter = (data && data.parameters && data.parameters.retry_after) || 0; // 429: za ile sekund ponowić
@@ -224,7 +227,9 @@ class Telegram {
     const cq = u.callback_query;
     if (!cq) return;
     const answer = (text) => this.try('answerCallbackQuery', { callback_query_id: cq.id, text: text || undefined });
-    const m = String(cq.data || '').match(/^(pub|rej):([A-Za-z0-9_-]{1,40})$/);
+    // pub – publikacja / ponowienie nieudanych, rej – odrzucenie; po niepewnej publikacji (brak odpowiedzi platformy):
+    // puc – post jest na profilu (zapisz jako opublikowany), pua – posta nie ma (wyślij ponownie także niepewne)
+    const m = String(cq.data || '').match(/^(pub|pua|puc|rej):([A-Za-z0-9_-]{1,40})$/);
     if (!m || !cq.message) return answer('');
 
     if (!this.authorized(cq.message.chat.id, cq.from)) {
@@ -233,7 +238,8 @@ class Telegram {
     }
     const from = cq.from && cq.from.username ? `@${cq.from.username}` : (cq.from && (cq.from.first_name || String(cq.from.id))) || '?';
     const draftId = m[2];
-    const ctx = { draftId, chatId: cq.message.chat.id, messageId: cq.message.message_id, from };
+    const unknown = { pua: 'retry', puc: 'confirm' }[m[1]];
+    const ctx = { draftId, chatId: cq.message.chat.id, messageId: cq.message.message_id, from, ...(unknown ? { unknown } : {}) };
     const markup = (text) => ({
       chat_id: ctx.chatId,
       message_id: ctx.messageId,
@@ -248,8 +254,9 @@ class Telegram {
       await this.try('editMessageReplyMarkup', markup(tr('❌ Odrzucono ({0})', from)));
       return this.onReject(draft, ctx);
     }
-    await answer(tr('⏳ Publikuję…'));
-    await this.try('editMessageReplyMarkup', markup(tr('⏳ Publikuję…')));
+    const busy = unknown === 'confirm' ? tr('⏳ Zapisuję…') : tr('⏳ Publikuję…');
+    await answer(busy);
+    await this.try('editMessageReplyMarkup', markup(busy));
     try {
       await this.onPublish(draft, ctx);
     } catch (e) {
@@ -259,7 +266,7 @@ class Telegram {
         reply_markup: {
           inline_keyboard: [
             [
-              { text: tr('🔁 Spróbuj ponownie'), callback_data: `pub:${draftId}` },
+              { text: tr('🔁 Spróbuj ponownie'), callback_data: `${m[1]}:${draftId}` },
               { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },
             ],
           ],

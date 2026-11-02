@@ -7,6 +7,14 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.3.0 – 2026-11-02
+
+- **Platforma bez odpowiedzi:** gdy platforma (np. X albo Facebook) przyjmie post, ale nie odpowie na czas albo
+  połączenie się zerwie, raport w Telegramie nie pokazuje już błędu, tylko ⚠️ „nie wiadomo, czy opublikowano” z prośbą
+  o sprawdzenie profilu. 🔁 nie wysyła takiego posta drugi raz (wcześniej mógł powstać duplikat), a dwa nowe przyciski
+  zapisują go jako opublikowany („✅ Jest na profilu”) albo wysyłają ponownie („📤 Nie ma – wyślij”). W panelu taki post
+  ma status „Nie wiadomo”. Raport pokazuje też czytelniej błędy z odpowiedzi API – sam opis zamiast surowego JSON-u.
+
 ## 1.2.1 – 2026-10-29
 
 - Strona produktu: polska wersja jest pod [posterapp.pl](https://posterapp.pl/), angielska pod

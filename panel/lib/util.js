@@ -92,16 +92,32 @@ async function readJsonBody(req, limit) {
   }
 }
 
-// fetch z limitem czasu; zwraca { status, ok, data (JSON lub null), text }
+// Błąd fetch, po którym nie wiadomo, czy serwer przyjął zapytanie: przekroczony czas albo połączenie zerwane po
+// wysłaniu – np. post mógł się opublikować mimo braku odpowiedzi. Nieudane połączenie (DNS, odmowa, TLS) – false.
+const NO_ANSWER_CODES = new Set(['UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT']);
+function noAnswer(e) {
+  if (!e) return false;
+  return e.name === 'TimeoutError' || NO_ANSWER_CODES.has(e.cause?.code || e.code);
+}
+
+// fetch z limitem czasu; zwraca { status, ok, data (JSON lub null), text }. Błąd bez odpowiedzi serwera ma
+// noAnswer = true (zapytanie mogło dotrzeć – przy publikacji wynik „nie wiadomo”, a nie zwykły błąd).
 async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = 20000 } = {}) {
+  const failed = (e) => {
+    const reason = e.name === 'TimeoutError' ? tr('przekroczono czas ({0} s)', Math.round(timeout / 1000)) : e.cause?.code || e.message;
+    if (!noAnswer(e)) return new HttpError(502, tr('Brak połączenia z {0}: {1}', hostOf(url), reason));
+    const err = new HttpError(502, tr('Brak odpowiedzi od {0}: {1}', hostOf(url), reason));
+    err.noAnswer = true;
+    return err;
+  };
   let res;
+  let text;
   try {
     res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(timeout), redirect: 'follow' });
+    text = await res.text();
   } catch (e) {
-    const reason = e.name === 'TimeoutError' ? tr('przekroczono czas ({0} s)', Math.round(timeout / 1000)) : e.cause?.code || e.message;
-    throw new HttpError(502, tr('Brak połączenia z {0}: {1}', hostOf(url), reason));
+    throw failed(e);
   }
-  const text = await res.text();
   let data = null;
   try {
     data = text ? JSON.parse(text) : null;
@@ -174,6 +190,7 @@ module.exports = {
   sendJson,
   readBody,
   readJsonBody,
+  noAnswer,
   fetchJson,
   readLimited,
   hostOf,

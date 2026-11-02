@@ -2044,7 +2044,8 @@ a.pchip:hover {
   --c: var(--ok);
   --c-soft: var(--ok-soft);
 }
-.cal-e.post.partial {
+.cal-e.post.partial,
+.cal-e.post.unknown {
   --c: var(--warn);
   --c-soft: var(--warn-soft);
 }

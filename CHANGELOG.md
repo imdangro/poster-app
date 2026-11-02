@@ -7,6 +7,14 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.3.0 – 2026-11-02
+
+- **A platform that does not answer:** when a platform (e.g. X or Facebook) accepts a post but does not answer in time
+  or the connection drops, the Telegram report no longer shows an error but ⚠️ “not sure if published” and asks you to
+  check the profile. 🔁 does not send such a post again (before, it could create a duplicate), and two new buttons mark
+  it as published (“✅ It's on the profile”) or send it again (“📤 Not there – send”). In the panel such a post has the
+  status “Unknown”. The report also shows API errors more readably – just the description instead of raw JSON.
+
 ## 1.2.1 – 2026-10-29
 
 - Product page: the Polish version is at [posterapp.pl](https://posterapp.pl/) and the English one at

@@ -11,13 +11,26 @@ const out = (name) => {
     return null;
   }
 };
+// n8n zapisuje odpowiedź błędu jako „504 - "{\"error\":{\"message\":\"…\"}}"” – zostawiamy kod i sam opis z JSON-u
+const readable = (msg) => {
+  const m = /^(\d{3}) - "([\s\S]*)"$/.exec(msg);
+  if (!m) return msg;
+  try {
+    const body = JSON.parse(JSON.parse(`"${m[2]}"`));
+    const e = body && body.error;
+    const text = (e && typeof e === 'object' ? e.message : e) || body.detail || body.title || body.description || body.message;
+    return text && typeof text === 'string' ? `${m[1]} – ${text}` : msg;
+  } catch (x) {
+    return msg;
+  }
+};
 // Błąd z węzła HTTP (tryb „continue on fail”) bywa zserializowany bez treści – wtedy podajemy wskazówkę.
 const err = (j) => {
   if (!j || !('error' in j)) return null;
   const e = j.error;
   if (typeof e === 'string') return e.slice(0, 400);
   const code = e && (e.httpCode || e.status);
-  const msg = (e && e.message) || '';
+  const msg = readable((e && e.message) || '');
   const details = e && [code && !msg.startsWith(String(code)) ? code : null, msg, e.description].filter(Boolean).join(' – ');
   if (details) return details.slice(0, 400);
   const raw = JSON.stringify(e || {});
@@ -31,8 +44,20 @@ const firstErr = (...names) => {
   return null;
 };
 
+// Brak odpowiedzi po wysłaniu (przekroczony czas, zerwane połączenie, 504 z bramki panelu albo platformy): platforma
+// mogła przyjąć post – wynik „nie wiadomo” (unknown) zamiast błędu, a 🔁 nie wyśle go drugi raz bez decyzji w Telegramie.
+const noAnswer = (j) => {
+  const e = j && j.error;
+  if (!e) return false;
+  if (typeof e !== 'object') return /timeout|timed out|socket hang up/i.test(String(e));
+  if (Number(e.httpCode || e.status) === 504) return true;
+  if (['ECONNABORTED', 'ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNRESET', 'EPIPE'].includes(e.code)) return true;
+  return /timeout of \d+ms exceeded|socket hang up|ECONNRESET|ETIMEDOUT/i.test(`${e.message || ''} ${e.description || ''}`);
+};
+
 const now = new Date().toISOString();
 const results = { ...(draft.results || {}) };
+const failure = (error, unknown) => ({ ok: false, error, at: now, ...(unknown ? { unknown: true } : {}) });
 
 if (todo.x) {
   const post = out('X: opublikuj post');
@@ -40,7 +65,9 @@ if (todo.x) {
   const uploadErr = draft.xWithImage ? err(out('X: upload grafiki')) : null;
   results.x = id
     ? { ok: true, id, url: `https://x.com/i/status/${id}`, at: now, ...(uploadErr ? { warning: tr('bez grafiki: {0}', uploadErr) } : {}) }
-    : { ok: false, error: firstErr('X: upload grafiki', 'X: opublikuj post') || tr('brak odpowiedzi API'), at: now };
+    : noAnswer(post)
+      ? failure(firstErr('X: opublikuj post'), true)
+      : failure(firstErr('X: upload grafiki', 'X: opublikuj post') || tr('brak odpowiedzi API'));
 }
 if (todo.facebook) {
   // zdjęcie z opisem (/photos) albo post z linkiem (/feed)
@@ -48,11 +75,16 @@ if (todo.facebook) {
   const postId = fb && !fb.error ? fb.post_id || fb.id : null;
   results.facebook = postId
     ? { ok: true, id: postId, url: `https://www.facebook.com/${postId}`, at: now, ...(draft.fbWithImage ? {} : { kind: 'link' }) }
-    : {
-        ok: false,
-        error: firstErr('FB: wczytaj grafikę', 'Facebook: opublikuj post', 'Facebook: opublikuj tekst/link') || tr('brak odpowiedzi API'),
-        at: now,
-      };
+    : noAnswer(fb)
+      ? failure(firstErr('Facebook: opublikuj post', 'Facebook: opublikuj tekst/link'), true)
+      : failure(firstErr('FB: wczytaj grafikę', 'Facebook: opublikuj post', 'Facebook: opublikuj tekst/link') || tr('brak odpowiedzi API'));
+}
+
+// „✅ Jest na profilu” w Telegramie: niepewne platformy zapisujemy jako opublikowane (bez linku – sprawdził człowiek)
+if (ctx.unknown === 'confirm') {
+  for (const [k, r] of Object.entries(results)) {
+    if (r && !r.ok && r.unknown) results[k] = { ok: true, confirmed: true, note: tr('potwierdzone ręcznie'), at: now };
+  }
 }
 
 // własny post: w raporcie tylko platformy wybrane w edytorze
@@ -65,7 +97,16 @@ const enabled = {
 // platformy pominięte z braku grafiki (np. Instagram) nie psują statusu – nie ma czego ponawiać
 const active = Object.keys(enabled).filter((k) => enabled[k] && !(skipped[k] && !results[k]?.ok));
 const okCount = active.filter((k) => results[k]?.ok).length;
-const status = !active.length ? 'approved' : okCount === active.length ? 'published' : okCount ? 'partial' : 'failed';
+const unsure = active.filter((k) => !results[k]?.ok && results[k]?.unknown);
+const status = !active.length
+  ? 'approved'
+  : okCount === active.length
+    ? 'published'
+    : okCount
+      ? 'partial'
+      : unsure.length
+        ? 'unknown'
+        : 'failed';
 
 // --- Raport HTML ---------------------------------------------------------------------------------
 const esc = (s) =>
@@ -82,12 +123,14 @@ const line = (k) => {
     const what = r.url ? tr('<a href="{0}">zobacz post</a>', esc(r.url)) : esc(r.note || 'OK');
     return `${label[k]}: ✅ ${what}${r.warning ? ` ⚠️ ${esc(r.warning)}` : ''}`;
   }
+  if (r?.unknown) return `${label[k]}: ⚠️ ${tr('brak odpowiedzi – post mógł się opublikować ({0})', esc(r.error))}`;
   return `${label[k]}: ❌ ${esc(r?.error || tr('nie wykonano'))}`;
 };
 const header = {
   published: tr('✅ <b>Opublikowano</b>'),
   partial: tr('⚠️ <b>Opublikowano częściowo</b>'),
   failed: tr('❌ <b>Publikacja nieudana</b>'),
+  unknown: tr('⚠️ <b>Nie wiadomo, czy opublikowano</b>'),
   approved: tr('✅ <b>Zatwierdzono</b> (brak platform do publikacji)'),
 }[status];
 
@@ -103,16 +146,27 @@ const text = [
   '',
   ...['x', 'facebook'].filter(chosen).map(line),
   ...(manual ? [] : [tr('   ↳ Instagram i TikTok ręcznie: grafika i teksty powyżej')]),
+  ...(unsure.length ? ['', tr('👀 Sprawdź profil: jeśli post tam jest – „✅ Jest na profilu”, jeśli nie – „📤 Nie ma – wyślij”.')] : []),
   who,
 ].join('\n');
 
 const done = status === 'published' || status === 'approved';
+// niepewna publikacja: decyzja po sprawdzeniu profilu (puc – jest, pua – wyślij ponownie); 🔁 – zwykłe błędy
+const failedLeft = active.some((k) => !results[k]?.ok && !results[k]?.unknown);
 const replyMarkup = done
   ? { inline_keyboard: [[{ text: status === 'published' ? tr('✅ Opublikowano') : tr('✅ Zatwierdzono'), callback_data: 'noop' }]] }
   : {
       inline_keyboard: [
+        ...(unsure.length
+          ? [
+              [
+                { text: tr('✅ Jest na profilu'), callback_data: `puc:${draft.draftId}` },
+                { text: tr('📤 Nie ma – wyślij'), callback_data: `pua:${draft.draftId}` },
+              ],
+            ]
+          : []),
         [
-          { text: tr('🔁 Ponów nieudane'), callback_data: `pub:${draft.draftId}` },
+          ...(failedLeft || !unsure.length ? [{ text: tr('🔁 Ponów nieudane'), callback_data: `pub:${draft.draftId}` }] : []),
           { text: tr('🗑 Porzuć'), callback_data: `rej:${draft.draftId}` },
         ],
       ],

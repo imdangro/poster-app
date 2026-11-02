@@ -14,6 +14,7 @@ if (cfg.mode !== 'publish') {
         messageId: last ? last.message_id : null,
         approvedBy: via,
         via,
+        unknown: '',
       },
     },
   ];
@@ -28,6 +29,8 @@ return [
       messageId: p.messageId,
       approvedBy: p.approvedBy,
       via: 'telegram',
+      // decyzja po niepewnej publikacji: retry – wyślij ponownie, confirm – zapisz jako opublikowany
+      unknown: p.unknown || '',
     },
   },
 ];

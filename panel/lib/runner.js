@@ -345,8 +345,10 @@ class Runner {
         break;
       case 'publish': {
         const results = e.results || {};
+        const detail = (v) => (v && v.error ? ` (${String(v.error).slice(0, 120)})` : '');
+        // unknown: brak odpowiedzi platformy – post mógł się opublikować
         const summary = Object.entries(results)
-          .map(([k, v]) => `${k}: ${v && v.ok ? 'OK' : tr('błąd{0}', v && v.error ? ` (${String(v.error).slice(0, 120)})` : '')}`)
+          .map(([k, v]) => `${k}: ${v && v.ok ? 'OK' : v && v.unknown ? tr('nie wiadomo{0}', detail(v)) : tr('błąd{0}', detail(v))}`)
           .join(' · ');
         if (run)
           this.store.updateRun(run.id, {

@@ -571,7 +571,7 @@ Link trafia do posta na X w trybie grafiki *🔗 post z linkiem* i w poście bez
    `kind: "compose"` z gotowymi tekstami. Zdjęcie czeka w `data/panel/compose` i n8n odbiera je przez
    `/internal/bots/<id>/image`. Węzeł *Post własny: przygotuj* składa draft (bez źródeł i bez AI), dalej jak wyżej:
    Telegram z przyciskami albo – przy „Publikuj teraz” – od razu publikacja.
-5. **Publikacja**: X → Facebook. Bez grafiki (lub w trybie *link*) X i Facebook dostają tekst z linkiem. Błąd jednej platformy nie blokuje drugiej. Raport trafia do Telegrama (z przyciskiem 🔁 dla nieudanych) i do historii w panelu.
+5. **Publikacja**: X → Facebook. Bez grafiki (lub w trybie *link*) X i Facebook dostają tekst z linkiem. Błąd jednej platformy nie blokuje drugiej. Raport trafia do Telegrama (z przyciskiem 🔁 dla nieudanych) i do historii w panelu. Gdy platforma nie odpowie (np. przekroczony czas), post mógł się ukazać – raport pokazuje przy niej ⚠️ *nie wiadomo*, 🔁 jej nie ponawia, a przyciski „✅ Jest na profilu” i „📤 Nie ma – wyślij” zapisują post jako opublikowany albo wysyłają go ponownie.
 6. **Błędy**: workflow jest swoim *Error Workflow*. Zgłasza błąd panelowi, a ten zapisuje go przy bocie i wysyła alert na Telegram.
 
 ### Tekst i grafika przez panel (router AI)

@@ -325,6 +325,7 @@
     approved: [tr('Zatwierdzono'), 'ok'],
     partial: [tr('Częściowo'), 'warn'],
     failed: [tr('Nieudana'), 'bad'],
+    unknown: [tr('Nie wiadomo'), 'warn'],
     error: [tr('Błąd'), 'bad'],
     timeout: [tr('Brak odpowiedzi'), 'bad'],
     no_news: [tr('Brak nowych newsów'), ''],
@@ -334,6 +335,19 @@
   function statusBadge(st) {
     const [label, cls, spin] = STATUS[st] || [st || '—', ''];
     return h('span', { class: `badge ${cls}` }, spin ? h('span', { class: 'spinner' }) : null, label);
+  }
+  // wynik publikacji na platformie: ✓ link, ⚠️ nie wiadomo (brak odpowiedzi platformy – post mógł wyjść) albo ✗ błąd
+  function resultSpan(r) {
+    if (r.ok)
+      return h(
+        'span',
+        { class: 'res ok' },
+        '✓ ',
+        r.url ? h('a', { href: r.url, target: '_blank', rel: 'noopener' }, tr('zobacz post')) : r.note || 'OK',
+      );
+    if (r.unknown)
+      return h('span', { class: 'res warn' }, `⚠️ ${tr('nie wiadomo, czy się opublikował – sprawdź profil')} (${r.error || '—'})`);
+    return h('span', { class: 'res bad' }, `✗ ${r.error || tr('błąd')}`);
   }
   const KIND = { generate: tr('Generowanie'), publish: tr('Publikacja'), compose: tr('Własny post') };
   const TRIGGER = {
@@ -3104,21 +3118,7 @@
               ? h('button', { class: 'btn sm', onclick: () => openDraft(run.draftId) }, icon('image'), tr('Pokaż draft'))
               : null,
           ),
-          PLATFORMS.filter((k) => res[k]).map((k) =>
-            h(
-              'div',
-              { class: 'row small' },
-              plat(k, false),
-              res[k].ok
-                ? h(
-                    'span',
-                    { class: 'res ok' },
-                    '✓ ',
-                    res[k].url ? h('a', { href: res[k].url, target: '_blank', rel: 'noopener' }, tr('zobacz post')) : res[k].note || 'OK',
-                  )
-                : h('span', { class: 'res bad' }, `✗ ${res[k].error || tr('błąd')}`),
-            ),
-          ),
+          PLATFORMS.filter((k) => res[k]).map((k) => h('div', { class: 'row small' }, plat(k, false), resultSpan(res[k]))),
         );
       };
       return card(
@@ -3316,23 +3316,7 @@
       return toast(e.message, 'bad');
     }
     const res = d.results || {};
-    const resultRow = (k) => {
-      const r = res[k];
-      if (!r) return null;
-      return h(
-        'div',
-        { class: 'row small' },
-        plat(k, false),
-        r.ok
-          ? h(
-              'span',
-              { class: 'res ok' },
-              '✓ ',
-              r.url ? h('a', { href: r.url, target: '_blank', rel: 'noopener' }, tr('zobacz post')) : r.note || 'OK',
-            )
-          : h('span', { class: 'res bad' }, `✗ ${r.error || tr('błąd')}`),
-      );
-    };
+    const resultRow = (k) => (res[k] ? h('div', { class: 'row small' }, plat(k, false), resultSpan(res[k])) : null);
     const block = (title, text) =>
       text ? h('div', null, h('div', { class: 'row' }, h('b', { class: 'grow' }, title), copyBtn(text)), h('pre', null, text)) : null;
     // własny post: tylko platformy wybrane w edytorze

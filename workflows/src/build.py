@@ -563,8 +563,8 @@ sticky("publish", [ctx, rd_draft, pdraft, done_if, tg_done, rep_done, x_if, x_im
 REPORT_TITLE = "6️⃣ Raport · Report"
 sticky("report", [summary, save_status, tg_report, tg_buttons, rep_pub], bi(
     REPORT_TITLE,
-    "Wyniki platform → plik draftu + wiadomość w Telegramie (🔁 ponawia tylko nieudane) + historia w panelu.",
-    "Platform results → draft file + Telegram message (🔁 retries only the failed ones) + history in the panel."),
+    "Wyniki platform → plik draftu + wiadomość w Telegramie (🔁 ponawia tylko nieudane) + historia w panelu. Brak odpowiedzi platformy (np. przekroczony czas) → ⚠️ *nie wiadomo*: post mógł wyjść, więc 🔁 go pomija – po sprawdzeniu profilu „✅ Jest na profilu” albo „📤 Nie ma – wyślij”.",
+    "Platform results → draft file + Telegram message (🔁 retries only the failed ones) + history in the panel. No answer from a platform (e.g. a timeout) → ⚠️ *unknown*: the post may be out, so 🔁 skips it – after checking the profile, “✅ It's on the profile” or “📤 Not there – send”."),
        2, head=140)
 sticky("errors", [err_t, alert], bi(
     "❗ Błędy · Errors",

@@ -572,7 +572,7 @@ The link goes into the X post in the *🔗 post with a link* image mode and in a
    gets `kind: "compose"` with the finished texts. The photo waits in `data/panel/compose` and n8n gets it through
    `/internal/bots/<id>/image`. The *Post własny: przygotuj* node builds the draft (no sources and no AI), then as above:
    Telegram with the buttons or – with “Publish now” – publishing right away.
-5. **Publishing**: X → Facebook. Without an image (or in *link* mode) X and Facebook get text with a link. An error on one platform does not block the other. The report goes to Telegram (with a 🔁 button for failed ones) and to the panel history.
+5. **Publishing**: X → Facebook. Without an image (or in *link* mode) X and Facebook get text with a link. An error on one platform does not block the other. The report goes to Telegram (with a 🔁 button for failed ones) and to the panel history. When a platform does not answer (e.g. a timeout), the post may still be out – the report marks it ⚠️ *not sure*, 🔁 skips it, and the “✅ It's on the profile” and “📤 Not there – send” buttons mark the post as published or send it again.
 6. **Errors**: the workflow is its own *Error Workflow*. It reports the error to the panel, which saves it with the bot and sends a Telegram alert.
 
 ### Text and images through the panel (AI router)

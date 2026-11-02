@@ -85,7 +85,14 @@ const telegram = new Telegram(store, {
     await runner.start(bot, {
       kind: 'publish',
       trigger: 'telegram',
-      extra: { draftId: ctx.draftId, chatId: ctx.chatId, messageId: ctx.messageId, approvedBy: ctx.from },
+      // unknown: 'retry' | 'confirm' – decyzja po niepewnej publikacji (brak odpowiedzi platformy)
+      extra: {
+        draftId: ctx.draftId,
+        chatId: ctx.chatId,
+        messageId: ctx.messageId,
+        approvedBy: ctx.from,
+        ...(ctx.unknown ? { unknown: ctx.unknown } : {}),
+      },
     });
   },
   onReject: async (draft, ctx) => {

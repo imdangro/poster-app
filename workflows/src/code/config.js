@@ -28,7 +28,14 @@ if (mode === 'publish') {
   const draftId = str(body.draftId);
   // ID trafia do ścieżki pliku – tylko bezpieczne znaki
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(draftId)) throw new Error(tr('Niepoprawne ID draftu: {0}', draftId.slice(0, 50)));
-  publish = { draftId, chatId: body.chatId, messageId: body.messageId || null, approvedBy: str(body.approvedBy, 'Telegram') };
+  publish = {
+    draftId,
+    chatId: body.chatId,
+    messageId: body.messageId || null,
+    approvedBy: str(body.approvedBy, 'Telegram'),
+    // po niepewnej publikacji (brak odpowiedzi platformy): retry – wyślij ponownie, confirm – post jest na profilu
+    unknown: ['retry', 'confirm'].includes(body.unknown) ? body.unknown : '',
+  };
 }
 // Własny post: teksty na wybrane platformy (AI dopasowało je w panelu albo to tekst autora) i grafika z panelu
 let compose = null;

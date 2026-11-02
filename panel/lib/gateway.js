@@ -4,7 +4,7 @@
 // (token bota Telegram, token konta X albo strony FB itd.) i przekazuje je dalej.
 // Dzięki temu sekrety nie trafiają do historii wykonań n8n, a każdy bot może mieć własne konta.
 const { Readable } = require('stream');
-const { HttpError, readBody, sendJson } = require('./util');
+const { HttpError, readBody, sendJson, noAnswer } = require('./util');
 const { UPSTREAM } = require('./accounts');
 const { tr } = require('./i18n');
 
@@ -124,7 +124,15 @@ class Gateway {
           signal: AbortSignal.timeout(15 * 60 * 1000),
         });
       } catch (e) {
-        throw new HttpError(502, tr('Panel nie może połączyć się z {0}: {1}', new URL(url).host, e.cause?.code || e.message));
+        const host = new URL(url).host;
+        // 504: zapytanie wysłane, ale bez odpowiedzi – np. post mógł się opublikować (workflow pokaże „nie wiadomo”
+        // i nie ponowi go bez potwierdzenia); 502: połączenie się nie udało, nic nie zostało wysłane
+        if (noAnswer(e))
+          throw new HttpError(
+            504,
+            tr('Brak odpowiedzi od {0}: {1}', host, e.name === 'TimeoutError' ? tr('przekroczono czas') : e.cause?.code || e.code),
+          );
+        throw new HttpError(502, tr('Panel nie może połączyć się z {0}: {1}', host, e.cause?.code || e.message));
       }
       const loc = res.headers.get('location');
       if (res.status >= 300 && res.status < 400 && loc && ['GET', 'HEAD'].includes(method)) {
