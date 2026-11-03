@@ -60,7 +60,11 @@ class Accounts {
     const s = String(url || '').trim();
     const get = (k) => {
       const m = s.match(new RegExp(`[?&#]${k}=([^&#]*)`));
-      return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+      try {
+        return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+      } catch (e) {
+        throw new HttpError(400, tr('Niepoprawny adres')); // np. „%” bez kodu znaku
+      }
     };
     const error = get('error_description') || get('error');
     if (!get('code'))

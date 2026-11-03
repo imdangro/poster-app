@@ -22,13 +22,19 @@ die() { printf '\033[1;31m[%s]\033[0m %s\n' "$(m błąd error)" "$*" >&2; exit 1
 command -v docker >/dev/null || die "$(m "Brak polecenia docker." "The docker command is missing.")"
 
 KEY=.git/poster-deploy-key
+KNOWN=.git/poster-known-hosts
 # Udziały NAS-a (np. UGOS) często wymuszają uprawnienia 0777 na plikach, a ssh odrzuca klucz dostępny
 # dla innych („UNPROTECTED PRIVATE KEY FILE”). Dlatego przy każdym połączeniu git w kontenerze kopiuje
 # klucz do swojego /tmp z uprawnieniami 600 (umask 077) i używa tej kopii – znika razem z kontenerem.
-SSH_COMMAND="umask 077; cat /git/$KEY > /tmp/poster-deploy-key; ssh -i /tmp/poster-deploy-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/git/.git/poster-known-hosts"
+# Klucz hosta GitHuba jest znany z góry (scripts/github-known-hosts) – ssh nie ufa kluczowi z pierwszego połączenia.
+SSH_COMMAND="umask 077; cat /git/$KEY > /tmp/poster-deploy-key; ssh -i /tmp/poster-deploy-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/git/$KNOWN"
 
 # git w kontenerze (na NAS-ie nie trzeba instalować gita); safe.directory – patrz scripts/update.sh
-dgit() { docker run --rm -v "$PWD":/git alpine/git -c safe.directory=/git "$@"; }
+# git w kontenerze: obraz przypięty digestem (kompilacja alpine/git z 25.10.2026) – skrypty działają jako root
+# z całym katalogiem projektu, więc nowa wersja obrazu nie trafi tu bez wydania Postera. Ta sama wartość jest
+# w scripts/update.sh, upgrade-to-pro.sh, setup-deploy-key.sh i docs/install.sh (test panel/test/scripts.test.js).
+GIT_IMAGE=alpine/git:3ed2e3d@sha256:e8ceedc73bd80992ae8d58a7d24c58b8322146c354f1d2e81a97db4452068ec0
+dgit() { docker run --rm -v "$PWD":/git "$GIT_IMAGE" -c safe.directory=/git "$@"; }
 
 ORIGIN="$(dgit remote get-url origin)" || die "$(m "Nie mogę odczytać adresu repozytorium (git remote get-url origin)." \
   "Cannot read the repository address (git remote get-url origin).")"
@@ -45,7 +51,7 @@ if [ ! -f "$KEY" ]; then
   if command -v ssh-keygen >/dev/null; then
     ssh-keygen -q -t ed25519 -N "" -C "poster-nas" -f "$KEY"
   else
-    docker run --rm -v "$PWD":/git --entrypoint ssh-keygen alpine/git -q -t ed25519 -N "" -C "poster-nas" -f "/git/$KEY"
+    docker run --rm -v "$PWD":/git --entrypoint ssh-keygen "$GIT_IMAGE" -q -t ed25519 -N "" -C "poster-nas" -f "/git/$KEY"
   fi
 fi
 chmod 600 "$KEY" 2>/dev/null || true # na części udziałów NAS nie działa – patrz SSH_COMMAND
@@ -84,6 +90,7 @@ fi
 read -r -p "$(m "Gdy klucz jest dodany na GitHubie, naciśnij Enter... " "When the key is added on GitHub, press Enter... ")" _
 
 # 2) Git w kontenerze używa klucza, a repozytorium pobieramy przez SSH
+cp scripts/github-known-hosts "$KNOWN"
 dgit config core.sshCommand "$SSH_COMMAND"
 dgit config ssh.variant ssh # polecenie zaczyna się od „umask”, więc mówimy gitowi wprost, że to OpenSSH
 dgit remote set-url origin "git@github.com:$SLUG.git"

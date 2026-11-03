@@ -6,7 +6,7 @@ const { Store, sanitizeBot, defaultBot } = require('../lib/store');
 const { tmpDir } = require('./helpers');
 
 test('kanał YouTube jest w wersji PRO – bot zostaje botem newsowym', () => {
-  const store = new Store(tmpDir(), {}, tmpDir());
+  const store = new Store(tmpDir());
   const bot = store.addBot({ name: 'Bot' });
   assert.equal(sanitizeBot({ mode: 'youtube' }, bot).mode, 'news');
   assert.equal(defaultBot('abc123').youtube, undefined);

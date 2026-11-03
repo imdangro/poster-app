@@ -7,7 +7,7 @@ const { Store, defaultBot } = require('../lib/store');
 const { tmpDir } = require('./helpers');
 
 test('Threads i Bluesky są w wersji PRO', () => {
-  const store = new Store(tmpDir(), {}, tmpDir());
+  const store = new Store(tmpDir());
   const bot = store.addBot({ name: 'Bot' });
   assert.equal(bot.publishing.threads, undefined);
   assert.equal(defaultBot('abc123').accounts.bluesky, undefined);

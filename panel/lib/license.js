@@ -151,13 +151,14 @@ function summaryOf(st, result) {
   return { state, updatesUntil: st.expiresAt || null, checkedAt: st.checkedAt, keyEnd: keyEnd(st.key) };
 }
 
-// Zapisuje stan (tylko root) i podsumowanie dla panelu (użytkownik kontenera panelu musi je przeczytać)
+// Zapisuje stan (tylko root) i podsumowanie dla panelu (użytkownik kontenera panelu musi je przeczytać). Właściciela
+// podsumowania root ustawia na deskryptorze pliku tymczasowego (writeJsonAtomic), a nie chown po ścieżce: data/panel
+// należy do kontenera panelu, więc podmienione tam dowiązanie symboliczne nie może przekierować zapisu ani chown.
 function save(projectDir, dataDir, st, result) {
   writeJsonAtomic(statePath(projectDir), st, 0o600);
   fs.mkdirSync(dataDir, { recursive: true });
-  const file = path.join(dataDir, SUMMARY_FILE);
-  writeJsonAtomic(file, summaryOf(st, result), 0o640);
-  if (process.getuid && process.getuid() === 0) fs.chownSync(file, PANEL_UID, PANEL_UID);
+  const owner = process.getuid && process.getuid() === 0 ? { uid: PANEL_UID, gid: PANEL_UID } : null;
+  writeJsonAtomic(path.join(dataDir, SUMMARY_FILE), summaryOf(st, result), 0o640, { owner });
 }
 
 // Wyniki bez rozstrzygającej odpowiedzi Polara

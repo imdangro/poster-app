@@ -18,12 +18,13 @@ module.exports = {
   'Metoda niedozwolona': 'Method not allowed',
   'Nie znaleziono': 'Not found',
   'Błąd serwera: {0}': 'Server error: {0}',
+  'Błąd serwera – szczegóły są w logach panelu (sudo docker compose logs panel)':
+    'Server error – details are in the panel logs (sudo docker compose logs panel)',
   'Nieprawidłowy PANEL_INTERNAL_TOKEN': 'Invalid PANEL_INTERNAL_TOKEN',
   'Odczyt X:': 'Reading X:',
   'Brak treści zapytania do AI': 'The AI request is empty',
   'Nie ma takiego adresu': 'No such address',
   'API dla n8n: port {0}': 'API for n8n: port {0}',
-  'Pierwsze uruchomienie: przeniesiono ustawienia z .env (botów: {0}).': 'First start: settings moved from .env (bots: {0}).',
   'Pierwsze uruchomienie: pusta konfiguracja – otwórz panel, ustaw hasło i dodaj bota.':
     'First start: empty configuration – open the panel, set a password and add a bot.',
   'Nieobsłużony błąd:': 'Unhandled error:',
@@ -104,6 +105,8 @@ module.exports = {
   'OK – {0} wpisów': 'OK – {0} items',
   'Nie ma takiego draftu': 'No such draft',
   'Wymagany JSON': 'JSON required',
+  'Odrzucono zapytanie z innej strony – otwórz panel bezpośrednio jego adresem':
+    'Request from another site rejected – open the panel directly at its address',
   'Nie ma takiego adresu API': 'No such API address',
   'Kod do ustawienia hasła panelu: {0} – wpisz go w przeglądarce razem z nowym hasłem.':
     'Panel setup code: {0} – enter it in the browser together with your new password.',
@@ -120,7 +123,20 @@ module.exports = {
   'Panel nie może połączyć się z {0}: {1}': 'The panel cannot connect to {0}: {1}',
   'Brak odpowiedzi od {0}: {1}': 'No response from {0}: {1}',
   'Zbyt wiele przekierowań': 'Too many redirects',
+  'Bramka: zablokowano {0} – workflow Postera nie wysyła takich zapytań':
+    'Gateway: blocked {0} – the Poster workflow does not send such requests',
+  'Bramka panelu przepuszcza tylko zapytania workflow Postera – {0} jest zablokowane':
+    'The panel gateway lets through only requests of the Poster workflow – {0} is blocked',
+  '{0} prowadzi do sieci lokalnej ({1})': '{0} leads to the local network ({1})',
+  'niepoprawny adres: {0}': 'invalid address: {0}',
+  '{0} – tylko adresy http i https': '{0} – only http and https addresses',
+  '{0} – port {1} (Poster pobiera tylko z portów 80 i 443)': '{0} – port {1} (Poster downloads only from ports 80 and 443)',
+  '{0} prowadzi do sieci lokalnej': '{0} leads to the local network',
+  'za dużo przekierowań ({0})': 'too many redirects ({0})',
+  'niepoprawne przekierowanie: {0}': 'invalid redirect: {0}',
+  'pominięto adres z kanału: {0}': 'skipped an address from the feed: {0}',
   'brak odpowiedniego zdjęcia w źródle': 'no suitable photo in the source',
+  'skończył się czas na tekst ({0} min)': 'ran out of time for the text ({0} min)',
   'link Google News nie prowadzi wprost do artykułu – dodaj bezpośredni kanał RSS portalu':
     "the Google News link does not lead directly to the article – add the site's own RSS feed",
   'brak tokenu bota Telegram (Ustawienia)': 'no Telegram bot token (Settings)',
@@ -131,14 +147,26 @@ module.exports = {
   'odczyt X nie działa od {0} – konto-czytnik (TWITTER_AUTH_TOKEN) jest wylogowane lub zablokowane; podmień token w .env (README → „Źródło X”)':
     'reading X has been down since {0} – the reader account (TWITTER_AUTH_TOKEN) is signed out or blocked; replace the token in .env (README → “X source”)',
   '{0} włączony, ale bez podłączonego konta': '{0} is on, but no account is connected',
+  'czat draftów to grupa bez listy administratorów – drafty może zatwierdzić każdy jej uczestnik; wpisz ID administratorów (Ustawienia → Telegram)':
+    'the drafts chat is a group without an admin list – any member can approve drafts; enter the admin IDs (Settings → Telegram)',
   'n8n nie odpowiada ({0}) – czy kontener poster-n8n działa?': 'n8n is not responding ({0}) – is the poster-n8n container running?',
   'przekroczono czas': 'timed out',
   'n8n nie zna webhooka „poster” – zaimportuj i opublikuj workflow: sudo bash scripts/import-to-n8n.sh':
     'n8n does not know the “poster” webhook – import and publish the workflow: sudo bash scripts/import-to-n8n.sh',
+  'n8n odrzucił token panelu – utwórz poświadczenie webhooka ponownie: sudo bash scripts/import-to-n8n.sh':
+    'n8n rejected the panel token – create the webhook credential again: sudo bash scripts/import-to-n8n.sh',
   'n8n zwrócił HTTP {0}: {1}': 'n8n returned HTTP {0}: {1}',
   'n8n odrzucił zapytanie – PANEL_INTERNAL_TOKEN w n8n i panelu się różni (sudo docker compose up -d)':
     'n8n rejected the request – PANEL_INTERNAL_TOKEN differs between n8n and the panel (sudo docker compose up -d)',
   'Bot „{0}” nie może wystartować: {1}': 'The bot “{0}” cannot start: {1}',
+  'Niepoprawny adres': 'Invalid address',
+  'Zamykam panel ({0}) – czekam najwyżej {1} s na trwające zadania…':
+    'Shutting down the panel ({0}) – waiting up to {1} s for running tasks…',
+  'Usuwanie starych draftów: 0 (nie usuwaj) albo od 7 do 3650 dni': 'Deleting old drafts: 0 (do not delete) or 7 to 3650 days',
+  'Usunięto stare drafty (starsze niż {0} dni): {1}': 'Deleted old drafts (older than {0} days): {1}',
+  'Nie wszystkie zadania skończyły się w {0} s – zamykam mimo to': 'Not all tasks finished within {0} s – shutting down anyway',
+  'Ten draft właśnie się publikuje – poczekaj na raport w Telegramie':
+    'This draft is being published right now – wait for the report in Telegram',
   'Harmonogram:': 'Schedule:',
   'Harmonogram: uruchomiono bota {0} ({1})': 'Schedule: started the bot {0} ({1})',
   'Harmonogram: bot {0} – {1}': 'Schedule: bot {0} – {1}',
@@ -183,8 +211,6 @@ module.exports = {
   'Callback URI dla X musi być adresem http(s)': 'The X Callback URI must be an http(s) address',
   'Wersja Graph API ma format v24.0': 'The Graph API version has the format v24.0',
   '{0}: adres API musi zaczynać się od http:// lub https://': '{0}: the API address must start with http:// or https://',
-  'Mój bot': 'My bot',
-  'Migracja z .env: pominięto niepoprawne wartości –': 'Migration from .env: invalid values skipped –',
   'Zapis state.json nie powiódł się:': 'Saving state.json failed:',
   'Nie ma takiego bota (może został usunięty)': 'No such bot (maybe it was deleted)',
   'Wersja LITE ma jednego bota – więcej botów daje wersja PRO.': 'The LITE version has one bot – the PRO version gives you more bots.',
@@ -203,6 +229,8 @@ module.exports = {
   'Pominięto kliknięcie spoza dozwolonego czatu/użytkownika': 'Ignored a click from a chat/user that is not allowed',
   '⛔ Brak uprawnień': '⛔ Not allowed',
   'Nie znaleziono draftu na dysku': 'Draft not found on disk',
+  '⏳ Ten draft właśnie się publikuje – wynik przyjdzie w raporcie':
+    '⏳ This draft is being published right now – the result will come in the report',
   '❌ Odrzucono': '❌ Rejected',
   '❌ Odrzucono ({0})': '❌ Rejected ({0})',
   '⏳ Publikuję…': '⏳ Publishing…',
@@ -211,6 +239,12 @@ module.exports = {
   '❌ Odrzuć': '❌ Reject',
   '❗ Nie udało się uruchomić publikacji: {0}': '❗ Could not start publishing: {0}',
   'Nie można odczytać {0}: {1}': 'Cannot read {0}: {1}',
+  'Plik {0} jest uszkodzony, a jego kopii (.bak) brak albo też jest uszkodzona – popraw plik albo go usuń (panel zacznie wtedy od pustych danych)':
+    'The file {0} is damaged and its copy (.bak) is missing or damaged too – fix the file or delete it (the panel then starts with empty data)',
+  'Plik {0} był uszkodzony – użyto poprzedniej wersji (.bak), a uszkodzony zapisano jako {1}':
+    'The file {0} was damaged – the previous version (.bak) was used, and the damaged file was saved as {1}',
+  'Plik {0} był uszkodzony – start od pustych danych, a uszkodzony zapisano jako {1}':
+    'The file {0} was damaged – starting with empty data, and the damaged file was saved as {1}',
   'Zbyt duże zapytanie': 'Request too large',
   'Niepoprawny JSON w zapytaniu': 'Invalid JSON in the request',
   'przekroczono czas ({0} s)': 'timed out ({0} s)',

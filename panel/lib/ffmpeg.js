@@ -5,7 +5,28 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 
-function ffmpeg(args, timeout) {
+// Najwyżej FFMPEG_MAX procesów ffmpeg naraz (domyślnie 2): kilka animacji i konwersji jednocześnie nie zajmie całej
+// pamięci i procesora NAS-a – kolejne czekają w kolejce
+const MAX = Math.max(1, parseInt(process.env.FFMPEG_MAX, 10) || 2);
+let running = 0;
+const waiting = [];
+const slot = () => (running < MAX ? (running++, Promise.resolve()) : new Promise((resolve) => waiting.push(resolve)));
+const release = () => {
+  const next = waiting.shift();
+  if (next) next();
+  else running--;
+};
+
+async function ffmpeg(args, timeout) {
+  await slot();
+  try {
+    return await run(args, timeout);
+  } finally {
+    release();
+  }
+}
+
+function run(args, timeout) {
   return new Promise((resolve, reject) => {
     execFile(process.env.FFMPEG_PATH || 'ffmpeg', args, { timeout, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {

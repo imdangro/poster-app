@@ -212,12 +212,16 @@ def chain(*names):
 # ------------------------------------------------------------------------------------------------
 Y_GEN, Y_PUB, Y_ERR = 200, 1200, 1900
 
+# Webhook przyjmuje tylko zapytania z nagłówkiem x-poster-token = PANEL_INTERNAL_TOKEN (Header Auth n8n): obce zapytanie
+# z sieci dostaje 403, zanim powstanie wykonanie. Poświadczenie tworzy scripts/import-to-n8n.sh przed importem workflow.
+PANEL_CREDENTIAL = {"id": "PosterPanelToken", "name": "Poster: token panelu"}
 t_hook = add(base("Start: zlecenie z panelu", "n8n-nodes-base.webhook", 2, (0, 600), {
     "httpMethod": "POST",
     "path": "poster",
+    "authentication": "headerAuth",
     "responseMode": "responseNode",
     "options": {},
-}, webhookId=uid("poster webhook")))
+}, webhookId=uid("poster webhook"), credentials={"httpHeaderAuth": PANEL_CREDENTIAL}))
 TOKEN_OK = "!!$env.PANEL_INTERNAL_TOKEN && $json.headers['x-poster-token'] === $env.PANEL_INTERNAL_TOKEN"
 respond = add(base("Odpowiedz panelowi", "n8n-nodes-base.respondToWebhook", 1.1, (220, 600), {
     "respondWith": "json",
@@ -340,13 +344,15 @@ tg_posts = http("Telegram: wyślij teksty postów", (x3 + 440, Y_GEN), "POST", T
                 json_body="={{ JSON.stringify(" + TGP + ".posts) }}", retry=(3, 5000))
 tg_script = http("Telegram: wyślij skrypt i przyciski", (x3 + 660, Y_GEN), "POST", TG + "/sendMessage",
                  json_body="={{ JSON.stringify(" + TGP + ".script) }}", retry=(3, 5000))
-# auto = publikacja od razu (Config.autoPublish): tryb automatyczny bota albo własny post z „Publikuj teraz”
+# auto = publikacja od razu (Config.autoPublish): własny post z „Publikuj teraz”
+AUTO = "(" + CFG + ".autoPublish === true)"
+HELD = ""
 DRAFT_EVENT = ("={{ JSON.stringify({ type: 'draft', runId: " + CFG + ".runId, botId: " + CFG + ".botId, "
                "draftId: " + IMGP + ".draftId, title: " + IMGP + ".news.title, "
-               "image: (" + IMGP + ".image || {}).source || 'none', auto: " + CFG + ".autoPublish === true }) }}")
+               "image: (" + IMGP + ".image || {}).source || 'none', auto: " + AUTO + HELD + " }) }}")
 rep_draft = http("Panel: zgłoś draft", (x3 + 880, Y_GEN), "POST", "{{ " + CFG + ".panelUrl }}/internal/events",
                  json_body=DRAFT_EVENT, timeout=15000, on_error="continueRegularOutput")
-auto_if = if_node("Publikować bez akceptacji?", (x3 + 1100, Y_GEN), "={{ " + CFG + ".autoPublish === true }}", "true")
+auto_if = if_node("Publikować bez akceptacji?", (x3 + 1100, Y_GEN), "={{ " + AUTO + " }}", "true")
 connect(save_draft, tg_head_if)
 connect(tg_head_if, tg_photo, out=0)
 connect(tg_head_if, tg_head, out=1)
@@ -523,9 +529,9 @@ overview_h = text_height(overview, 1150)
 sticky("overview", [], overview, 7, xy=(-40, -120 - overview_h), width=1150, height=overview_h)
 
 sticky("start", START, bi("▶️ Zlecenie z panelu · Job from the panel", [
-    "Odpowiedź od razu zwraca panelowi ID wykonania (link w historii bota). Zlecenia bez poprawnego tokenu są ignorowane. Własny post (`compose`) omija źródła i AI.",
+    "Odpowiedź od razu zwraca panelowi ID wykonania (link w historii bota). Webhook przyjmuje tylko zlecenia z tokenem panelu (poświadczenie „Poster: token panelu” z `import-to-n8n.sh`). Własny post (`compose`) omija źródła i AI.",
 ], [
-    "The response returns the execution ID to the panel at once (a link in the bot's history). Jobs without a valid token are ignored. An own post (`compose`) skips the sources and AI.",
+    "The response returns the execution ID to the panel at once (a link in the bot's history). The webhook accepts only jobs with the panel token (the “Poster: token panelu” credential from `import-to-n8n.sh`). An own post (`compose`) skips the sources and AI.",
 ]),
        5, head=140, height=290)  # niższa notatka – nie nachodzi na notatkę publikacji
 sticky("sources", [src, rss, norm, apify_if, apify, norm_apify, fresh, dedup], bi("1️⃣ Źródła + deduplikacja · Sources + deduplication", [

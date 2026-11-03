@@ -151,7 +151,8 @@ sudo bash scripts/update.sh
 `update.sh` runs, in order:
 1. pulls the new version from GitHub (`git pull` in the `alpine/git` container, no git installation needed);
 2. `init-nas.sh`: adds missing auto-generated keys to `.env` and fixes the permissions of `data/`, without changing existing values;
-3. `docker compose up -d --build`: rebuilds the panel image and restarts the containers;
+3. pulls new n8n and RSSHub images, rebuilds the panel on an up-to-date base image (security fixes of Node.js, Alpine
+   and ffmpeg) and restarts the containers – without a connection to Docker Hub the current images stay (`--no-images` skips this step);
 4. `import-to-n8n.sh`: imports the new workflow (same ID, replaces the old one), publishes it and restarts n8n.
 
 What changed and whether a version needs anything more – [CHANGELOG.md](CHANGELOG.md).
@@ -355,9 +356,10 @@ These messages in the n8n logs are **harmless**:
 
 ### Step 6. n8n: owner account and workflow import
 
-1. Open `http://NAS_IP:5678` and create the **owner account** right away – until it exists, anyone on your network
-   can create it. The one-command installer creates it by itself.
-2. Import and publish the workflow: `sudo bash scripts/import-to-n8n.sh`. The workflow needs no n8n credentials.
+1. Import and publish the workflow: `sudo bash scripts/import-to-n8n.sh`. The script creates the **n8n owner account**
+   right away (login `admin@poster.local`, a random password – it shows it once, save it), because until the account
+   exists, anyone on your network can create it. An account you created earlier at `http://NAS_IP:5678` stays as it is.
+   It also creates the only n8n credential, “Poster: token panelu”: the job webhook accepts only requests with the panel token.
 
 ### Step 7. Panel: password, keys, first bot
 
@@ -382,7 +384,7 @@ These messages in the n8n logs are **harmless**:
 
 | Place | What is there |
 |---|---|
-| **Dashboard** | Status of n8n, Telegram, Gemini and the X reader account. The bot card with the next run, the last result and the platforms. *Write a post*, *Run now* and *Pause/Resume* buttons. A table of recent activity with links to the draft and to the n8n execution |
+| **Dashboard** | Status of n8n, Telegram, Gemini and the X reader account (and a warning when less than 1 GB is left on the disk). The bot card with the next run, the last result and the platforms. *Write a post*, *Run now* and *Pause/Resume* buttons. A table of recent activity with links to the draft and to the n8n execution |
 | **New post** | Your own post: text, link, photo (from the disk or the camera), X and Facebook, a hint for AI. *Adapt to platforms* – AI writes a version for every platform, *No AI* – your text within the platform limits. You edit the versions before sending: *Send for approval* or *Publish now* |
 | **Bot → General** | Name, topic, brand name, post language, **additional instructions for AI** (tone, audience, topics to avoid) |
 | **Bot → Sources** | RSS feeds with a *Test* button (a website address is enough – the panel finds its feed) and a Google News wizard. X profiles (RSSHub / Apify / off) with a test via RSSHub. Maximum news age, number of candidates for AI |
@@ -393,7 +395,7 @@ These messages in the n8n logs are **harmless**:
 | **Bot → History** | The bot's runs and drafts |
 | **Bot → Advanced** | Duplicate memory (reset), **deleting the bot** |
 | **Drafts** | Draft gallery with images, texts to copy (also for posting to Instagram and TikTok by hand), publishing results and downloading the image |
-| **Settings** | Gemini key, **AI providers** (Ollama, custom OpenAI-compatible API), Telegram bot (+ chat ID detection, admins), X app, Graph API version, Apify, **panel language**, panel password, **PRO edition** (license key after the purchase) |
+| **Settings** | Gemini key, **AI providers** (Ollama, custom OpenAI-compatible API), Telegram bot (+ chat ID detection, admins), X app, Graph API version, Apify, **panel language**, **draft files** (deleting old ones, free disk space), panel password, **PRO edition** (license key after the purchase) |
 
 <details>
 <summary>📸 Screenshots: new post, schedule, text and costs, drafts, phone</summary>
@@ -476,6 +478,7 @@ for the bot's settings.
 
 When the article has no photo, X and Facebook get a post with a link.
 Google News links do not lead straight to the article – for photos add the portal's direct RSS feed.
+The panel downloads article photos and pages only from the internet – from the local network only from the hosts of the RSS feeds set in the bot (e.g. a blog on the NAS).
 
 ⚖️ Photos from articles are protected by copyright. Publish them only when you have the right to (your own sources, an agency license). When in doubt, choose a **post with a link** – it is the standard, safe way to share news.
 
@@ -493,7 +496,7 @@ Google News links do not lead straight to the article – for photos add the por
 1. In [@BotFather](https://t.me/BotFather) send `/newbot`. Paste the token in **panel → Settings → Telegram** and click *Check token*.
 2. Send `/start` to your bot. The bot replies with the chat ID, and the **Detect** button fills it in for you.
    For a group, add the bot to the group and send `/start` there.
-3. In a group also enter the **admin IDs** (your user ID), so that only you can click ✅.
+3. In a group also enter the **admin IDs** (your user ID), so that only you can click ✅ – without this list any member of the group can approve drafts (the panel warns about it next to the bot).
 4. If the Telegram bot had a webhook before, remove it: `curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"`.
 
 ### Google Gemini
@@ -594,19 +597,24 @@ The *Grafika: przygotuj* node turns `data` into a binary file (it goes to `sendP
 
 | Task | How |
 |---|---|
-| Updating Poster | `sudo bash scripts/update.sh` (pull, fill in `.env`, rebuild, import the workflow) |
+| Updating Poster | `sudo bash scripts/update.sh` (pull, fill in `.env`, new images and rebuild, import the workflow) |
 | Changing the schedule, topic, models, platforms | panel → bot. Changes apply from the next run, without restarts |
 | Changing the LLM prompt | style: *Bot → General → Additional instructions for AI*; the whole prompt: `workflows/src/code/build_prompt.js` + `python3 workflows/src/build.py` (a change made only in n8n disappears with the next workflow import) |
 | Resetting deduplication | panel → bot → *Advanced → Clear memory* |
-| Updating n8n | back up, then `N8N_VERSION=…` in `.env` → `sudo docker compose pull && sudo docker compose up -d` |
-| Backup | `sudo tar czf poster-backup-$(date +%F).tgz data .env`: `data/` holds the n8n database, the panel settings and keys, and the drafts; `.env` holds the encryption key |
+| Updating n8n | together with Poster (`update.sh`): n8n in the version tested with the workflow of this release. Pinning another version: back up, then `N8N_VERSION=…` in `.env` → `sudo docker compose pull && sudo docker compose up -d` |
+| Backup | `sudo sh -c 'tar czf - data .env \| openssl enc -aes-256-cbc -pbkdf2 -out poster-backup-$(date +%F).tgz.enc'` – asks for a password for the copy. `data/` holds the n8n database, the settings, API keys and account tokens, and the drafts, and `.env` holds the encryption key, so keep the copy encrypted. Restoring in the project directory: `sudo sh -c 'openssl enc -d -aes-256-cbc -pbkdf2 -in poster-backup-YYYY-MM-DD.tgz.enc \| tar xzf -'` |
 | Viewing drafts | panel → *Drafts*, or the `docker/poster/data/files` folder (SMB) |
+| Disk space | drafts (text, image, video) stay in `data/files` until you delete them. *Settings → Draft files → Delete drafts older than* (e.g. 90 days; 0 = do not delete, the default) – every 6 hours the panel deletes all files of drafts that nothing has changed for that many days. The free space is shown there too; below 1 GB the Dashboard and `/healthz` warn |
 | n8n execution history | pruned after 7 days (`EXECUTIONS_DATA_MAX_AGE=168`) |
 | Resetting the panel password | `sudo docker compose exec panel node reset-password.js` – logs out all sessions and prints a code to set a new password in the browser (no panel restart) |
-| Forgotten n8n password | `sudo docker compose exec n8n n8n user-management:reset`, then right away open `http://NAS_IP:5678` and create the owner account again. The workflow and the execution history stay |
+| Logging out on all devices | panel → *Settings → Panel password → Log out on all devices* (e.g. after losing a phone) – the password stays the same |
+| Monitoring | `http://NAS_IP:7080/healthz` (no sign-in) – HTTP 200 and `"ok":true` when n8n, receiving Telegram messages and the schedule work and at least 1 GB of disk space is free; 503 on a problem. E.g. Uptime Kuma: an *HTTP(s) – Keyword* monitor with the keyword `"ok":true` |
+| Memory limits | `PANEL_MEMORY`, `N8N_MEMORY`, `RSSHUB_MEMORY` in `.env` (empty = 1g, 2g, 1g), then `sudo docker compose up -d`. Docker restarts a container that goes over its limit |
+| Forgotten n8n password | `sudo docker compose exec n8n n8n user-management:reset`, then right away `sudo bash scripts/import-to-n8n.sh` – it creates the owner account again and shows the new password. The workflow and the execution history stay |
 
 ## Troubleshooting
 
+- **The update ends with “Nie udało się zainstalować ffmpeg (apk)” (ffmpeg could not be installed).** Building the panel did not download ffmpeg from the Alpine package server (no internet or a temporary server failure). The current version keeps running – check the NAS's connection and run `sudo bash scripts/update.sh` again.
 - **Dashboard: “n8n is not responding” / “n8n does not know the “poster” webhook”.** The n8n container is not running or the workflow is not published. Run `sudo docker compose ps` and `sudo bash scripts/import-to-n8n.sh`.
 - **“n8n rejected the request – PANEL_INTERNAL_TOKEN…”.** The containers have different tokens: after changing `.env` run `sudo docker compose up -d` (restarts both).
 - **No new drafts.** The Dashboard shows the status of every run:
@@ -618,6 +626,8 @@ The *Grafika: przygotuj* node turns `data` into a binary file (it goes to `sendP
 - **X: 403 on upload.** The app has *Read only* permissions or the token lacks `media.write`. Fix the settings in the X portal and connect the account again.
 - **“Reading X is down” (alert / red tile).** The reader account was logged out or blocked, or the proxy does not work. Replace `TWITTER_AUTH_TOKEN` (see “X source”), run `sudo docker compose up -d rsshub` and click *Check profiles via RSSHub*.
 - **Posts without photos, although the articles have them.** The source is Google News (the links do not lead to the article) or the portal blocks downloading. Add the portal's direct RSS feed; the warning is visible in the draft caption in Telegram.
+- **“skipped an address from the feed: … leads to the local network” in a draft.** The article's photo or page is on the local network (e.g. a blog on the NAS) under a different name than the bot's RSS feed. In *Sources* enter the feed under the same name as the site, e.g. `https://blog.example.com/feed` – the panel downloads from the hosts of the bot's feeds also on the local network.
+- **“🔍 Check the text – addresses or contacts that are not in the source” in a draft.** AI added a website address, an @account, an e-mail or a phone number that is neither in the news nor in the bot's settings – e.g. it followed an instruction smuggled into someone else's feed. Check the text before ✅. Brand addresses and accounts that AI should add go in *Bot → General → Additional instructions for AI* – then they are not flagged.
 - **SSRF protection (optional).** After enabling `N8N_SSRF_PROTECTION_ENABLED=true` add `N8N_SSRF_ALLOWED_HOSTNAMES=rsshub,panel`, otherwise n8n cannot connect to RSSHub and the panel in the Docker network.
 - **Buttons do not react.** Check the Telegram tile on the Dashboard. Clicks are accepted only from the chat in Settings; with an admin list, only from them.
 - **“Bot … has no connected X account/Facebook page”.** The platform is on in *Publishing*, but the account is not connected in the bot's *Accounts* tab.

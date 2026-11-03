@@ -15,7 +15,7 @@ test('stary config.json: brakujące pola bota dostają wartości domyślne', () 
     bots: [{ id: 'abc123', name: 'Stary bot', topic: 'technologie', paused: false, sources: { rss: ['https://example.com/rss'] } }],
   };
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(old));
-  const store = new Store(dir, {}, tmpDir());
+  const store = new Store(dir);
   const bot = store.bot('abc123');
   assert.ok(bot, 'bot wczytany');
   assert.equal(bot.name, 'Stary bot');
@@ -24,7 +24,7 @@ test('stary config.json: brakujące pola bota dostają wartości domyślne', () 
   assert.deepEqual(bot.sources.rss, ['https://example.com/rss']);
   for (const key of Object.keys(defaultBot('x'))) assert.ok(key in bot, `pole ${key}`);
   assert.equal(store.global.telegram.chatId, '-100123');
-  assert.equal(store.migrated, false);
+  assert.equal(store.firstStart, false);
 });
 
 test('config sprzed usunięcia grafiki AI: grafika marki zamiast AI, bez Veo i limitów, jeden klucz Gemini', () => {
@@ -56,7 +56,7 @@ test('config sprzed usunięcia grafiki AI: grafika marki zamiast AI, bez Veo i l
     telegramBotToken: 't',
   };
   fs.writeFileSync(path.join(dir, 'secrets.json'), JSON.stringify({ global: secrets, bots: {} }));
-  const store = new Store(dir, {}, tmpDir());
+  const store = new Store(dir);
   const a = store.bot('abc123');
   assert.equal(a.content.imageMode, 'source');
   assert.equal(a.content.imageFallback, 'brand');
@@ -72,23 +72,38 @@ test('config sprzed usunięcia grafiki AI: grafika marki zamiast AI, bez Veo i l
   assert.deepEqual(store.secrets.global, saved);
 });
 
-test('pierwsze uruchomienie bez .env: pusta konfiguracja', () => {
-  const store = new Store(tmpDir(), {}, tmpDir());
-  assert.equal(store.migrated, true);
+test('pierwsze uruchomienie: pusta konfiguracja zapisana od razu, kolejny start już nie „pierwszy”', () => {
+  const store = new Store(tmpDir());
+  assert.equal(store.firstStart, true);
   assert.deepEqual(store.bots, []);
+  assert.ok(fs.existsSync(path.join(store.dir, 'config.json')));
+  assert.equal(new Store(store.dir).firstStart, false);
 });
 
 test('język panelu: stara konfiguracja zostaje po polsku, nowa czeka na wybór', () => {
   const dir = tmpDir();
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ version: 1, global: {}, bots: [] }));
-  assert.equal(new Store(dir, {}, tmpDir()).global.ui.language, 'pl');
-  const fresh = new Store(tmpDir(), {}, tmpDir());
+  assert.equal(new Store(dir).global.ui.language, 'pl');
+  const fresh = new Store(tmpDir());
   assert.equal(fresh.global.ui.language, '');
   // po zapisie wybór zostaje (także pusty) – ponowne wczytanie nie zamienia go na polski
-  const again = new Store(fresh.dir, {}, tmpDir());
+  const again = new Store(fresh.dir);
   assert.equal(again.global.ui.language, '');
   again.updateGlobal({ ui: { language: 'en' } });
-  assert.equal(new Store(fresh.dir, {}, tmpDir()).global.ui.language, 'en');
+  assert.equal(new Store(fresh.dir).global.ui.language, 'en');
   again.updateGlobal({ ui: { language: 'de' } });
   assert.equal(again.global.ui.language, 'en', 'nieznany język ignorowany');
+});
+
+test('pamięć duplikatów: plik czytany raz (potem z pamięci), zmiany zapisane na dysku, wyczyszczenie – od nowa', () => {
+  const dir = tmpDir();
+  const store = new Store(dir);
+  const bot = store.addBot({ name: 'Newsy' });
+  assert.equal(store.dedupFilter(bot.id, [{ id: 'a' }, { id: 'b' }]).length, 2);
+  assert.equal(store.dedupLoad(bot.id), store.dedupLoad(bot.id), 'ten sam obiekt – bez ponownego parsowania pliku');
+  assert.equal(store.dedupCount(bot.id), 2);
+  assert.equal(new Store(dir).dedupCount(bot.id), 2, 'zapisane na dysku');
+  store.dedupReset(bot.id);
+  assert.equal(store.dedupCount(bot.id), 0);
+  assert.equal(store.dedupFilter(bot.id, [{ id: 'a' }]).length, 1);
 });

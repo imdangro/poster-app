@@ -18,9 +18,11 @@ let mock;
 let base;
 before(async () => {
   mock = http.createServer((req, res) => {
-    req.resume();
+    let body = '';
+    req.on('data', (c) => (body += c));
     req.on('end', () => {
-      if (req.url.endsWith('/drop')) return req.socket.destroy();
+      // przez bramkę (dozwolone ścieżki workflow) zerwanie połączenia zamawia treść zapytania
+      if (req.url.endsWith('/drop') || body.includes('"drop"')) return req.socket.destroy();
       if (req.url.endsWith('/hang')) return;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end('{"ok":true,"result":{}}');
@@ -55,7 +57,7 @@ test('brak odpowiedzi: przekroczony czas i zerwane połączenie – tak; odmowa 
 });
 
 test('bramka: połączenie zerwane po wysłaniu – 504 „Brak odpowiedzi”; nieudane połączenie – 502', async () => {
-  const store = new Store(tmpDir(), {}, tmpDir());
+  const store = new Store(tmpDir());
   store.secrets.global.telegramBotToken = '123:abc';
   store.secrets.global.apifyToken = 'apify-token';
   const saved = { telegram: UPSTREAM.telegram, apify: UPSTREAM.apify };
@@ -65,14 +67,15 @@ test('bramka: połączenie zerwane po wysłaniu – 504 „Brak odpowiedzi”; n
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   const gwBase = `http://127.0.0.1:${srv.address().port}`;
   try {
-    const post = (p) => fetch(`${gwBase}${p}`, { method: 'POST', body: '{}', headers: { 'content-type': 'application/json' } });
-    const dropped = await post('/gw/_/telegram/drop');
+    const post = (p, body = {}) =>
+      fetch(`${gwBase}${p}`, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+    const dropped = await post('/gw/_/telegram/sendMessage', { drop: true });
     assert.equal(dropped.status, 504);
     assert.match((await dropped.json()).error.message, /^Brak odpowiedzi od 127\.0\.0\.1:\d+: \w+/);
-    const refused = await post('/gw/_/apify/v2/acts');
+    const refused = await post('/gw/_/apify/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items');
     assert.equal(refused.status, 502);
     assert.match((await refused.json()).error.message, /^Panel nie może połączyć się z 127\.0\.0\.1:\d+: ECONNREFUSED/);
-    const fine = await post('/gw/_/telegram/getMe');
+    const fine = await post('/gw/_/telegram/sendMessage');
     assert.equal(fine.status, 200);
   } finally {
     srv.close();
@@ -82,7 +85,7 @@ test('bramka: połączenie zerwane po wysłaniu – 504 „Brak odpowiedzi”; n
 
 test('Telegram: „✅ Jest na profilu” i „📤 Nie ma – wyślij” – zlecenie publikacji z decyzją, zwykłe ✅ bez niej', async () => {
   const filesDir = tmpDir();
-  const store = new Store(tmpDir(), {}, filesDir);
+  const store = new Store(tmpDir());
   store.updateGlobal({ telegram: { chatId: '-100777' } });
   fs.writeFileSync(path.join(filesDir, 'd1.json'), JSON.stringify({ draftId: 'd1', status: 'unknown' }));
   const published = [];
@@ -103,10 +106,13 @@ test('Telegram: „✅ Jest na profilu” i „📤 Nie ma – wyślij” – zl
     calls.push({ method, params });
     return {};
   };
-  const click = (data, chatId = -100777) =>
-    telegram.handle({
+  // publikacja rusza w tle – czekamy też na jej koniec (np. przyciski po błędzie)
+  const click = async (data, chatId = -100777) => {
+    await telegram.handle({
       callback_query: { id: 'q1', data, from: { id: 5, username: 'ania' }, message: { message_id: 9, chat: { id: chatId } } },
     });
+    await telegram.settled();
+  };
   await click('puc:d1');
   await click('pua:d1');
   await click('pub:d1');

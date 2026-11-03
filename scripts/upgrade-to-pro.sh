@@ -29,7 +29,11 @@ command -v docker >/dev/null || die "$(m "Brak polecenia docker." "The docker co
   "The project directory is not a git clone (e.g. installed from a ZIP). Install LITE with git as described in the README (you can move the data/ directory and the .env file), then run the script again.")"
 
 # git w kontenerze (na NAS-ie nie trzeba instalować gita); safe.directory – patrz scripts/update.sh
-dgit() { docker run --rm -v "$PWD":/git alpine/git -c safe.directory=/git "$@"; }
+# git w kontenerze: obraz przypięty digestem (kompilacja alpine/git z 25.10.2026) – skrypty działają jako root
+# z całym katalogiem projektu, więc nowa wersja obrazu nie trafi tu bez wydania Postera. Ta sama wartość jest
+# w scripts/update.sh, upgrade-to-pro.sh, setup-deploy-key.sh i docs/install.sh (test panel/test/scripts.test.js).
+GIT_IMAGE=alpine/git:3ed2e3d@sha256:e8ceedc73bd80992ae8d58a7d24c58b8322146c354f1d2e81a97db4452068ec0
+dgit() { docker run --rm -v "$PWD":/git "$GIT_IMAGE" -c safe.directory=/git "$@"; }
 
 ORIGIN="$(dgit remote get-url origin)" || die "$(m "Nie mogę odczytać adresu repozytorium (git remote get-url origin)." \
   "Cannot read the repository address (git remote get-url origin).")"
@@ -66,7 +70,7 @@ if [ ! -f "$PRO_KEY" ]; then
   if command -v ssh-keygen >/dev/null; then
     ssh-keygen -q -t ed25519 -N "" -C "poster-pro" -f "$PRO_KEY"
   else
-    docker run --rm -v "$PWD":/git --entrypoint ssh-keygen alpine/git -q -t ed25519 -N "" -C "poster-pro" -f "/git/$PRO_KEY"
+    docker run --rm -v "$PWD":/git --entrypoint ssh-keygen "$GIT_IMAGE" -q -t ed25519 -N "" -C "poster-pro" -f "/git/$PRO_KEY"
   fi
 fi
 chmod 600 "$PRO_KEY" 2>/dev/null || true # na części udziałów NAS nie działa – patrz PRO_SSH
@@ -105,11 +109,11 @@ esac
 
 # 3) Dostęp do repozytorium PRO: sprzedawca dodaje klucz NAS-a po aktywacji. Udziały NAS-a (np. UGOS) często wymuszają
 # uprawnienia 0777, a ssh odrzuca klucz dostępny dla innych – git w kontenerze używa więc kopii klucza z uprawnieniami 600
-# (jak scripts/setup-deploy-key.sh). Klucz hosta GitHuba jest znany z góry (github.com → SSH key fingerprints).
+# (jak scripts/setup-deploy-key.sh). Klucz hosta GitHuba jest znany z góry (scripts/github-known-hosts, opublikowany
+# przez GitHuba) – ssh nie ufa kluczowi z pierwszego połączenia.
 KNOWN=.git/poster-known-hosts
-grep -qs '^github\.com ssh-ed25519 ' "$KNOWN" ||
-  echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >>"$KNOWN"
-PRO_SSH="umask 077; cat /git/$PRO_KEY > /tmp/poster-pro-key; ssh -i /tmp/poster-pro-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/git/$KNOWN"
+cp scripts/github-known-hosts "$KNOWN"
+PRO_SSH="umask 077; cat /git/$PRO_KEY > /tmp/poster-pro-key; ssh -i /tmp/poster-pro-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/git/$KNOWN"
 pgit() { dgit -c "core.sshCommand=$PRO_SSH" -c ssh.variant=ssh "$@"; }
 
 WAIT="${POSTER_PRO_WAIT:-900}"

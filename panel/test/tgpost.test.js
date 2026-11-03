@@ -48,7 +48,7 @@ const message = (text, extra = {}) => ({
 
 test('/post w LITE: odpowiedź o wersji PRO, tylko w czacie ustawionym w Posterze', async () => {
   tg.calls.length = 0;
-  const store = new Store(tmpDir(), {}, tmpDir());
+  const store = new Store(tmpDir());
   store.secrets.global.telegramBotToken = TOKEN;
   store.global.telegram.chatId = String(CHAT);
   const telegram = new Telegram(store, { filesDir: tmpDir(), onPublish: async () => {}, onReject: async () => {} });

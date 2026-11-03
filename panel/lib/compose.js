@@ -8,8 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { HttpError, randomId } = require('./util');
-const { sniffImage } = require('./ai');
-const { imageSize } = require('./images');
+const { sniffImage, imageSize } = require('./media');
 const { promptFor } = require('./compose-prompt');
 const { tr } = require('./i18n');
 
@@ -182,6 +181,9 @@ class Compose {
     this.images = images;
     this.dir = path.join(dataDir, 'compose');
     this.recent = new Map(); // ostatnio wysłane posty (ochrona przed podwójnym kliknięciem)
+    // posty w trakcie wysyłki (ten sam klucz co w recent): drugie, równoległe zapytanie z tym samym postem (dwie karty,
+    // ponowienie przez przeglądarkę) dostaje 409, zanim n8n odpowie na pierwsze
+    this.inflight = new Set();
   }
 
   // Dane edytora dla jednego bota: platformy (włączone w bocie, konta), braki i możliwości grafiki
@@ -262,7 +264,8 @@ class Compose {
       .update(JSON.stringify(planAt ? [job.platforms, job.posts, job.link, planAt] : [job.platforms, job.posts, job.link]))
       .digest('hex')}`;
     for (const [k, t] of this.recent) if (Date.now() - t > DUPLICATE_MS) this.recent.delete(k);
-    if (this.recent.has(key)) throw new HttpError(409, tr('Ten post został przed chwilą wysłany – sprawdź Telegram i historię bota'));
+    if (this.recent.has(key) || this.inflight.has(key))
+      throw new HttpError(409, tr('Ten post został przed chwilą wysłany – sprawdź Telegram i historię bota'));
     if (upload && save) job.image.upload = this.saveUpload(upload);
     return { job, key, upload: save ? null : upload };
   }
@@ -301,34 +304,44 @@ class Compose {
       const messages = errors.map((e) => e.message);
       throw new HttpError(errors.every((e) => e.status === 409) ? 409 : 400, messages.join(' · '), { errors: messages });
     }
-    const runs = [];
-    const failed = [];
-    for (const it of items) {
-      if (it.upload) it.job.image.upload = this.saveUpload(it.upload);
-      try {
-        runs.push(await this.runner.start(it.bot, { kind: 'compose', trigger: 'manual', extra: { compose: it.job } }));
-        this.recent.set(it.key, Date.now());
-      } catch (e) {
-        if (it.job.image.upload) this.removeUpload(it.job.image.upload);
-        failed.push({ botId: it.bot.id, botName: it.bot.name, error: e.message, status: e.status || 500 });
+    // od sprawdzenia do odpowiedzi n8n posty są „w trakcie wysyłki” – rezerwacja przed pierwszym await
+    const keys = items.map((it) => it.key);
+    for (const k of keys) this.inflight.add(k);
+    try {
+      const runs = [];
+      const failed = [];
+      for (const it of items) {
+        if (it.upload) it.job.image.upload = this.saveUpload(it.upload);
+        try {
+          runs.push(await this.runner.start(it.bot, { kind: 'compose', trigger: 'manual', extra: { compose: it.job } }));
+          this.recent.set(it.key, Date.now());
+        } catch (e) {
+          if (it.job.image.upload) this.removeUpload(it.job.image.upload);
+          failed.push({ botId: it.bot.id, botName: it.bot.name, error: e.message, status: e.status || 500 });
+        }
       }
+      // nic nie wyszło – błąd jak przy jednym bocie (np. n8n nie odpowiada)
+      if (!runs.length)
+        throw new HttpError(failed[0].status, failed.map((f) => (items.length > 1 ? `${f.botName}: ${f.error}` : f.error)).join(' · '));
+      return { runs, failed: failed.map(({ botId, botName, error }) => ({ botId, botName, error })) };
+    } finally {
+      for (const k of keys) this.inflight.delete(k);
     }
-    // nic nie wyszło – błąd jak przy jednym bocie (np. n8n nie odpowiada)
-    if (!runs.length)
-      throw new HttpError(failed[0].status, failed.map((f) => (items.length > 1 ? `${f.botName}: ${f.error}` : f.error)).join(' · '));
-    return { runs, failed: failed.map(({ botId, botName, error }) => ({ botId, botName, error })) };
   }
 
   // Zlecenie „compose” do n8n (draft → Telegram albo publikacja od razu); błąd startu usuwa wgrane zdjęcie.
   // trigger: manual (panel) albo telegram (/post z Telegrama, PRO)
   async send(bot, body, { trigger = 'manual' } = {}) {
     const { job, key } = this.prepare(bot, body);
+    this.inflight.add(key); // rezerwacja przed pierwszym await (patrz this.inflight)
     let run;
     try {
       run = await this.runner.start(bot, { kind: 'compose', trigger, extra: { compose: job } });
     } catch (e) {
       if (job.image.upload) this.removeUpload(job.image.upload);
       throw e;
+    } finally {
+      this.inflight.delete(key);
     }
     this.recent.set(key, Date.now());
     return run;

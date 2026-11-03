@@ -109,11 +109,13 @@ const status = !active.length
         : 'failed';
 
 // --- Raport HTML ---------------------------------------------------------------------------------
+// HTML Telegrama: cudzysłów też – adresy postów trafiają do href="…"
 const esc = (s) =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 const label = { x: '🐦 X', facebook: '📘 Facebook' };
 const line = (k) => {
   if (!enabled[k]) return `${label[k]}: ${tr('⏭️ wyłączone w panelu')}`;

@@ -470,7 +470,8 @@ window.POSTER_I18N.en = {
   'Napisz /start do swojego bota, potem kliknij „Wykryj”.': 'Send /start to your bot, then click “Detect”.',
   'ID administratorów (opcjonalnie)': 'Admin IDs (optional)',
   'np. 123456789, 987654321': 'e.g. 123456789, 987654321',
-  'Tylko ci użytkownicy mogą klikać ✅/❌ (ważne w grupach).': 'Only these users can click ✅/❌ (important in groups).',
+  'Tylko ci użytkownicy mogą klikać ✅/❌. W grupie bez tej listy drafty zatwierdzi każdy jej uczestnik.':
+    'Only these users can click ✅/❌. In a group without this list, any member can approve drafts.',
   'Sprawdź token': 'Check token',
   'Wyślij test': 'Send test',
   'Aplikacja X (Twitter)': 'X (Twitter) app',
@@ -512,6 +513,18 @@ window.POSTER_I18N.en = {
   'Nowe hasło (min. 8 znaków)': 'New password (min. 8 characters)',
   'Zmieniono hasło': 'Password changed',
   'Zmień hasło': 'Change password',
+  'Pliki draftów': 'Draft files',
+  'Teksty, grafiki i wideo draftów w folderze data/files na NAS-ie.': 'Draft texts, images and videos in the data/files folder on the NAS.',
+  'Usuwaj drafty starsze niż (dni)': 'Delete drafts older than (days)',
+  '0 = nie usuwaj. Znikają wszystkie pliki draftu (tekst, grafika, wideo), których nic nie zmieniło przez tyle dni – sprawdzane co 6 godzin.':
+    '0 = do not delete. All files of a draft (text, image, video) that nothing has changed for that many days are removed – checked every 6 hours.',
+  'Wolne miejsce na dysku': 'Free disk space',
+  'Miejsce na dysku': 'Disk space',
+  'zostało {0} – włącz usuwanie starych draftów albo zwolnij miejsce na NAS-ie':
+    '{0} left – turn on deleting old drafts or free up space on the NAS',
+  'Wylogować panel na wszystkich urządzeniach, także tutaj? Hasło się nie zmieni.':
+    'Log the panel out on all devices, including this one? The password stays the same.',
+  'Wyloguj na wszystkich urządzeniach': 'Log out on all devices',
   'Przedłuż licencję': 'Renew the license',
   'Własny post': 'Own post',
   'Nie udało się odczytać zdjęcia – zapisz je jako JPG albo PNG': 'Could not read the photo – save it as JPG or PNG',

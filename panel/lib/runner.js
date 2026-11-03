@@ -2,7 +2,8 @@
 // Uruchamianie botów: harmonogram, „Uruchom teraz”, publikacja po kliknięciu w Telegramie.
 // Panel wywołuje webhook n8n (POST /webhook/poster) z pełną konfiguracją bota (bez sekretów),
 // a n8n raportuje postęp z powrotem (/internal/events, /internal/error).
-const { randomId, HttpError } = require('./util');
+const { randomId, HttpError, periodic } = require('./util');
+const { esc } = require('./html');
 const { dueSlot, nextSlots } = require('./schedule');
 const { TEXT_PROVIDERS } = require('./ai');
 const { tr } = require('./i18n');
@@ -11,6 +12,11 @@ const PLATFORM_ACCOUNT = { x: 'x', facebook: 'meta' };
 // po ilu przebiegach z rzędu bez żadnego pobranego profilu X wysłać alert o koncie-czytniku
 const X_ALERT_AFTER = Math.max(1, parseInt(process.env.POSTER_X_ALERT_AFTER, 10) || 3);
 const TIMEOUT_MIN = { generate: 40, publish: 60, compose: 60 };
+
+const openGroupWarning = () =>
+  tr(
+    'czat draftów to grupa bez listy administratorów – drafty może zatwierdzić każdy jej uczestnik; wpisz ID administratorów (Ustawienia → Telegram)',
+  );
 
 class Runner {
   constructor(store, { n8nUrl, n8nPublicUrl, internalToken, panelInternalUrl, rsshubUrl }) {
@@ -21,7 +27,7 @@ class Runner {
     this.panelInternalUrl = panelInternalUrl;
     this.rsshubUrl = rsshubUrl;
     this.telegram = null; // ustawiane w server.js
-    this.timer = null;
+    this.scheduler = null; // takty harmonogramu (startScheduler)
   }
 
   // ------------------------------------------------------------------ konfiguracja dla n8n
@@ -112,6 +118,9 @@ class Runner {
     for (const [k, acc] of Object.entries(PLATFORM_ACCOUNT)) {
       if (bot.publishing[k] && !bot.accounts[acc]) out.push(tr('{0} włączony, ale bez podłączonego konta', names[k]));
     }
+    // czat draftów to grupa albo kanał (ID ujemne) bez listy administratorów: drafty zatwierdzi każdy uczestnik
+    const draftChat = String(bot.telegram.chatId || this.store.global.telegram.chatId || '');
+    if (draftChat.startsWith('-') && !(this.store.global.telegram.adminIds || []).length) out.push(openGroupWarning());
     return out;
   }
 
@@ -142,6 +151,13 @@ class Runner {
     if (res.status === 404) {
       throw new HttpError(502, tr('n8n nie zna webhooka „poster” – zaimportuj i opublikuj workflow: sudo bash scripts/import-to-n8n.sh'));
     }
+    // webhook sprawdza token panelu (poświadczenie „Poster: token panelu”) – brak poświadczenia albo inny token w n8n
+    if (res.status === 401 || res.status === 403) {
+      throw new HttpError(
+        502,
+        tr('n8n odrzucił token panelu – utwórz poświadczenie webhooka ponownie: sudo bash scripts/import-to-n8n.sh'),
+      );
+    }
     if (!res.ok) throw new HttpError(502, tr('n8n zwrócił HTTP {0}: {1}', res.status, text.slice(0, 200)));
     if (!data || data.ok !== true)
       throw new HttpError(502, tr('n8n odrzucił zapytanie – PANEL_INTERNAL_TOKEN w n8n i panelu się różni (sudo docker compose up -d)'));
@@ -153,6 +169,11 @@ class Runner {
     // publikacja i własny post nie potrzebują źródeł ani AI – wystarczy Telegram
     const problems = kind === 'generate' ? this.problems(bot) : this.publishProblems(bot);
     if (problems.length) throw new HttpError(400, tr('Bot „{0}” nie może wystartować: {1}', bot.name, problems.join('; ')));
+    // drugie zlecenie publikacji tego samego draftu (podwójne kliknięcie ✅, dwóch administratorów) opublikowałoby post
+    // drugi raz – platformy publikowane przez n8n (np. X, Facebook) nie mają własnej blokady
+    if (kind === 'publish' && this.publishing(extra.draftId)) {
+      throw new HttpError(409, tr('Ten draft właśnie się publikuje – poczekaj na raport w Telegramie'));
+    }
     const run = this.store.addRun({
       id: `r${Date.now().toString(36)}${randomId(3)}`,
       botId: bot.id,
@@ -176,17 +197,35 @@ class Runner {
     return run;
   }
 
+  // Publikacja draftu w toku: przebieg „publish” (✅ w Telegramie) przed raportem z n8n albo przebieg z publikacją od
+  // razu („Publikuj teraz”, tryb automatyczny) – najdłużej do limitu czasu przebiegu (potem sweep() kończy go jako
+  // „brak odpowiedzi” i można spróbować ponownie). Zwraca przebieg albo null.
+  publishing(draftId) {
+    if (!draftId) return null;
+    const now = Date.now();
+    return (
+      this.store.state.runs.find(
+        (r) =>
+          r.draftId === draftId &&
+          (r.kind === 'publish' ? ['starting', 'running'].includes(r.status) : r.status === 'publishing') &&
+          now - Date.parse(r.startedAt) < (TIMEOUT_MIN[r.kind] || 40) * 60 * 1000,
+      ) || null
+    );
+  }
+
   executionUrl(id) {
     return id ? `${this.n8nPublicUrl}/workflow/PosterBotMain001/executions/${id}` : null;
   }
 
   // ------------------------------------------------------------------ harmonogram
+  // Takt co 20 s; takt, który jeszcze trwa (np. wolne n8n przy kilku botach), nie nakłada się z następnym
   startScheduler() {
-    const tick = () => {
-      this.tick().catch((e) => console.error(tr('Harmonogram:'), e.message));
-    };
-    setTimeout(tick, 5000);
-    this.timer = setInterval(tick, 20000);
+    this.scheduler = periodic(() => this.tick().catch((e) => console.error(tr('Harmonogram:'), e.message)), 20000, 5000);
+  }
+
+  // zamykanie panelu: koniec taktów, obietnica końca trwającego
+  stopScheduler() {
+    return this.scheduler ? this.scheduler.stop() : Promise.resolve();
   }
 
   // Ustaw „ostatni termin” na bieżący – po zapisaniu harmonogramu bot nie wystartuje za termin, który właśnie minął.
@@ -198,6 +237,7 @@ class Runner {
 
   async tick() {
     const now = new Date();
+    this.lastTickAt = now.getTime(); // stan harmonogramu dla /healthz
     for (const bot of [...this.store.bots]) {
       if (bot.paused) continue;
       const slot = dueSlot(bot.schedule, now, undefined, bot.id);
@@ -334,11 +374,12 @@ class Runner {
           // auto: własny post z „Publikuj teraz” – publikacja rusza od razu
           const auto = e.auto === true;
           const autoText = tr('publikuję teraz – zlecenie z panelu');
+          const waiting = tr('draft czeka na akceptację w Telegramie');
           this.store.updateRun(run.id, {
             draftId: e.draftId,
             title: String(e.title || '').slice(0, 300),
             status: auto ? 'publishing' : 'draft',
-            message: auto ? autoText : tr('draft czeka na akceptację w Telegramie'),
+            message: auto ? autoText : waiting,
             ...(auto ? {} : { finishedAt: now }),
           });
         }
@@ -427,10 +468,5 @@ function hostLabel(url) {
   const m = String(url).match(/^https?:\/\/(?:www\.)?([^/?#:]+)/i);
   return m ? m[1] : url;
 }
-const esc = (s) =>
-  String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 
-module.exports = { Runner, esc, shortTime };
+module.exports = { Runner, shortTime };

@@ -1,6 +1,8 @@
 'use strict';
 // REST API interfejsu panelu (port 7080, wymaga zalogowania).
-const { HttpError, readJsonBody, sendJson, fetchJson, readLimited, mask } = require('./util');
+const { HttpError, readJsonBody, sendJson, fetchJson, mask, isJsonType, sameOrigin } = require('./util');
+const { testFeed } = require('./feeds');
+const { esc } = require('./html');
 const { nextSlots, scheduleHours } = require('./schedule');
 const { sanitizeBot, DEFAULTS } = require('./store');
 const { UPSTREAM, apiError } = require('./accounts');
@@ -43,13 +45,13 @@ function createApi(ctx) {
     '/api/setup',
     async (req, res, p, body) => {
       if (!auth.needsSetup) throw new HttpError(409, tr('Hasło jest już ustawione'));
-      const ip = req.socket.remoteAddress;
-      auth.checkRate(ip);
+      const client = auth.clientKey(req);
+      auth.checkRate(client);
       if (!auth.checkSetupCode(body.code)) {
-        auth.fail(ip);
+        auth.fail(client);
         throw new HttpError(403, tr('Nieprawidłowy kod. Znajdziesz go w logach panelu: sudo docker compose logs panel | grep -i kod'));
       }
-      auth.setPassword(body.password);
+      await auth.setPassword(body.password);
       // język wybrany na ekranie pierwszego uruchomienia – od teraz panel, Telegram i raporty w tym języku
       if (LANGUAGES.includes(body.language)) store.updateGlobal({ ui: { language: body.language } });
       res.setHeader('set-cookie', auth.createCookie(req));
@@ -61,10 +63,10 @@ function createApi(ctx) {
     'POST',
     '/api/login',
     async (req, res, p, body) => {
-      const ip = req.socket.remoteAddress;
-      auth.checkRate(ip);
-      if (!auth.verify(body.password)) {
-        auth.fail(ip);
+      const client = auth.clientKey(req);
+      auth.checkRate(client);
+      if (!(await auth.verify(body.password))) {
+        auth.fail(client);
         throw new HttpError(401, tr('Nieprawidłowe hasło'));
       }
       res.setHeader('set-cookie', auth.createCookie(req));
@@ -75,15 +77,26 @@ function createApi(ctx) {
   route(
     'POST',
     '/api/logout',
-    async (req, res) => {
+    async (req, res, p, body) => {
+      // everywhere: wylogowanie na wszystkich urządzeniach (nowy sekret sesji) – tylko z ważnej sesji
+      if (body && body.everywhere === true) {
+        if (!auth.isAuthenticated(req)) throw new HttpError(401, tr('Zaloguj się'));
+        auth.logoutEverywhere();
+      }
       res.setHeader('set-cookie', auth.clearCookie(req));
       return { ok: true };
     },
     { open: true },
   );
   route('POST', '/api/password', async (req, res, p, body) => {
-    if (!auth.verify(body.current)) throw new HttpError(400, tr('Obecne hasło jest nieprawidłowe'));
-    auth.setPassword(body.password);
+    // limit prób także tutaj: z przejętą sesją (ciasteczkiem) nie da się zgadywać obecnego hasła
+    const client = auth.clientKey(req);
+    auth.checkRate(client);
+    if (!(await auth.verify(body.current))) {
+      auth.fail(client);
+      throw new HttpError(400, tr('Obecne hasło jest nieprawidłowe'));
+    }
+    await auth.setPassword(body.password);
     res.setHeader('set-cookie', auth.createCookie(req));
     return { ok: true };
   });
@@ -124,6 +137,7 @@ function createApi(ctx) {
         username: telegram.status.username,
       },
       gemini: { ok: !!ai.geminiKey(), message: ai.geminiKey() ? tr('klucz ustawiony') : tr('brak klucza') },
+      disk: drafts.disk(), // wolne miejsce na dysku z draftami (free: bajty albo null), low: mniej niż 1 GB
       // konto-czytnik X (RSSHub) – tylko gdy któryś bot czyta X przez RSSHub
       xReader: store.bots.some((b) => runner.usesXReader(b))
         ? { ...runner.xReaderStatus(), botId: (store.bots.find((b) => runner.usesXReader(b)) || {}).id }
@@ -157,7 +171,7 @@ function createApi(ctx) {
     return { bot };
   });
   route('PUT', '/api/bots/:id', async (req, res, p, body) => {
-    const before = store.requireBot(p.id);
+    const before = store.requireBot(p.id); // ten sam obiekt po zmianie (store.updateBot) – stan sprzed zmiany kopiujemy
     const scheduleBefore = JSON.stringify(before.schedule) + before.paused;
     const { accounts: _a, id: _i, createdAt: _c, ...input } = body || {};
     let bot = store.updateBot(p.id, input);
@@ -202,6 +216,7 @@ function createApi(ctx) {
         publishing: {},
         telegram: {},
         accounts: {},
+        // sanitizeBot czyta też pola trybu strony i kanału YouTube – bez nich podgląd kończył się błędem 500
       },
     );
     // botId = ziarno losowego przesunięcia (podgląd pokazuje te same godziny, które wybierze harmonogram)
@@ -230,6 +245,7 @@ function createApi(ctx) {
       xRedirectUri: accounts.xRedirectUri(),
     },
     licenseKey: licenseKey.view(), // klucz licencyjny z panelu dla scripts/upgrade-to-pro.sh
+    disk: drafts.disk(), // wolne miejsce na dysku z draftami (karta „Pliki draftów”)
     options: {
       defaults: DEFAULTS,
       textProviders: Object.entries(TEXT_PROVIDERS).map(([id, p]) => ({
@@ -306,7 +322,7 @@ function createApi(ctx) {
       parse_mode: 'HTML',
       text: tr(
         '✅ <b>Poster</b>: test połączenia z panelu{0}. Drafty będą przychodzić tutaj.',
-        body.botName ? tr(' (bot „{0}”)', escHtml(body.botName)) : '',
+        body.botName ? tr(' (bot „{0}”)', esc(body.botName)) : '',
       ),
     });
     return { ok: true, message: tr('Wysłano wiadomość testową') };
@@ -335,64 +351,6 @@ function createApi(ctx) {
     if (r.ok && !String(body.template || '').trim()) await runner.trackXReader({ total: 1, failed: 0, testOnly: true });
     return r;
   });
-
-  async function testFeed(url, { discover = true } = {}) {
-    let res;
-    let text;
-    try {
-      res = await fetch(url, {
-        headers: {
-          'user-agent': 'Mozilla/5.0 (Poster panel RSS test)',
-          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
-        },
-        signal: AbortSignal.timeout(20000),
-      });
-      const raw = await readLimited(res, 10 * 1024 * 1024);
-      if (!raw) return { ok: false, message: tr('Odpowiedź ma ponad 10 MB – to nie wygląda na kanał RSS') };
-      text = raw.toString('utf8');
-    } catch (e) {
-      return {
-        ok: false,
-        message: tr('Brak połączenia: {0}', e.name === 'TimeoutError' ? tr('przekroczono czas (20 s)') : e.cause?.code || e.message),
-      };
-    }
-    if (!res.ok)
-      return {
-        ok: false,
-        message: `HTTP ${res.status}: ${text
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 160)}`,
-      };
-    const items = text.match(/<(item|entry)[\s>][\s\S]*?<\/\1>/gi) || [];
-    if (!items.length) {
-      // adres strony zamiast kanału: kanał wskazuje <link rel="alternate" type="application/rss+xml" href="…">
-      const html = /<html[\s>]|<!doctype html/i.test(text.slice(0, 2000));
-      const feed = html && discover ? discoverFeed(text, res.url || url) : null;
-      if (feed && feed !== url) {
-        const r = await testFeed(feed, { discover: false });
-        if (r.ok) return { ...r, discovered: feed, message: tr('Znaleziono kanał RSS strony – {0}', r.message) };
-      }
-      return {
-        ok: false,
-        message: html
-          ? tr(
-              'To strona WWW, a nie kanał RSS, i nie wskazuje swojego kanału – wpisz adres kanału, np. https://twojastrona.pl/feed/ (WordPress)',
-            )
-          : tr('To nie wygląda na kanał RSS/Atom (brak wpisów)'),
-      };
-    }
-    const titles = items.slice(0, 3).map((it) => decodeTitle((it.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || ''));
-    const dates = items
-      .map((it) => Date.parse((it.match(/<(pubDate|updated|published|dc:date)[^>]*>([\s\S]*?)<\/\1>/i) || [])[2] || ''))
-      .filter(Boolean);
-    const newest = dates.length ? new Date(Math.max(...dates)).toISOString() : null;
-    const n = items.length;
-    const few = [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100);
-    const message = n === 1 ? tr('OK – {0} wpis', n) : few ? tr('OK – {0} wpisy', n) : tr('OK – {0} wpisów', n);
-    return { ok: true, message, count: n, titles, newest };
-  }
 
   // ------------------------------------------------------------------ własny post (✍️ Nowy post)
   route('GET', '/api/compose', async () => ({ bots: store.bots.map((b) => compose.view(b)) }));
@@ -439,10 +397,18 @@ function createApi(ctx) {
       const m = url.match(r.re);
       if (!m) continue;
       if (!r.open && !auth.isAuthenticated(req)) throw new HttpError(401, tr('Zaloguj się'));
-      if (req.method !== 'GET' && !String(req.headers['content-type'] || '').includes('application/json')) {
-        throw new HttpError(415, tr('Wymagany JSON')); // blokuje formularze z obcych stron (CSRF)
+      // CSRF: zmiany tylko JSON-em (blokuje formularze i „proste” zapytania obcych stron) i tylko z tej samej strony
+      // (blokuje inne aplikacje pod adresem NAS-a i sąsiednie subdomeny – patrz sameOrigin w util.js)
+      if (req.method !== 'GET') {
+        if (!isJsonType(req)) throw new HttpError(415, tr('Wymagany JSON'));
+        if (!sameOrigin(req)) throw new HttpError(403, tr('Odrzucono zapytanie z innej strony – otwórz panel bezpośrednio jego adresem'));
       }
-      const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
+      let params;
+      try {
+        params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
+      } catch (e) {
+        throw new HttpError(400, tr('Niepoprawny adres')); // np. „%” bez kodu znaku
+      }
       const body = req.method === 'GET' ? {} : await readJsonBody(req, r.bodyLimit);
       const out = await r.handler(req, res, params, body);
       if (res.headersSent || res.writableEnded) return; // handler sam wysłał odpowiedź (np. plik)
@@ -450,40 +416,6 @@ function createApi(ctx) {
     }
     throw new HttpError(404, tr('Nie ma takiego adresu API'));
   };
-}
-
-function decodeTitle(s) {
-  return s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 200);
-}
-const escHtml = (s) =>
-  String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-// Kanał RSS/Atom wskazany przez stronę WWW (<link rel="alternate" …>); kanały komentarzy pomijamy.
-function discoverFeed(html, base) {
-  for (const tag of String(html).match(/<link\b[^>]*>/gi) || []) {
-    const attr = (name) => (tag.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i')) || [])[1] || '';
-    if (!/(^|\s)alternate(\s|$)/i.test(attr('rel')) || !/application\/(rss|atom)\+xml/i.test(attr('type'))) continue;
-    const href = attr('href').replace(/&amp;/g, '&').trim();
-    if (!href || /comments?\/feed|\/comments(\/|$)/i.test(href)) continue;
-    try {
-      const u = new URL(href, base).toString();
-      if (/^https?:\/\//i.test(u)) return u;
-    } catch (e) {}
-  }
-  return null;
 }
 
 module.exports = { createApi };

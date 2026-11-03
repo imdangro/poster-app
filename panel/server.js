@@ -7,14 +7,15 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { PROJECT_URL, PRODUCT_URL, EDITION, HttpError, sendJson, readJsonBody, safeEqual } = require('./lib/util');
+const { PROJECT_URL, PRODUCT_URL, EDITION, HttpError, sendJson, readJsonBody, safeEqual, periodic } = require('./lib/util');
 const { setLanguageSource, withLanguage, lang, tr, trBoth } = require('./lib/i18n');
 const { Store } = require('./lib/store');
 const { Auth } = require('./lib/auth');
 const { Accounts } = require('./lib/accounts');
 const { Gateway, gatewayError } = require('./lib/gateway');
 const { Telegram } = require('./lib/telegram');
-const { Runner, esc } = require('./lib/runner');
+const { Runner } = require('./lib/runner');
+const { esc } = require('./lib/html');
 const { Drafts } = require('./lib/drafts');
 const { createApi } = require('./lib/api');
 const { AI } = require('./lib/ai');
@@ -51,7 +52,7 @@ const info = {
 let store;
 let auth;
 try {
-  store = new Store(DATA_DIR, env, FILES_DIR);
+  store = new Store(DATA_DIR);
   setLanguageSource(() => store.global.ui.language); // Ustawienia → Język; puste = polski
   auth = new Auth(DATA_DIR);
 } catch (e) {
@@ -75,11 +76,13 @@ const runner = new Runner(store, {
 });
 
 // Kliknięcia w Telegramie → publikacja (n8n) albo odrzucenie
-const defaultBot = () => (store.migratedBotId && store.bot(store.migratedBotId)) || store.bots[0] || null;
+const defaultBot = () => store.bots[0] || null;
 const telegram = new Telegram(store, {
   filesDir: FILES_DIR,
+  // drugie kliknięcie ✅, zanim skończy się publikacja tego draftu, nie uruchamia drugiej publikacji
+  isPublishing: (draftId) => !!runner.publishing(draftId),
   onPublish: async (draft, ctx) => {
-    // drafty sprzed panelu nie mają botId – należą do pierwszego (przeniesionego z .env) bota
+    // drafty sprzed panelu nie mają botId – należą do pierwszego bota
     const bot = draft.botId ? store.bot(draft.botId) : defaultBot();
     if (!bot) throw new HttpError(404, tr('Bot, który utworzył ten draft, został usunięty'));
     await runner.start(bot, {
@@ -156,12 +159,44 @@ function oauthPage(res, ok, title, text, botId) {
   res.end(html);
 }
 
+// Stan panelu dla zewnętrznego monitoringu (np. Uptime Kuma): n8n odpowiada, odbiór wiadomości z Telegrama działa,
+// harmonogram tyka. Bez logowania, więc tylko kody stanu – bez nazw botów i treści błędów. HTTP 503 = kłopot.
+const WORKERS = env.PANEL_DISABLE_WORKERS !== '1';
+const STARTED = Date.now();
+const HEALTH_CACHE_MS = Number(env.POSTER_HEALTH_CACHE_MS) || 15000;
+let n8nProbe = null;
+let n8nState = { at: 0, ok: false };
+async function health(res) {
+  if (Date.now() - n8nState.at > HEALTH_CACHE_MS) {
+    n8nProbe =
+      n8nProbe ||
+      fetch(`${runner.n8nUrl}/healthz`, { signal: AbortSignal.timeout(4000) })
+        .then((r) => r.ok)
+        .catch(() => false)
+        .then((ok) => (n8nState = { at: Date.now(), ok }))
+        .finally(() => (n8nProbe = null));
+    await n8nProbe;
+  }
+  const disk = drafts.disk();
+  const checks = {
+    n8n: n8nState.ok ? 'ok' : 'error',
+    // mało miejsca na dysku z draftami – n8n nie zapisze grafiki ani draftu
+    disk: disk.free === null ? 'off' : disk.low ? 'low' : 'ok',
+    telegram: !WORKERS || !store.secrets.global.telegramBotToken ? 'off' : telegram.status.ok ? 'ok' : 'error',
+    // takt co 20 s; dłużej niż 2 min bez taktu = harmonogram stoi (np. zawieszone zapytanie)
+    scheduler: !WORKERS ? 'off' : Date.now() - (runner.lastTickAt || STARTED) < 120000 ? 'ok' : 'stalled',
+  };
+  const ok = !Object.values(checks).some((v) => ['error', 'stalled', 'low'].includes(v));
+  sendJson(res, ok ? 200 : 503, { ok, ...checks });
+}
+
 // panel wysyła swój język w nagłówku – błędy API są w języku ekranu także przed wyborem języka w Ustawieniach
 const uiServer = http.createServer((req, res) => withLanguage(req.headers['x-poster-lang'], () => handleUi(req, res)));
 async function handleUi(req, res) {
   try {
     const url = req.url.split('?')[0];
     if (url.startsWith('/api/')) return await api(req, res);
+    if (url === '/healthz' && req.method === 'GET') return await health(res);
 
     const cb = url.match(/^\/oauth\/x\/callback$/);
     if (cb && req.method === 'GET') {
@@ -194,7 +229,13 @@ async function handleUi(req, res) {
   } catch (e) {
     if (!e.status) console.error('UI:', e);
     if (res.headersSent) return res.destroy();
-    sendJson(res, e.status || 500, { error: { message: e.status ? e.message : tr('Błąd serwera: {0}', e.message), ...(e.extra || {}) } });
+    // nieoczekiwany błąd: szczegóły (ścieżki, komunikaty bibliotek) tylko dla zalogowanego, reszta – odesłanie do logów
+    const message = e.status
+      ? e.message
+      : auth.isAuthenticated(req)
+        ? tr('Błąd serwera: {0}', e.message)
+        : tr('Błąd serwera – szczegóły są w logach panelu (sudo docker compose logs panel)');
+    sendJson(res, e.status || 500, { error: { message, ...(e.extra || {}) } });
   }
 }
 
@@ -271,26 +312,58 @@ internalServer.headersTimeout = 60000;
 
 uiServer.listen(UI_PORT, env.PANEL_LISTEN || '0.0.0.0', () => console.log(`Panel: ${info.publicUrl} (port ${UI_PORT})`));
 internalServer.listen(INTERNAL_PORT, env.PANEL_LISTEN || '0.0.0.0', () => console.log(tr('API dla n8n: port {0}', INTERNAL_PORT)));
-if (store.migrated) {
-  console.log(
-    store.bots.length
-      ? tr('Pierwsze uruchomienie: przeniesiono ustawienia z .env (botów: {0}).', store.bots.length)
-      : trBoth('Pierwsze uruchomienie: pusta konfiguracja – otwórz panel, ustaw hasło i dodaj bota.'),
-  );
-}
+if (store.firstStart) console.log(trBoth('Pierwsze uruchomienie: pusta konfiguracja – otwórz panel, ustaw hasło i dodaj bota.'));
 auth.announceSetup(); // bez hasła: kod do jego ustawienia trafia do logów (sudo docker compose logs panel)
 for (const bot of store.bots) if (!store.state.schedule[bot.id]) runner.markCurrentSlot(bot);
-if (env.PANEL_DISABLE_WORKERS !== '1') {
+// Usuwanie starych draftów (Ustawienia → Pliki draftów; 0 = nie usuwaj) – co 6 h, bez draftu w trakcie publikacji
+const pruneDrafts = () => {
+  const days = store.global.files.retentionDays;
+  const removed = drafts.prune(days, { skip: (draftId) => !!runner.publishing(draftId) });
+  if (removed) console.log(tr('Usunięto stare drafty (starsze niż {0} dni): {1}', days, removed));
+};
+let pruner = null;
+if (WORKERS) {
   runner.startScheduler();
   telegram.start();
+  pruner = periodic(pruneDrafts, 6 * 3600 * 1000, 60 * 1000, { unref: true });
 }
 
-const shutdown = () => {
-  try {
-    store.saveState(true);
-  } catch (e) {}
+// Zatrzymanie panelu (SIGTERM przy `docker compose stop/up` i restarcie NAS-a): bez nowych zadań, a trwające –
+// zapytania n8n (np. publikacja na Threads), publikacja po ✅, takt harmonogramu i planera – mają do SHUTDOWN_MS na
+// koniec, potem zapis stanu. Docker czeka 30 s (stop_grace_period w docker-compose.yml). Drugi sygnał – koniec od razu.
+const SHUTDOWN_MS = Math.max(1000, Number(env.PANEL_SHUTDOWN_MS) || 25000);
+let stopping = false;
+async function shutdown(signal) {
+  const save = () => {
+    try {
+      store.saveState(true);
+    } catch (e) {}
+  };
+  if (stopping) {
+    save();
+    process.exit(0);
+  }
+  stopping = true;
+  console.log(tr('Zamykam panel ({0}) – czekam najwyżej {1} s na trwające zadania…', signal, Math.round(SHUTDOWN_MS / 1000)));
+  const closed = (server) => new Promise((resolve) => server.close(() => resolve()));
+  const work = Promise.allSettled([
+    closed(uiServer),
+    closed(internalServer),
+    runner.stopScheduler(),
+    telegram.stop(),
+    pruner && pruner.stop(),
+  ]);
+  // połączenia keep-alive bez zapytania (przeglądarka, n8n) – zamykane od razu i po skończeniu trwających zapytań
+  const idle = setInterval(() => {
+    uiServer.closeIdleConnections();
+    internalServer.closeIdleConnections();
+  }, 200);
+  const late = await Promise.race([work.then(() => false), new Promise((r) => setTimeout(() => r(true), SHUTDOWN_MS).unref())]);
+  clearInterval(idle);
+  if (late) console.warn(tr('Nie wszystkie zadania skończyły się w {0} s – zamykam mimo to', Math.round(SHUTDOWN_MS / 1000)));
+  save();
   process.exit(0);
-};
+}
 process.on('unhandledRejection', (e) => console.error(tr('Nieobsłużony błąd:'), e));
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

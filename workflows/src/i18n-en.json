@@ -12,6 +12,7 @@
   "🆕 <b>Nowy draft</b> · 🤖 <b>{0}</b> · <code>{1}</code>": "🆕 <b>New draft</b> · 🤖 <b>{0}</b> · <code>{1}</code>",
   "🔗 {0}: <a href=\"{1}\">otwórz źródło</a>": "🔗 {0}: <a href=\"{1}\">open the source</a>",
   "👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.": "👇 Check the texts and approve with the button under the last message.",
+  "🔍 <b>Sprawdź tekst</b> – adresy lub kontakty spoza źródła: {0}": "🔍 <b>Check the text</b> – addresses or contacts that are not in the source: {0}",
   "📘📸 <b>Facebook / Instagram</b> · {0} znaków": "📘📸 <b>Facebook / Instagram</b> · {0} characters",
   "🐦 <b>X</b> (post z linkiem) · {0}/280": "🐦 <b>X</b> (post with a link) · {0}/280",
   "📘 <b>Facebook</b> (post z linkiem) · {0} znaków": "📘 <b>Facebook</b> (post with a link) · {0} characters",

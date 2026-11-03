@@ -7,6 +7,93 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.4.0 – 2026-11-03
+
+- **Panel security:** the panel accepts changes only from its own page. Another app at the NAS address (another port),
+  a page open in the browser while you use an SSH tunnel (`localhost`) or a neighbouring subdomain behind a reverse proxy
+  can no longer send a request on behalf of the signed-in user – before, the content type check could be bypassed.
+  Scripts that write files in `data/panel` as root also no longer follow symbolic links planted there.
+- **No double publishing:** a second ✅ click on the same draft (a double tap, two admins in the chat) before the first
+  publishing ends no longer sends the post again – Telegram answers “⏳ This draft is being published right now”. The
+  same goes for the same own post sent twice at once (e.g. from two tabs): the second request gets the message that the
+  post was just sent.
+- **A power cut no longer stops the panel:** settings, keys, history and the duplicate memory are written with a forced
+  flush to disk, and the panel keeps the previous version of the files (`*.bak` in `data/panel`). The panel moves a
+  damaged file (e.g. cut off by a power cut on the NAS) aside as `*.corrupt-<date>` and starts from the previous version
+  – before, a damaged `state.json` stopped the panel and all bots. When the settings or keys are damaged and there is no
+  copy, the panel does not start with empty settings but names the file to fix in the logs; a damaged password file –
+  it asks for a new password with a code from the logs, as after a reset.
+- An article address with a quotation mark in an RSS feed no longer breaks the draft message in Telegram.
+- **Updates with security fixes:** `update.sh` pulls new n8n and RSSHub images with every update and builds the panel on
+  an up-to-date base image (fixes of Node.js, Alpine and ffmpeg) – before, the images stayed in the version from the
+  installation day. The update therefore takes longer by the download time; without a connection to Docker Hub it
+  finishes on the current images, and `--no-images` skips this step.
+- **n8n is updated together with Poster:** `.env` no longer pins the n8n version – the version tested with the workflow
+  of the release runs. `update.sh` clears the value `N8N_VERSION=2.40.7` written at installation by itself; another,
+  deliberately pinned version stays, with a reminder (if you pinned exactly 2.40.7 on purpose, enter it again).
+- **n8n webhook only with the panel token:** n8n accepts jobs only with the panel token (the “Poster: token panelu”
+  credential created by `import-to-n8n.sh` – `update.sh` runs it). A foreign request from the network is refused before
+  n8n creates an execution. A workflow imported in n8n by hand needs `sudo bash scripts/import-to-n8n.sh`.
+- **The script creates the n8n owner account:** `import-to-n8n.sh` (also in `update.sh`) creates the n8n owner account
+  when there is none yet and shows the login and password once – with the step-by-step installation nobody on the
+  network can take over n8n before you. An existing account stays as it is.
+- **The panel gateway lets through only the Poster workflow's requests:** a compromised n8n cannot use the bots' keys
+  for anything else, e.g. it cannot take over receiving the Telegram bot's messages or read the Facebook page token.
+  Files through the gateway: up to 50 MB (Telegram's upload limit).
+- Git in the installation and update scripts runs from a pinned version of the `alpine/git` image (only a new Poster
+  release changes it).
+- **Photos and pages from feeds only from the internet:** an address from someone else's RSS feed or from an article
+  page that leads to the local network (e.g. an image from a camera at home, a router page, Docker services) is skipped
+  by the panel with a warning in the draft – also after a redirect and when the name points to a local address only at
+  connection time. Outside the bot's feeds the panel downloads only from ports 80 and 443. The hosts of the RSS feeds set
+  in the bot (e.g. a blog on the NAS) work as before. The feed test in the panel downloads the address you enter as
+  before, but does not follow a redirect to another server on the local network.
+- **Drafts chat in a group:** when drafts go to a Telegram group and the *Admin IDs* list (*Settings → Telegram*) is
+  empty, the panel shows a warning next to the bot – any member of the group can approve drafts then.
+- **AI text checked against the source:** content from feeds reaches AI as data separated from instructions, and a draft
+  with a website address, an @account, an e-mail or a phone number that is not in the news or the bot's settings gets
+  the note “🔍 Check the text” – e.g. when AI followed an instruction smuggled into someone else's feed. Brand addresses
+  and accounts given in *Additional instructions for AI* are not flagged.
+- **GitHub's host key known in advance:** the scripts' SSH connection to GitHub (deploy key, upgrade to PRO) accepts only
+  the key published by GitHub – before, it trusted the key from the first connection. `update.sh` switches existing
+  installations over by itself.
+- **Containers with fewer privileges and with limits:** no container can raise its privileges (`no-new-privileges`), the
+  panel and n8n run without kernel capabilities, and the panel program is read-only (ffmpeg's work files are in
+  memory). The containers have memory limits – `PANEL_MEMORY`, `N8N_MEMORY` and `RSSHUB_MEMORY` in `.env`, 1g, 2g and
+  1g by default – and the panel and n8n also a process limit. RSSHub has a healthcheck.
+- **The panel does not build without ffmpeg:** when installing ffmpeg fails (e.g. the NAS cannot reach the Alpine
+  package server), the update ends with a clear message and the current version keeps running – just run `update.sh`
+  again. Before, the panel was built without ffmpeg and silently skipped WebP photos.
+- **Graceful panel shutdown:** on an update or a NAS restart the panel gives running tasks (e.g. n8n requests and
+  publishing after ✅) up to 25 s to finish and saves its state instead of cutting them off halfway.
+- **Status for monitoring:** `http://NAS_IP:7080/healthz` answers without signing in – 200 when n8n, receiving Telegram
+  messages and the schedule work, 503 on a problem – e.g. for Uptime Kuma (README → “Maintenance”).
+- **Resilience:** saving the bot's settings while an account is being connected no longer loses that connection; ✅ in
+  Telegram no longer holds up the next clicks when n8n is slow to accept the job; schedule ticks no longer overlap; a bot
+  run with a slow model (e.g. Ollama) ends within the time n8n waits for it; ffmpeg runs in at most 2 processes at once.
+- **Sign-in and sessions:** the limit of failed attempts also covers changing the password and also applies to all
+  addresses together. Behind a reverse proxy on the local network the client's address (`X-Forwarded-For`) counts, so
+  one person's mistakes do not block others. New button *Settings → Panel password → Log out on all devices* (e.g. after
+  losing a phone) – the password stays the same.
+- **Errors and permissions:** a visitor who is not signed in does not see server error details, and a malformed API
+  address gives error 400 instead of a server error. `init-nas.sh` (also run by `update.sh`) leaves `data/panel` to the
+  owner only – before, every update gave the group access to the key files until the panel's next write.
+- **Encrypted backup:** the README gives a password-encrypted copy of `data/` and `.env` (`openssl`) – it holds the API
+  keys and account tokens.
+- **Old drafts and disk space:** a new *Settings → Draft files* card. The panel can delete drafts (text, image and video
+  in `data/files`) that nothing has changed for a given number of days – it checks every 6 hours and leaves a draft that
+  is being published. By default it deletes nothing (0). The card shows the free disk space; when less than 1 GB is
+  left, the Dashboard and `/healthz` warn (the `disk` field, response 503). For this the panel can now write to
+  `data/files` (before: read-only).
+- **A faster panel with many drafts:** the draft list does not read the `data/files` folder on every refresh, and the
+  draft cache has a limit, so memory use does not grow with the number of drafts. The panel reads a bot's duplicate
+  memory from disk once instead of on every run, and checking the password at sign-in does not hold up other requests.
+- **Cleanup:** the panel no longer moves settings from `.env` on its first start (a leftover from the versions before
+  publication), and `docker-compose.yml` no longer passes it the old variables such as `GEMINI_API_KEY` or
+  `TELEGRAM_BOT_TOKEN` – you set keys only in the panel. If your `.env` from a very old installation still has them, you
+  can delete them from it. `import-to-n8n.sh` no longer accepts the old `--publish`, `--only-workflow`,
+  `--only-credentials` and `--force-x` options.
+
 ## 1.3.0 – 2026-11-02
 
 - **A platform that does not answer:** when a platform (e.g. X or Facebook) accepts a post but does not answer in time

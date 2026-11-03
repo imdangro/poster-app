@@ -5,11 +5,18 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
-const { readJson, writeJsonAtomic, HttpError } = require('./util');
+const { readJsonSafe, writeJsonAtomic, HttpError } = require('./util');
+const { isPublicAddress } = require('./net');
 const { tr, trBoth } = require('./i18n');
 
 const COOKIE = 'poster_session';
 const SESSION_DAYS = 30;
+// Limit nieudanych prób (hasło, kod z logów, obecne hasło przy zmianie): na adres i dla wszystkich adresów razem
+// w oknie 15 min – wspólny limit ogranicza zgadywanie także wtedy, gdy ktoś podaje fałszywe adresy (X-Forwarded-For)
+const MAX_FAILS = 8;
+const MAX_FAILS_ALL = 40;
+const FAIL_WINDOW_MS = 15 * 60 * 1000;
+const ALL = '*';
 // Bez znaków, które mylą się przy przepisywaniu z logów (0/O, 1/I/L)
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
@@ -47,7 +54,9 @@ class Auth {
     }
     if (stamp === this.stamp) return;
     this.stamp = stamp;
-    this.data = stamp ? readJson(this.file, null) : null;
+    // uszkodzony auth.json zostaje odłożony (readJsonSafe) – panel startuje z nowym kodem do ustawienia hasła w logach,
+    // jak po resecie hasła (bez kopii .bak: nie może wrócić hasło sprzed resetu)
+    this.data = stamp ? readJsonSafe(this.file, null) : null;
   }
 
   save(data) {
@@ -89,39 +98,71 @@ class Auth {
     return want.length > 0 && want.length === got.length && crypto.timingSafeEqual(want, got);
   }
 
+  // scrypt asynchronicznie (pula wątków Node.js) – logowanie nie wstrzymuje panelu na kilkadziesiąt ms
   hash(password, salt) {
-    return crypto.scryptSync(password, Buffer.from(salt, 'hex'), 64, { N: 16384, r: 8, p: 1 }).toString('hex');
+    return new Promise((resolve, reject) =>
+      crypto.scrypt(password, Buffer.from(salt, 'hex'), 64, { N: 16384, r: 8, p: 1 }, (err, key) =>
+        err ? reject(err) : resolve(key.toString('hex')),
+      ),
+    );
   }
 
-  setPassword(password) {
+  async setPassword(password) {
     if (typeof password !== 'string' || password.length < 8) throw new HttpError(400, tr('Hasło musi mieć co najmniej 8 znaków'));
     const salt = crypto.randomBytes(16).toString('hex');
+    const hash = await this.hash(password, salt);
     // nowy sekret sesji = wylogowanie wszystkich dotychczasowych sesji; kod pierwszego uruchomienia przestaje działać
     this.save({
       salt,
-      hash: this.hash(password, salt),
+      hash,
       secret: crypto.randomBytes(32).toString('hex'),
       updatedAt: new Date().toISOString(),
     });
   }
 
-  verify(password) {
+  async verify(password) {
     if (this.needsSetup || typeof password !== 'string') return false;
-    const h = Buffer.from(this.hash(password, this.data.salt), 'hex');
-    const ok = Buffer.from(this.data.hash, 'hex');
+    const { salt, hash } = this.data; // hasło mogło się zmienić (reset w innym procesie) w trakcie liczenia
+    const h = Buffer.from(await this.hash(password, salt), 'hex');
+    const ok = Buffer.from(hash, 'hex');
     return h.length === ok.length && crypto.timingSafeEqual(h, ok);
   }
 
-  checkRate(ip) {
-    const f = this.failures.get(ip);
-    if (f && f.count >= 8 && f.until > Date.now()) {
-      throw new HttpError(429, tr('Zbyt wiele nieudanych prób – spróbuj za {0} min', Math.ceil((f.until - Date.now()) / 60000)));
-    }
+  // Adres klienta do limitu prób. Za odwrotnym proxy w sieci lokalnej (połączenie z adresu prywatnego) – pierwszy adres
+  // z X-Forwarded-For, żeby błędy jednej osoby nie blokowały wszystkich; fałszywy nagłówek ogranicza limit wspólny.
+  clientKey(req) {
+    const ip = String((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, '');
+    const forwarded = String(req.headers['x-forwarded-for'] || '')
+      .split(',')[0]
+      .trim()
+      .slice(0, 64);
+    return forwarded && !isPublicAddress(ip) ? forwarded : ip;
   }
-  fail(ip) {
-    const f = this.failures.get(ip);
-    const fresh = !f || f.until < Date.now();
-    this.failures.set(ip, { count: fresh ? 1 : f.count + 1, until: Date.now() + 15 * 60 * 1000 });
+
+  checkRate(key) {
+    const now = Date.now();
+    const blocked = [this.failures.get(key), this.failures.get(ALL)].find(
+      (f, i) => f && f.until > now && f.count >= (i ? MAX_FAILS_ALL : MAX_FAILS),
+    );
+    if (blocked) throw new HttpError(429, tr('Zbyt wiele nieudanych prób – spróbuj za {0} min', Math.ceil((blocked.until - now) / 60000)));
+  }
+  fail(key) {
+    const now = Date.now();
+    for (const k of [key, ALL]) {
+      const f = this.failures.get(k);
+      const fresh = !f || f.until < now;
+      this.failures.set(k, { count: fresh ? 1 : f.count + 1, until: now + FAIL_WINDOW_MS });
+    }
+    // wygasłe wpisy znikają – mapa nie rośnie bez końca
+    if (this.failures.size > 1000) for (const [k, f] of this.failures) if (f.until < now) this.failures.delete(k);
+  }
+
+  // „Wyloguj na wszystkich urządzeniach”: nowy sekret sesji – każde wydane ciasteczko (np. na zgubionym telefonie)
+  // przestaje działać; hasło bez zmian
+  logoutEverywhere() {
+    this.reload();
+    if (this.needsSetup) return;
+    this.save({ ...this.data, secret: crypto.randomBytes(32).toString('hex'), sessionsResetAt: new Date().toISOString() });
   }
 
   sign(value) {

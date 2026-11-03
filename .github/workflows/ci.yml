@@ -26,7 +26,7 @@ jobs:
       n8n: ${{ steps.scope.outputs.n8n }}
       installer: ${{ steps.scope.outputs.installer }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Zmienione pliki
         id: scope
         env:
@@ -56,15 +56,15 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version: 24
       - name: Składnia JS
         # node --check sprawdza tylko pierwszy podany plik – stąd pętla
         run: for f in $(find panel -name '*.js' -not -path '*/node_modules/*'); do node --check "$f" || exit 1; done
       - name: Formatowanie (prettier)
-        run: npx --yes prettier@3 --check "panel/**/*.{js,css,html}" "workflows/src/**/*.js"
+        run: npx --yes prettier@3.8.1 --check "panel/**/*.{js,css,html}" "workflows/src/**/*.js"
       - name: Skrypty bash (składnia i shellcheck)
         # bash -n sprawdza tylko pierwszy podany plik – stąd pętla; SC1111: cudzysłowy „…” w tekstach są celowe
         run: |
@@ -85,10 +85,10 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.n8n == 'true') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version: 24
       - name: Walidacja węzłów (wersja n8n z docker-compose.yml)
         run: |
           N8N_VERSION=$(grep -oP 'N8N_VERSION:-\K[0-9.]+' docker-compose.yml)
@@ -116,7 +116,7 @@ jobs:
       matrix:
         image: ['ubuntu:22.04', 'ubuntu:24.04', 'debian:12', 'debian:13']
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Docker Engine i Compose v2 z repozytorium Dockera (bez demona – kontener nie ma systemd)
         run: |
           docker run --rm -v "$PWD/docs:/src:ro" '${{ matrix.image }}' bash -c '
@@ -137,7 +137,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Funkcje instalatora (adres IP, język, nowy .env)
         run: |
           set -euo pipefail
@@ -211,9 +211,49 @@ jobs:
             -d "{\"emailOrLdapLoginId\":\"admin@poster.local\",\"password\":\"$pass\"}"
           cd "$RUNNER_TEMP/poster"
           sudo docker compose exec -T n8n n8n list:workflow --active=true | grep -q PosterBotMain001
-          # panel → n8n: zlecenie przez webhook workflow
-          sudo docker compose exec -T panel node -e "fetch('http://n8n:5678/webhook/poster', { method: 'POST',
-            headers: { 'content-type': 'application/json' }, body: '{}' }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+          # panel → n8n: zlecenie przez webhook workflow tylko z tokenem panelu (Header Auth, poświadczenie z
+          # import-to-n8n.sh); zapytanie bez tokenu n8n odrzuca (403), zanim powstanie wykonanie
+          sudo docker compose exec -T panel node -e "
+            const call = (h) => fetch('http://n8n:5678/webhook/poster', { method: 'POST', headers: { 'content-type': 'application/json', ...h }, body: '{}' });
+            (async () => {
+              const no = await call({});
+              const ok = await call({ 'x-poster-token': process.env.PANEL_INTERNAL_TOKEN });
+              const body = await ok.json().catch(() => ({}));
+              console.log('bez tokenu: HTTP ' + no.status + ' · z tokenem: HTTP ' + ok.status + ' ' + JSON.stringify(body));
+              process.exit(no.status === 403 && ok.ok && body.ok === true ? 0 : 1);
+            })().catch(() => process.exit(1));"
+      - name: Utwardzone kontenery – ffmpeg przy programie tylko do odczytu, /healthz, łagodne zamykanie panelu
+        run: |
+          set -euo pipefail
+          url="$(grep -oE 'http://[^ ]+:7080' "$RUNNER_TEMP/install.log" | head -n1)"
+          cd "$RUNNER_TEMP/poster"
+          # program panelu tylko do odczytu; pliki robocze w /tmp (w pamięci), dane w /data
+          if sudo docker compose exec -T panel sh -c 'touch /app/x' 2>/dev/null; then echo 'kod panelu da się zmienić'; exit 1; fi
+          sudo docker compose exec -T panel sh -c 'touch /tmp/x /data/.write-test && rm /tmp/x /data/.write-test'
+          # ffmpeg z kodu panelu: WebP → JPG – pliki robocze w /tmp
+          sudo docker compose exec -T panel ffmpeg -loglevel error -f lavfi -i color=c=orange:s=1200x800 -frames:v 1 /tmp/t.webp
+          sudo docker compose exec -T panel node -e "
+            const fs = require('fs');
+            require('./lib/ffmpeg')
+              .convertWebp(fs.readFileSync('/tmp/t.webp'))
+              .then((r) => (fs.writeFileSync('/tmp/t.jpg', r.buffer), console.log('WebP: ' + r.mimeType + ', ' + r.buffer.length + ' B')))
+              .catch((e) => (console.error(e), process.exit(1)));"
+          # bez uprawnień jądra (panel, n8n) i bez podnoszenia uprawnień (wszystkie)
+          for c in poster-panel poster-n8n poster-rsshub; do
+            sudo docker inspect -f '{{.Name}}: cap_drop {{.HostConfig.CapDrop}}, {{.HostConfig.SecurityOpt}}, read-only {{.HostConfig.ReadonlyRootfs}}, pamięć {{.HostConfig.Memory}}' "$c"
+            sudo docker inspect -f '{{.HostConfig.SecurityOpt}}' "$c" | grep -q no-new-privileges
+          done
+          sudo docker inspect -f '{{.HostConfig.CapDrop}}' poster-panel | grep -q ALL
+          sudo docker inspect -f '{{.HostConfig.CapDrop}}' poster-n8n | grep -q ALL
+          # stan dla monitoringu i healthcheck RSSHub
+          curl -fsS "$url/healthz" | tee /dev/stderr | grep -q '"ok":true'
+          timeout 180 sh -c 'until [ "$(sudo docker inspect -f "{{.State.Health.Status}}" poster-rsshub)" = healthy ]; do sleep 5; done'
+          # łagodne zamykanie: SIGTERM → komunikat i kod wyjścia 0; potem panel wraca
+          sudo docker compose stop panel
+          sudo docker compose logs panel | grep -Eq 'Zamykam panel \(SIGTERM\)|Shutting down the panel \(SIGTERM\)'
+          test "$(sudo docker inspect -f '{{.State.ExitCode}}' poster-panel)" = 0
+          sudo docker compose up -d panel
+          timeout 120 sh -c 'until [ "$(sudo docker inspect -f "{{.State.Health.Status}}" poster-panel)" = healthy ]; do sleep 3; done'
       - name: Ponowne uruchomienie – instalacja gotowa, podpowiedź aktualizacji
         run: |
           set -o pipefail

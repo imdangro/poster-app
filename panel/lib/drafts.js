@@ -1,25 +1,48 @@
 'use strict';
-// Odczyt draftów zapisanych przez n8n w data/files (JSON + grafika + wideo) – panel ma tylko odczyt.
+// Drafty zapisane przez n8n w data/files (JSON + grafika + wideo): lista dla panelu, usuwanie starych draftów
+// (ustawienie „Pliki draftów”) i wolne miejsce na dysku.
 const fs = require('fs');
 const path = require('path');
 
 const DRAFT_RE = /^d\d{8}-\d{4}-[a-z0-9]{3,8}\.json$/;
+// wszystkie pliki draftu: <draftId>.json, grafika i wideo
+const DRAFT_FILE_RE = /^(d\d{8}-\d{4}-[a-z0-9]{3,8})\.(json|jpe?g|png|webp|mp4)$/;
+const CACHE_MAX = 1000; // podsumowania draftów w pamięci (najdawniej używane wypadają)
+const NAMES_MAX_AGE_MS = 60000; // lista plików odświeżana też co minutę (system plików bez zmian czasu katalogu)
+const DAY_MS = 86400 * 1000;
 
 class Drafts {
   constructor(filesDir, store) {
     this.dir = filesDir;
     this.store = store;
-    this.cache = new Map(); // plik → { mtimeMs, summary }
+    this.cache = new Map(); // plik → { mtimeMs, summary }; kolejność = ostatnie użycie
+    this.names = null; // { mtimeMs, at, list } – nazwy plików draftów od najnowszego
   }
 
-  list({ botId, limit = 60 } = {}) {
-    let names = [];
+  // Nazwy plików JSON draftów od najnowszego. Katalog (tysiące plików po roku) czytany ponownie tylko po zmianie –
+  // nowy albo usunięty plik zmienia czas modyfikacji katalogu – i najrzadziej co minutę.
+  draftNames() {
+    let st;
     try {
-      names = fs.readdirSync(this.dir).filter((n) => DRAFT_RE.test(n));
+      st = fs.statSync(this.dir);
     } catch (e) {
       return [];
     }
-    names.sort().reverse(); // nazwa zawiera datę i godzinę
+    const c = this.names;
+    if (c && c.mtimeMs === st.mtimeMs && Date.now() - c.at < NAMES_MAX_AGE_MS) return c.list;
+    let list = [];
+    try {
+      list = fs.readdirSync(this.dir).filter((n) => DRAFT_RE.test(n));
+    } catch (e) {
+      return [];
+    }
+    list.sort().reverse(); // nazwa zawiera datę i godzinę
+    this.names = { mtimeMs: st.mtimeMs, at: Date.now(), list };
+    return list;
+  }
+
+  list({ botId, limit = 60 } = {}) {
+    const names = this.draftNames();
     const out = [];
     for (const name of names.slice(0, 800)) {
       const d = this.summary(name);
@@ -40,7 +63,11 @@ class Drafts {
       return null;
     }
     const c = this.cache.get(name);
-    if (c && c.mtimeMs === st.mtimeMs) return this.withOverrides(c.summary);
+    if (c && c.mtimeMs === st.mtimeMs) {
+      this.cache.delete(name); // ostatnio użyte na koniec kolejki
+      this.cache.set(name, c);
+      return this.withOverrides(c.summary);
+    }
     const d = this.read(name.replace(/\.json$/, ''));
     if (!d) return null;
     const bot = d.botId ? this.store.bot(d.botId) : null;
@@ -70,7 +97,9 @@ class Drafts {
       approvedBy: d.approvedBy || '',
       lastAttemptAt: d.lastAttemptAt || null,
     };
+    this.cache.delete(name);
     this.cache.set(name, { mtimeMs: st.mtimeMs, summary });
+    if (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value);
     return this.withOverrides(summary);
   }
 
@@ -86,6 +115,63 @@ class Drafts {
     } catch (e) {
       return null;
     }
+  }
+
+  // Usuwa drafty, których żaden plik (tekst, grafika, wideo) nie zmienił się od `days` dni – razem, żeby draft nie
+  // został bez zdjęcia. skip(draftId) – draft, którego nie wolno teraz usunąć (np. publikacja w toku).
+  // Zwraca liczbę usuniętych draftów.
+  prune(days, { now = Date.now(), skip = () => false } = {}) {
+    if (!(days > 0)) return 0;
+    const cutoff = now - days * DAY_MS;
+    const groups = new Map();
+    let names = [];
+    try {
+      names = fs.readdirSync(this.dir);
+    } catch (e) {
+      return 0;
+    }
+    for (const name of names) {
+      const m = name.match(DRAFT_FILE_RE);
+      if (!m) continue;
+      let st;
+      try {
+        st = fs.lstatSync(path.join(this.dir, name));
+      } catch (e) {
+        continue;
+      }
+      if (!st.isFile()) continue;
+      const g = groups.get(m[1]) || { files: [], newest: 0 };
+      g.files.push(name);
+      g.newest = Math.max(g.newest, st.mtimeMs);
+      groups.set(m[1], g);
+    }
+    let removed = 0;
+    for (const [draftId, g] of groups) {
+      if (g.newest >= cutoff || skip(draftId)) continue;
+      let deleted = 0; // bez uprawnień do pliku (np. inny właściciel niż 1000) draft zostaje i nie jest liczony
+      for (const name of g.files) {
+        try {
+          fs.unlinkSync(path.join(this.dir, name));
+          deleted++;
+        } catch (e) {}
+      }
+      if (!deleted) continue;
+      this.cache.delete(`${draftId}.json`);
+      removed++;
+    }
+    if (removed) this.names = null;
+    return removed;
+  }
+
+  // Wolne miejsce na dysku z draftami: { free: bajty albo null (system nie podaje), low: mniej niż 1 GB }
+  disk() {
+    let free = null;
+    try {
+      const s = fs.statfsSync(this.dir);
+      free = Number(s.bavail) * Number(s.bsize);
+    } catch (e) {}
+    const min = Number(process.env.POSTER_LOW_DISK_BYTES) || 1024 ** 3;
+    return { free, low: free !== null && free < min };
   }
 
   markRejected(draftId, by) {

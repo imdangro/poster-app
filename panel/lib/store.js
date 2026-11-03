@@ -6,7 +6,7 @@
 //   dedup/<bot>.json – pamięć już widzianych newsów (osobno dla każdego bota)
 const fs = require('fs');
 const path = require('path');
-const { readJson, writeJsonAtomic, randomId, HttpError } = require('./util');
+const { readJsonSafe, writeJsonAtomic, randomId, HttpError } = require('./util');
 const { INTERVALS, ALL_DAYS, JITTERS } = require('./schedule');
 const { LANGUAGES, lang, tr } = require('./i18n');
 
@@ -32,6 +32,8 @@ function defaultGlobal() {
     meta: { graphVersion: DEFAULTS.graphVersion },
     apify: { actorId: DEFAULTS.apifyActorId },
     ai: defaultAi(),
+    // pliki draftów w data/files: usuwanie draftów starszych niż N dni (0 = nie usuwaj)
+    files: { retentionDays: 0 },
   };
 }
 
@@ -209,6 +211,12 @@ function sanitizeGlobal(input, existing) {
     else g.meta.graphVersion = v;
   }
   if (i.apify && 'actorId' in i.apify) g.apify.actorId = str(i.apify.actorId, 120, DEFAULTS.apifyActorId);
+  if (i.files && 'retentionDays' in i.files) {
+    const n = Number(i.files.retentionDays);
+    if (!Number.isInteger(n) || (n !== 0 && (n < 7 || n > 3650)))
+      errors.push(tr('Usuwanie starych draftów: 0 (nie usuwaj) albo od 7 do 3650 dni'));
+    else g.files.retentionDays = n;
+  }
   if (i.ai) {
     const a = i.ai;
     const url = (v, what) => {
@@ -232,25 +240,27 @@ function sanitizeGlobal(input, existing) {
 
 // ---------------------------------------------------------------------------------------------- magazyn
 class Store {
-  constructor(dir, env = process.env, filesDir = '/files') {
+  constructor(dir) {
     this.dir = dir;
-    this.filesDir = filesDir;
     fs.mkdirSync(path.join(dir, 'dedup'), { recursive: true, mode: 0o700 });
     this.files = {
       config: path.join(dir, 'config.json'),
       secrets: path.join(dir, 'secrets.json'),
       state: path.join(dir, 'state.json'),
     };
-    const config = readJson(this.files.config, null);
-    this.secrets = readJson(this.files.secrets, { global: {}, bots: {} });
-    this.state = readJson(this.files.state, {});
+    // uszkodzony plik (zanik prądu, ręczna edycja): kopia .bak z poprzedniego zapisu; konfiguracja i klucze bez kopii –
+    // błąd startu (bez cichej utraty botów), a stan pracy – od nowa (historia, terminy, offset Telegrama)
+    const config = readJsonSafe(this.files.config, null, { strict: true });
+    this.secrets = readJsonSafe(this.files.secrets, { global: {}, bots: {} }, { strict: true });
+    this.state = readJsonSafe(this.files.state, {});
     this.state.schedule = this.state.schedule || {};
     this.state.runs = this.state.runs || [];
     this.state.telegram = this.state.telegram || { offset: 0, chats: [] };
     this.state.recentTopics = this.state.recentTopics || {};
     this.secrets.global = this.secrets.global || {};
     this.secrets.bots = this.secrets.bots || {};
-    this.migrated = false;
+    // pierwsze uruchomienie (brak config.json): pusta konfiguracja – hasło i boty ustawia się w panelu
+    this.firstStart = !config;
     if (config) {
       // konfiguracja sprzed wersji angielskiej – panel zostaje po polsku (bez względu na język przeglądarki)
       const hadLanguage = !!(config.global && config.global.ui);
@@ -269,104 +279,33 @@ class Store {
       if (upgradeSecrets(this.secrets.global)) this.saveSecrets();
     } else {
       this.config = { version: 1, global: defaultGlobal(), bots: [] };
-      this.migrateFromEnv(env);
-      this.migrated = true;
       this.saveConfig();
       this.saveSecrets();
     }
     this._stateTimer = null;
+    // pamięć duplikatów botów (dedup/<bot>.json) wczytana raz – panel jest jedynym, który ją zmienia
+    this.dedupCache = new Map();
   }
 
-  // Pierwsze uruchomienie: przenosimy dotychczasowe ustawienia z .env (przekazane do kontenera panelu).
-  migrateFromEnv(env) {
-    const e = (k) => String(env[k] || '').trim();
-    const list = (k) =>
-      e(k)
-        .split(/[\n,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    const g = this.config.global;
-    g.telegram.chatId = e('TELEGRAM_CHAT_ID');
-    g.telegram.adminIds = list('TELEGRAM_ADMIN_IDS').filter((x) => /^\d+$/.test(x));
-    g.x.clientId = e('X_CLIENT_ID');
-    if (/^v\d+\.\d$/.test(e('META_GRAPH_VERSION'))) g.meta.graphVersion = e('META_GRAPH_VERSION');
-    if (e('APIFY_ACTOR_ID')) g.apify.actorId = e('APIFY_ACTOR_ID');
-    const sg = this.secrets.global;
-    const setSecret = (key, envKey) => e(envKey) && (sg[key] = e(envKey));
-    setSecret('geminiApiKey', 'GEMINI_API_KEY');
-    setSecret('telegramBotToken', 'TELEGRAM_BOT_TOKEN');
-    setSecret('xClientSecret', 'X_CLIENT_SECRET');
-    setSecret('apifyToken', 'APIFY_TOKEN');
-
-    const hasBot = e('POSTER_TOPIC') || e('NEWS_RSS_FEEDS') || e('X_HANDLES');
-    if (!hasBot) return;
-    const id = randomId();
-    const rss = [];
-    for (const entry of list('NEWS_RSS_FEEDS')) {
-      const pipe = entry.indexOf('|');
-      const url = (pipe > 0 ? entry.slice(pipe + 1) : entry).trim();
-      if (isHttpUrl(url)) rss.push({ label: pipe > 0 ? entry.slice(0, pipe).trim().slice(0, 60) : '', url });
-    }
-    const base = defaultBot(id, (e('POSTER_BRAND_NAME') || e('POSTER_TOPIC') || tr('Mój bot')).slice(0, 60));
-    const input = {
-      topic: e('POSTER_TOPIC'),
-      brandName: e('POSTER_BRAND_NAME'),
-      language: e('POST_LANGUAGE') || 'polski',
-      sources: {
-        rss,
-        xSource: X_SOURCES.includes(e('X_SOURCE')) ? e('X_SOURCE') : 'rsshub',
-        xHandles: list('X_HANDLES').filter((h) => /^@?[A-Za-z0-9_]{1,15}$/.test(h)),
-        xRssTemplate: e('X_RSS_URL_TEMPLATE').includes('{handle}') ? e('X_RSS_URL_TEMPLATE') : '',
-        apifyMaxItems: e('APIFY_MAX_ITEMS') || 40,
-        maxAgeHours: e('MAX_NEWS_AGE_HOURS') || 12,
-        maxCandidates: e('MAX_CANDIDATES') || 25,
-      },
-      content: { textModel: e('GEMINI_TEXT_MODEL') || DEFAULTS.textModel },
-      publishing: {
-        x: bool(e('ENABLE_X')),
-        facebook: bool(e('ENABLE_FACEBOOK')),
-      },
-    };
-    let bot;
-    try {
-      bot = sanitizeBot(input, base);
-    } catch (err) {
-      console.warn(tr('Migracja z .env: pominięto niepoprawne wartości –'), err.message);
-      bot = sanitizeBot({ topic: input.topic, brandName: input.brandName, language: input.language }, base);
-    }
-    // Dotychczasowy bot działał według stałego harmonogramu 8/12/16/20 – zostaje aktywny.
-    bot.paused = false;
-    const sb = (this.secrets.bots[id] = {});
-    if (e('META_PAGE_ID') && e('META_PAGE_ACCESS_TOKEN')) {
-      bot.accounts.meta = {
-        pageId: e('META_PAGE_ID'),
-        pageName: '',
-        connectedAt: new Date().toISOString(),
-      };
-      sb.meta = { pageToken: e('META_PAGE_ACCESS_TOKEN') };
-    }
-    this.config.bots.push(bot);
-    this.migratedBotId = id;
-  }
-
+  // poprzednia wersja każdego pliku zostaje jako .bak – readJsonSafe sięga po nią, gdy plik jest uszkodzony
   saveConfig() {
-    writeJsonAtomic(this.files.config, this.config, 0o600);
+    writeJsonAtomic(this.files.config, this.config, 0o600, { backup: true });
   }
   saveSecrets() {
-    writeJsonAtomic(this.files.secrets, this.secrets, 0o600);
+    writeJsonAtomic(this.files.secrets, this.secrets, 0o600, { backup: true });
   }
   saveState(now = false) {
     if (now) {
       clearTimeout(this._stateTimer);
       this._stateTimer = null;
-      writeJsonAtomic(this.files.state, this.state, 0o600);
+      writeJsonAtomic(this.files.state, this.state, 0o600, { backup: true });
       return;
     }
     if (this._stateTimer) return;
     this._stateTimer = setTimeout(() => {
       this._stateTimer = null;
       try {
-        writeJsonAtomic(this.files.state, this.state, 0o600);
+        writeJsonAtomic(this.files.state, this.state, 0o600, { backup: true });
       } catch (e) {
         console.error(tr('Zapis state.json nie powiódł się:'), e.message);
       }
@@ -401,13 +340,17 @@ class Store {
     return bot;
   }
 
+  // Zmiana zapisuje się w tym samym obiekcie bota: kod, który trzyma bota w trakcie await (np. łączenie konta czeka na
+  // platformę), widzi zmianę i nie zapisuje starej kopii – zapis ustawień w tym czasie nie gubi połączonego konta.
+  // Kto porównuje stan sprzed zmiany, musi go sobie skopiować przed wywołaniem.
   updateBot(id, input) {
-    const idx = this.config.bots.findIndex((b) => b.id === id);
-    if (idx < 0) throw new HttpError(404, tr('Nie ma takiego bota'));
-    const next = sanitizeBot(input, this.config.bots[idx]);
-    this.config.bots[idx] = next;
+    const bot = this.bot(id);
+    if (!bot) throw new HttpError(404, tr('Nie ma takiego bota'));
+    const next = sanitizeBot(input, bot);
+    for (const k of Object.keys(bot)) if (!(k in next)) delete bot[k];
+    Object.assign(bot, next);
     this.saveConfig();
-    return next;
+    return bot;
   }
 
   deleteBot(id) {
@@ -421,6 +364,7 @@ class Store {
     this.saveConfig();
     this.saveSecrets();
     this.saveState();
+    this.dedupCache.delete(id);
     try {
       fs.unlinkSync(this.dedupFile(id));
     } catch (e) {}
@@ -454,8 +398,18 @@ class Store {
   dedupFile(id) {
     return path.join(this.dir, 'dedup', `${id.replace(/[^a-z0-9]/gi, '')}.json`);
   }
+  // uszkodzona pamięć duplikatów zostaje odłożona i liczy się od nowa, a bot działa dalej (bez kopii .bak – zapis przy
+  // każdym przebiegu; po wyczyszczeniu pamięci przebieg i tak publikuje najwyżej jeden post).
+  // Plik (do kilku MB) czytany jest raz, potem odczyty idą z pamięci – Pulpit (co 8 s) i sprawdzanie kanału YouTube nie
+  // parsują go za każdym razem; zmiany zapisuje dedupSave.
   dedupLoad(id) {
-    return readJson(this.dedupFile(id), { keys: {} });
+    let d = this.dedupCache.get(id);
+    if (!d) {
+      d = readJsonSafe(this.dedupFile(id), { keys: {} });
+      if (!(d && typeof d === 'object' && d.keys && typeof d.keys === 'object')) d = { keys: {} };
+      this.dedupCache.set(id, d);
+    }
+    return d;
   }
   dedupSave(id, d, now = Date.now()) {
     // Pamiętamy maks. 20 000 kluczy / 30 dni
@@ -484,6 +438,7 @@ class Store {
     return Object.keys(this.dedupLoad(id).keys).length;
   }
   dedupReset(id) {
+    this.dedupCache.delete(id);
     try {
       fs.unlinkSync(this.dedupFile(id));
     } catch (e) {}

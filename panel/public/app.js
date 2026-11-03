@@ -356,7 +356,7 @@
     telegram: 'Telegram',
     auto: tr('automatycznie'),
   };
-  const ADMIN_HELP = tr('Tylko ci użytkownicy mogą klikać ✅/❌ (ważne w grupach).');
+  const ADMIN_HELP = tr('Tylko ci użytkownicy mogą klikać ✅/❌. W grupie bez tej listy drafty zatwierdzi każdy jej uczestnik.');
   const PLAT = {
     x: ['X', 'X'],
     facebook: ['f', 'Facebook'],
@@ -758,6 +758,7 @@
   // ============================================================================================ router
   let lastHash = location.hash;
   async function router() {
+    if (!mainEl || !mainEl.isConnected) return; // ekran logowania lub pierwszego hasła – panel jeszcze niewidoczny
     if (S.guard && !S.guard()) {
       history.replaceState(null, '', lastHash || '#/');
       return;
@@ -858,6 +859,16 @@
           ),
           healthCard(h('span', { class: 'plat gemini' }, 'G'), 'Google Gemini', hl.gemini.ok, hl.gemini.message, '#/settings'),
           hl.xReader ? xReaderCard(hl.xReader, healthCard) : null,
+          // mało miejsca na dysku z draftami – n8n nie zapisze grafiki ani draftu
+          hl.disk && hl.disk.low
+            ? healthCard(
+                h('span', { class: 'plat', style: { background: '#dc2626' } }, icon('alert')),
+                tr('Miejsce na dysku'),
+                false,
+                tr('zostało {0} – włącz usuwanie starych draftów albo zwolnij miejsce na NAS-ie', gigabytes(hl.disk.free)),
+                '#/settings',
+              )
+            : null,
         ),
         h('div', { class: 'section-title' }, h('h2', null, tr('Boty'))),
         h(
@@ -3808,6 +3819,7 @@
             ),
           ),
         ),
+        filesCard(),
         passwordCard(),
         licenseCard(st),
         card(
@@ -4016,6 +4028,58 @@
     return card([...head, ...cardHead(tr('Licencja PRO'), status, renew)], p ? pending : h('div', null, keyLine, change, form), foot);
   }
 
+  // Pliki draftów w data/files: usuwanie starych draftów (0 = nie usuwaj) i wolne miejsce na dysku
+  function filesCard() {
+    const st = S.settings;
+    const files = { retentionDays: (st.global.files || {}).retentionDays || 0 };
+    const disk = st.disk || {};
+    return card(
+      [
+        h('span', { class: 'plat', style: { background: '#64748b' } }, icon('history')),
+        ...cardHead(tr('Pliki draftów'), tr('Teksty, grafiki i wideo draftów w folderze data/files na NAS-ie.')),
+      ],
+      h(
+        'div',
+        { class: 'form-grid' },
+        field(
+          tr('Usuwaj drafty starsze niż (dni)'),
+          h('input', {
+            type: 'number',
+            min: 0,
+            max: 3650,
+            value: files.retentionDays,
+            oninput: (e) => (files.retentionDays = Number(e.target.value)),
+          }),
+          tr(
+            '0 = nie usuwaj. Znikają wszystkie pliki draftu (tekst, grafika, wideo), których nic nie zmieniło przez tyle dni – sprawdzane co 6 godzin.',
+          ),
+        ),
+        disk.free === null || disk.free === undefined
+          ? null
+          : field(
+              tr('Wolne miejsce na dysku'),
+              h('div', { style: { paddingTop: '8px', color: disk.low ? 'var(--bad)' : '' } }, gigabytes(disk.free)),
+            ),
+      ),
+      [
+        h(
+          'button',
+          {
+            class: 'btn primary',
+            onclick: (e) =>
+              busy(e.currentTarget, async () => {
+                S.settings = await api('PUT', '/api/settings', { global: { files } });
+                toast(tr('Zapisano ustawienia'));
+              }),
+          },
+          icon('check'),
+          tr('Zapisz'),
+        ),
+      ],
+    );
+  }
+  const gigabytes = (bytes) => `${(bytes / 1024 ** 3).toLocaleString(LOCALE, { maximumFractionDigits: 1 })} GB`;
+
   function passwordCard() {
     let cur = '';
     let next = '';
@@ -4045,6 +4109,23 @@
               }),
           },
           tr('Zmień hasło'),
+        ),
+        // zgubiony telefon albo logowanie na cudzym komputerze: każda zapamiętana sesja przestaje działać
+        h(
+          'button',
+          {
+            class: 'btn',
+            onclick: (e) =>
+              busy(e.currentTarget, async () => {
+                if (!confirm(tr('Wylogować panel na wszystkich urządzeniach, także tutaj? Hasło się nie zmieni.'))) return;
+                await api('POST', '/api/logout', { everywhere: true });
+                S.session = { authenticated: false, needsSetup: false };
+                sideEl = null;
+                renderAuth();
+              }),
+          },
+          icon('logout'),
+          tr('Wyloguj na wszystkich urządzeniach'),
         ),
       ],
     );

@@ -151,7 +151,8 @@ sudo bash scripts/update.sh
 `update.sh` wykonuje kolejno:
 1. pobiera nową wersję z GitHuba (`git pull` w kontenerze `alpine/git`, bez instalowania gita);
 2. `init-nas.sh`: uzupełnia w `.env` brakujące klucze generowane automatycznie i poprawia uprawnienia `data/`, nie zmieniając istniejących wartości;
-3. `docker compose up -d --build`: przebudowuje obraz panelu i restartuje kontenery;
+3. pobiera nowe obrazy n8n i RSSHub, przebudowuje panel na aktualnym obrazie bazowym (poprawki bezpieczeństwa Node.js,
+   Alpine i ffmpeg) i restartuje kontenery – bez połączenia z Docker Hub zostają dotychczasowe obrazy (`--no-images` pomija ten krok);
 4. `import-to-n8n.sh`: importuje nowy workflow (to samo ID, nadpisuje stary), publikuje go i restartuje n8n.
 
 Co się zmieniło i czy dana wersja wymaga czegoś więcej – [CHANGELOG.pl.md](CHANGELOG.pl.md).
@@ -355,9 +356,10 @@ Te komunikaty w logach n8n są **niegroźne**:
 
 ### Krok 6. n8n: konto właściciela i import workflow
 
-1. Otwórz `http://NAS_IP:5678` i od razu załóż **konto właściciela** (owner) – dopóki go nie ma, może je założyć każdy
-   w Twojej sieci. Instalator jednym poleceniem zakłada je sam.
-2. Zaimportuj i opublikuj workflow: `sudo bash scripts/import-to-n8n.sh`. Workflow nie potrzebuje żadnych poświadczeń n8n.
+1. Zaimportuj i opublikuj workflow: `sudo bash scripts/import-to-n8n.sh`. Skrypt od razu zakłada **konto właściciela
+   n8n** (login `admin@poster.local`, losowe hasło – pokazuje je raz, zapisz je), bo dopóki konta nie ma, może je
+   założyć każdy w Twojej sieci. Konta założonego wcześniej w `http://NAS_IP:5678` skrypt nie zmienia. Tworzy też
+   jedyne poświadczenie n8n, „Poster: token panelu”: webhook zleceń przyjmuje tylko zapytania z tokenem panelu.
 
 ### Krok 7. Panel: hasło, klucze, pierwszy bot
 
@@ -382,7 +384,7 @@ Te komunikaty w logach n8n są **niegroźne**:
 
 | Miejsce | Co tam jest |
 |---|---|
-| **Pulpit** | Stan n8n, Telegrama, Gemini i konta-czytnika X. Karta bota z następnym uruchomieniem, ostatnim wynikiem i platformami. Przyciski *Napisz post*, *Uruchom teraz* i *Wstrzymaj/Wznów*. Tabela ostatnich działań z linkami do draftu i do wykonania w n8n |
+| **Pulpit** | Stan n8n, Telegrama, Gemini i konta-czytnika X (oraz ostrzeżenie, gdy na dysku zostaje mniej niż 1 GB). Karta bota z następnym uruchomieniem, ostatnim wynikiem i platformami. Przyciski *Napisz post*, *Uruchom teraz* i *Wstrzymaj/Wznów*. Tabela ostatnich działań z linkami do draftu i do wykonania w n8n |
 | **Nowy post** | Własny post: treść, link, zdjęcie (z dysku albo aparatu), platformy X i Facebook, wskazówka dla AI. *Dopasuj pod platformy* – AI pisze wersje na każdą platformę, *Bez AI* – Twój tekst w limitach platform. Wersje poprawiasz przed wysłaniem: *Wyślij do akceptacji* albo *Publikuj teraz* |
 | **Bot → Ogólne** | Nazwa, temat, nazwa marki, język postów, **dodatkowe wytyczne dla AI** (ton, grupa docelowa, tematy do unikania) |
 | **Bot → Źródła** | Kanały RSS z przyciskiem *Test* (wystarczy adres strony – panel sam znajdzie jej kanał) i kreatorem Google News. Profile X (RSSHub / Apify / wyłączone) z testem przez RSSHub. Maks. wiek newsa, liczba kandydatów dla AI |
@@ -393,7 +395,7 @@ Te komunikaty w logach n8n są **niegroźne**:
 | **Bot → Historia** | Uruchomienia i drafty bota |
 | **Bot → Zaawansowane** | Pamięć duplikatów (reset), **usuwanie bota** |
 | **Drafty** | Galeria draftów z grafikami, tekstami do skopiowania (także do ręcznej publikacji na Instagramie i TikToku), wynikami publikacji i pobieraniem grafiki |
-| **Ustawienia** | Klucz Gemini, **Dostawcy AI** (Ollama, własne API zgodne z OpenAI), bot Telegram (+ wykrywanie ID czatu, administratorzy), aplikacja X, wersja Graph API, Apify, **język panelu**, hasło panelu, **Wersja PRO** (klucz licencyjny po zakupie) |
+| **Ustawienia** | Klucz Gemini, **Dostawcy AI** (Ollama, własne API zgodne z OpenAI), bot Telegram (+ wykrywanie ID czatu, administratorzy), aplikacja X, wersja Graph API, Apify, **język panelu**, **pliki draftów** (usuwanie starych, wolne miejsce na dysku), hasło panelu, **Wersja PRO** (klucz licencyjny po zakupie) |
 
 <details>
 <summary>📸 Zrzuty ekranu: nowy post, harmonogram, tekst i koszty, drafty, telefon</summary>
@@ -475,6 +477,7 @@ dla ustawień bota.
 
 Gdy artykuł nie ma zdjęcia, X i Facebook dostają post z linkiem.
 Linki Google News nie prowadzą wprost do artykułu – dla zdjęć dodaj bezpośredni kanał RSS portalu.
+Zdjęcia i strony artykułów panel pobiera tylko z internetu – z sieci lokalnej wyłącznie z hostów kanałów RSS ustawionych w bocie (np. blog na NAS-ie).
 
 ⚖️ Zdjęcia z artykułów są chronione prawem autorskim. Publikuj je tylko wtedy, gdy masz do tego prawo (własne źródła, licencja agencji). W razie wątpliwości wybierz **post z linkiem** – to standardowy, bezpieczny sposób dzielenia się newsem.
 
@@ -492,7 +495,7 @@ Linki Google News nie prowadzą wprost do artykułu – dla zdjęć dodaj bezpo�
 1. W [@BotFather](https://t.me/BotFather) wyślij `/newbot`. Token wklej w **panelu → Ustawienia → Telegram** i kliknij *Sprawdź token*.
 2. Napisz do swojego bota `/start`. Bot odpowie ID czatu, a przycisk **Wykryj** wpisze je za Ciebie.
    Dla grupy dodaj bota do grupy i napisz w niej `/start`.
-3. W grupie wpisz też **ID administratorów** (swoje user ID), żeby tylko Ty mógł klikać ✅.
+3. W grupie wpisz też **ID administratorów** (swoje user ID), żeby tylko Ty mógł klikać ✅ – bez tej listy drafty zatwierdzi każdy uczestnik grupy (panel ostrzega o tym przy bocie).
 4. Jeśli bot Telegrama miał wcześniej webhook, usuń go: `curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"`.
 
 ### Google Gemini
@@ -593,19 +596,24 @@ Węzeł *Grafika: przygotuj* zamienia `data` na plik binarny (trafia do `sendPho
 
 | Zadanie | Jak |
 |---|---|
-| Aktualizacja Postera | `sudo bash scripts/update.sh` (pobranie, uzupełnienie `.env`, przebudowa, import workflow) |
+| Aktualizacja Postera | `sudo bash scripts/update.sh` (pobranie, uzupełnienie `.env`, nowe obrazy i przebudowa, import workflow) |
 | Zmiana harmonogramu, tematu, modeli, platform | panel → bot. Zmiany działają od następnego uruchomienia, bez restartów |
 | Zmiana promptu LLM | tekst stylu: *Bot → Ogólne → Dodatkowe wytyczne dla AI*; cały prompt: `workflows/src/code/build_prompt.js` + `python3 workflows/src/build.py` (zmiana w samym n8n zniknie przy następnym imporcie workflow) |
 | Reset deduplikacji | panel → bot → *Zaawansowane → Wyczyść pamięć* |
-| Aktualizacja n8n | backup, potem `N8N_VERSION=…` w `.env` → `sudo docker compose pull && sudo docker compose up -d` |
-| Backup | `sudo tar czf poster-backup-$(date +%F).tgz data .env`: w `data/` są baza n8n, ustawienia i klucze panelu oraz drafty, w `.env` klucz szyfrujący |
+| Aktualizacja n8n | razem z Posterem (`update.sh`): n8n w wersji sprawdzonej z workflow tego wydania. Przypięcie innej wersji: backup, potem `N8N_VERSION=…` w `.env` → `sudo docker compose pull && sudo docker compose up -d` |
+| Backup | `sudo sh -c 'tar czf - data .env \| openssl enc -aes-256-cbc -pbkdf2 -out poster-backup-$(date +%F).tgz.enc'` – zapyta o hasło do kopii. W `data/` są baza n8n, ustawienia, klucze API i tokeny kont oraz drafty, a w `.env` klucz szyfrujący, więc kopię trzymaj zaszyfrowaną. Odtworzenie w katalogu projektu: `sudo sh -c 'openssl enc -d -aes-256-cbc -pbkdf2 -in poster-backup-RRRR-MM-DD.tgz.enc \| tar xzf -'` |
 | Podgląd draftów | panel → *Drafty*, albo folder `docker/poster/data/files` (SMB) |
+| Miejsce na dysku | drafty (tekst, grafika, wideo) zostają w `data/files`, dopóki ich nie usuniesz. *Ustawienia → Pliki draftów → Usuwaj drafty starsze niż* (np. 90 dni; 0 = nie usuwaj, domyślnie) – panel co 6 godzin usuwa wszystkie pliki draftów, których nic nie zmieniło przez tyle dni. Tam też wolne miejsce; poniżej 1 GB ostrzega Pulpit i `/healthz` |
 | Historia wykonań n8n | przycinana po 7 dniach (`EXECUTIONS_DATA_MAX_AGE=168`) |
 | Reset hasła panelu | `sudo docker compose exec panel node reset-password.js` – wyloguje wszystkie sesje i wypisze kod, z którym ustawisz nowe hasło w przeglądarce (bez restartu panelu) |
-| Zapomniane hasło n8n | `sudo docker compose exec n8n n8n user-management:reset`, potem od razu otwórz `http://NAS_IP:5678` i załóż konto właściciela od nowa. Workflow i historia wykonań zostają |
+| Wylogowanie na wszystkich urządzeniach | panel → *Ustawienia → Hasło do panelu → Wyloguj na wszystkich urządzeniach* (np. po zgubieniu telefonu) – hasło zostaje bez zmian |
+| Monitoring | `http://NAS_IP:7080/healthz` (bez logowania) – HTTP 200 i `"ok":true`, gdy działa n8n, odbiór wiadomości z Telegrama i harmonogram, a na dysku jest co najmniej 1 GB wolnego miejsca; 503 przy kłopocie. Np. Uptime Kuma: monitor *HTTP(s) – Keyword* ze słowem `"ok":true` |
+| Limity pamięci | `PANEL_MEMORY`, `N8N_MEMORY`, `RSSHUB_MEMORY` w `.env` (puste = 1g, 2g, 1g), potem `sudo docker compose up -d`. Kontener ponad limitem Docker uruchamia ponownie |
+| Zapomniane hasło n8n | `sudo docker compose exec n8n n8n user-management:reset`, potem od razu `sudo bash scripts/import-to-n8n.sh` – założy konto właściciela od nowa i pokaże nowe hasło. Workflow i historia wykonań zostają |
 
 ## Rozwiązywanie problemów
 
+- **Aktualizacja kończy się komunikatem „Nie udało się zainstalować ffmpeg (apk)”.** Budowa panelu nie pobrała ffmpeg z serwera pakietów Alpine (brak internetu albo chwilowa awaria serwera). Dotychczasowa wersja działa dalej – sprawdź połączenie NAS-a i uruchom `sudo bash scripts/update.sh` ponownie.
 - **Pulpit: „n8n nie odpowiada” / „n8n nie zna webhooka poster”.** Kontener n8n nie działa albo workflow nie jest opublikowany. Wykonaj `sudo docker compose ps` i `sudo bash scripts/import-to-n8n.sh`.
 - **„n8n odrzucił zapytanie – PANEL_INTERNAL_TOKEN…”.** Kontenery mają różne tokeny: po zmianie `.env` wykonaj `sudo docker compose up -d` (restartuje oba).
 - **Brak nowych draftów.** Pulpit pokazuje status każdego uruchomienia:
@@ -617,6 +625,8 @@ Węzeł *Grafika: przygotuj* zamienia `data` na plik binarny (trafia do `sendPho
 - **X: 403 przy uploadzie.** Aplikacja ma uprawnienia *Read only* albo token nie ma `media.write`. Popraw ustawienia w portalu X i połącz konto ponownie.
 - **„Odczyt X nie działa” (alert / czerwony kafelek).** Konto-czytnik zostało wylogowane albo zablokowane, albo nie działa proxy. Podmień `TWITTER_AUTH_TOKEN` (patrz „Źródło X”), wykonaj `sudo docker compose up -d rsshub` i kliknij *Sprawdź profile przez RSSHub*.
 - **Posty bez zdjęć, choć artykuły je mają.** Źródło to Google News (linki nie prowadzą do artykułu) albo portal blokuje pobieranie. Dodaj bezpośredni kanał RSS portalu; ostrzeżenie widać w podpisie draftu w Telegramie.
+- **„pominięto adres z kanału: … prowadzi do sieci lokalnej” w drafcie.** Zdjęcie albo strona artykułu leży w sieci lokalnej (np. blog na NAS-ie) pod inną nazwą niż kanał RSS bota. W *Źródłach* wpisz kanał pod tą samą nazwą co strona, np. `https://blog.example.pl/feed` – z hostów kanałów bota panel pobiera także w sieci lokalnej.
+- **„🔍 Sprawdź tekst – adresy lub kontakty spoza źródła” w drafcie.** AI dopisało adres strony, @konto, e-mail albo telefon, których nie ma w newsie ani w ustawieniach bota – np. wykonało polecenie przemycone w cudzym kanale. Sprawdź tekst przed ✅. Adresy i konta marki, które AI ma dopisywać, podaj w *Bot → Ogólne → Dodatkowe wytyczne dla AI* – wtedy nie są oznaczane.
 - **Ochrona SSRF (opcjonalnie).** Po włączeniu `N8N_SSRF_PROTECTION_ENABLED=true` dodaj `N8N_SSRF_ALLOWED_HOSTNAMES=rsshub,panel`, inaczej n8n nie połączy się z RSSHub i panelem w sieci Dockera.
 - **Przyciski nie reagują.** Sprawdź na Pulpicie kafelek Telegram. Kliknięcia są przyjmowane tylko z czatu z Ustawień; przy liście administratorów – tylko od nich.
 - **„Bot … nie ma podłączonego konta X/strony Facebook”.** Platforma jest włączona w *Publikacji*, ale konto nie jest połączone w zakładce *Konta* bota.

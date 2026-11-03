@@ -7,6 +7,92 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.4.0 – 2026-11-03
+
+- **Bezpieczeństwo panelu:** panel przyjmuje zmiany tylko z własnej strony. Inna aplikacja pod adresem NAS-a (inny
+  port), strona otwarta w przeglądarce przy tunelu SSH (`localhost`) ani sąsiednia subdomena za reverse proxy nie wyślą
+  już zapytania w imieniu zalogowanego użytkownika – wcześniej dało się obejść sprawdzanie typu treści. Skrypty
+  zapisujące pliki w `data/panel` jako root nie idą też za podłożonymi tam dowiązaniami symbolicznymi.
+- **Bez podwójnych publikacji:** drugie kliknięcie ✅ tego samego draftu (podwójne tapnięcie, dwóch administratorów
+  w czacie), zanim skończy się pierwsza publikacja, nie wysyła posta drugi raz – Telegram odpowiada „⏳ Ten draft właśnie
+  się publikuje”. Tak samo ten sam własny post wysłany dwa razy naraz (np. z dwóch kart): drugie zapytanie dostaje
+  komunikat, że post został przed chwilą wysłany.
+- **Awaria zasilania nie zatrzymuje panelu:** ustawienia, klucze, historia i pamięć duplikatów zapisują się
+  z wymuszonym zapisem na dysk, a panel trzyma poprzednią wersję plików (`*.bak` w `data/panel`). Uszkodzony plik (np.
+  ucięty po zaniku prądu na NAS-ie) panel odkłada jako `*.corrupt-<data>` i startuje z poprzedniej wersji – wcześniej
+  uszkodzony `state.json` zatrzymywał panel i wszystkie boty. Gdy uszkodzone są ustawienia albo klucze, a kopii brak,
+  panel nie startuje z pustymi ustawieniami, tylko podaje w logach plik do poprawienia; uszkodzony plik hasła – prosi
+  o nowe hasło z kodem z logów, jak po resecie.
+- Adres artykułu z cudzysłowem w kanale RSS nie psuje już wiadomości z draftem w Telegramie.
+- **Aktualizacje z poprawkami bezpieczeństwa:** `update.sh` przy każdej aktualizacji pobiera nowe obrazy n8n i RSSHub
+  i buduje panel na aktualnym obrazie bazowym (poprawki Node.js, Alpine i ffmpeg) – wcześniej obrazy zostawały w wersji
+  z dnia instalacji. Aktualizacja trwa przez to dłużej o czas pobierania; bez połączenia z Docker Hub kończy się na
+  dotychczasowych obrazach, a `--no-images` pomija ten krok.
+- **n8n aktualizuje się razem z Posterem:** `.env` nie przypina już wersji n8n – działa wersja sprawdzona z workflow
+  danego wydania. Wpisaną przy instalacji wartość `N8N_VERSION=2.40.7` `update.sh` czyści sam; inną, świadomie
+  przypiętą wersję zostawia i przypomina o niej (jeśli celowo przypiąłeś właśnie 2.40.7, wpisz ją ponownie).
+- **Webhook n8n tylko z tokenem panelu:** n8n przyjmuje zlecenia wyłącznie z tokenem panelu (poświadczenie „Poster:
+  token panelu”, które tworzy `import-to-n8n.sh` – uruchamia go `update.sh`). Obce zapytanie z sieci dostaje odmowę,
+  zanim w n8n powstanie wykonanie. Workflow zaimportowany ręcznie w n8n wymaga uruchomienia
+  `sudo bash scripts/import-to-n8n.sh`.
+- **Konto właściciela n8n zakłada skrypt:** `import-to-n8n.sh` (także w `update.sh`) zakłada konto właściciela n8n, jeśli
+  go jeszcze nie ma, i raz pokazuje login i hasło – przy instalacji krok po kroku nikt w sieci nie przejmie n8n przed
+  Tobą. Istniejącego konta skrypt nie zmienia.
+- **Bramka panelu przepuszcza tylko zapytania workflow Postera:** przejęte n8n nie użyje kluczy botów do niczego
+  innego, np. nie przejmie odbioru wiadomości bota Telegram ani nie odczyta tokenu strony na Facebooku. Pliki przez
+  bramkę: do 50 MB (limit wysyłki Telegrama).
+- Git w skryptach instalacji i aktualizacji działa z przypiętej wersji obrazu `alpine/git` (zmienia ją dopiero nowe
+  wydanie Postera).
+- **Zdjęcia i strony z kanałów tylko z internetu:** adres z cudzego kanału RSS albo ze strony artykułu, który prowadzi
+  do sieci lokalnej (np. obraz z kamery w domu, strona routera, usługi Dockera), panel pomija z ostrzeżeniem w drafcie –
+  także po przekierowaniu i gdy nazwa wskazuje adres lokalny dopiero przy połączeniu. Spoza kanałów bota panel pobiera
+  tylko z portów 80 i 443. Hosty kanałów RSS ustawionych w bocie (np. blog na NAS-ie) działają jak dotąd. Test kanału
+  w panelu pobiera wpisany adres jak dotąd, ale nie idzie za przekierowaniem do innego serwera w sieci lokalnej.
+- **Czat draftów w grupie:** gdy drafty przychodzą do grupy Telegram, a lista *ID administratorów* (*Ustawienia →
+  Telegram*) jest pusta, panel ostrzega przy bocie – drafty może wtedy zatwierdzić każdy uczestnik grupy.
+- **Tekst AI sprawdzany ze źródłem:** treść z kanałów trafia do AI jako dane oddzielone od poleceń, a gotowy draft
+  z adresem strony, @kontem, e-mailem albo telefonem spoza newsa i ustawień bota ma dopisek „🔍 Sprawdź tekst” – np. gdy
+  AI wykonało polecenie przemycone w cudzym kanale. Adresy i konta marki podane w *Dodatkowych wytycznych dla AI* nie są
+  oznaczane.
+- **Klucz hosta GitHuba znany z góry:** połączenie SSH skryptów z GitHubem (deploy key, przejście na PRO) przyjmuje tylko
+  klucz opublikowany przez GitHuba – wcześniej ufało kluczowi z pierwszego połączenia. `update.sh` przestawia to
+  w istniejących instalacjach sam.
+- **Kontenery z mniejszymi uprawnieniami i limitami:** żaden kontener nie podniesie sobie uprawnień
+  (`no-new-privileges`), panel i n8n działają bez uprawnień jądra, a program panelu jest tylko do odczytu (pliki
+  robocze ffmpeg są w pamięci). Kontenery mają limity pamięci – w `.env` `PANEL_MEMORY`, `N8N_MEMORY` i `RSSHUB_MEMORY`,
+  domyślnie 1g, 2g i 1g – a panel i n8n także liczby procesów. RSSHub ma healthcheck.
+- **Panel bez ffmpeg się nie zbuduje:** gdy instalacja ffmpeg się nie uda (np. NAS nie łączy się z serwerem pakietów
+  Alpine), aktualizacja kończy się czytelnym komunikatem, a dotychczasowa wersja działa dalej – wystarczy ponowić
+  `update.sh`. Wcześniej panel budował się bez ffmpeg i po cichu pomijał zdjęcia WebP.
+- **Łagodne zamykanie panelu:** przy aktualizacji i restarcie NAS-a panel daje trwającym zadaniom (np. zapytaniom
+  n8n i publikacji po ✅) do 25 s na koniec i zapisuje stan, zamiast przerywać je w połowie.
+- **Stan dla monitoringu:** `http://NAS_IP:7080/healthz` bez logowania odpowiada 200, gdy działa n8n, odbiór
+  wiadomości z Telegrama i harmonogram, a 503 przy kłopocie – np. dla Uptime Kuma (README → „Utrzymanie”).
+- **Odporność:** zapis ustawień bota w trakcie łączenia konta nie gubi już połączenia; ✅ w Telegramie nie wstrzymuje
+  obsługi kolejnych kliknięć, gdy n8n wolno przyjmuje zlecenie; takty harmonogramu się nie nakładają; przebieg bota
+  z wolnym modelem (np. Ollama) kończy się w czasie, na który czeka n8n; ffmpeg działa najwyżej w 2 procesach naraz.
+- **Logowanie i sesje:** limit nieudanych prób obejmuje też zmianę hasła i działa także łącznie dla wszystkich adresów.
+  Za odwrotnym proxy w sieci lokalnej liczy się adres klienta (`X-Forwarded-For`), więc pomyłki jednej osoby nie
+  blokują innych. Nowy przycisk *Ustawienia → Hasło do panelu → Wyloguj na wszystkich urządzeniach* (np. po zgubieniu
+  telefonu) – hasło zostaje bez zmian.
+- **Błędy i uprawnienia:** niezalogowany nie widzi szczegółów błędów serwera, a zły adres API daje błąd 400 zamiast
+  błędu serwera. `init-nas.sh` (uruchamia go też `update.sh`) zostawia `data/panel` tylko dla właściciela – wcześniej
+  przy każdej aktualizacji grupa dostawała dostęp do plików z kluczami aż do najbliższego zapisu panelu.
+- **Szyfrowana kopia zapasowa:** README podaje kopię `data/` i `.env` szyfrowaną hasłem (`openssl`) – są w niej klucze
+  API i tokeny kont.
+- **Stare drafty i miejsce na dysku:** nowa karta *Ustawienia → Pliki draftów*. Panel może sam usuwać drafty (tekst,
+  grafikę i wideo w `data/files`), których nic nie zmieniło przez podaną liczbę dni – sprawdza co 6 godzin, a draftu
+  w trakcie publikacji nie rusza. Domyślnie nic nie usuwa (0). Karta pokazuje wolne miejsce na dysku; gdy zostaje mniej
+  niż 1 GB, ostrzega Pulpit i `/healthz` (pole `disk`, odpowiedź 503). Panel ma przez to zapis w `data/files`
+  (wcześniej tylko odczyt).
+- **Szybszy panel przy wielu draftach:** lista draftów nie czyta katalogu `data/files` przy każdym odświeżeniu, a pamięć
+  podręczna draftów ma limit, więc zużycie pamięci nie rośnie z liczbą draftów. Pamięć duplikatów bota panel czyta
+  z dysku raz, a nie przy każdym przebiegu, a sprawdzanie hasła przy logowaniu nie wstrzymuje innych zapytań.
+- **Porządki:** panel nie przenosi już ustawień z `.env` przy pierwszym starcie (pozostałość wersji sprzed publikacji),
+  a `docker-compose.yml` nie przekazuje mu dawnych zmiennych, np. `GEMINI_API_KEY` czy `TELEGRAM_BOT_TOKEN` – klucze
+  ustawiasz tylko w panelu. Jeśli Twój `.env` z bardzo starej instalacji je jeszcze ma, możesz je stamtąd usunąć.
+  `import-to-n8n.sh` nie przyjmuje dawnych opcji `--publish`, `--only-workflow`, `--only-credentials` i `--force-x`.
+
 ## 1.3.0 – 2026-11-02
 
 - **Platforma bez odpowiedzi:** gdy platforma (np. X albo Facebook) przyjmie post, ale nie odpowie na czas albo

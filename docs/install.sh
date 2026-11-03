@@ -21,6 +21,8 @@ REPO="${POSTER_REPO:-https://github.com/imdangro/poster-app.git}"
 PRODUCT_URL="https://posterapp.pl/"
 PRODUCT_URL_EN="https://posterapp.pl/en/"
 N8N_EMAIL="admin@poster.local"
+# git w kontenerze: obraz przypięty digestem, jak w scripts/update.sh (test panel/test/scripts.test.js)
+GIT_IMAGE=alpine/git:3ed2e3d@sha256:e8ceedc73bd80992ae8d58a7d24c58b8322146c354f1d2e81a97db4452068ec0
 # kod z logów panelu (panel/lib/auth.js): XXXX-XXXX-XXXX bez znaków, które się mylą
 CODE_CHARS='[ABCDEFGHJKMNPQRSTUVWXYZ23456789]'
 CODE_RE="${CODE_CHARS}{4}-${CODE_CHARS}{4}-${CODE_CHARS}{4}"
@@ -253,7 +255,7 @@ clone_repo() {
     repo=/src
   fi
   info "$(m "Pobieram Postera do $DIR..." "Downloading Poster to $DIR...")"
-  docker run --rm ${src[@]+"${src[@]}"} -v "$parent":/git alpine/git -c safe.directory='*' -c advice.detachedHead=false clone --quiet "$repo" "$name" ||
+  docker run --rm ${src[@]+"${src[@]}"} -v "$parent":/git "$GIT_IMAGE" -c safe.directory='*' -c advice.detachedHead=false clone --quiet "$repo" "$name" ||
     die "$(m "Nie udało się pobrać Postera (komunikat gita powyżej). Sprawdź połączenie z internetem i uruchom instalator ponownie." \
       "Could not download Poster (git message above). Check the internet connection and run the installer again.")"
   if ! is_poster_dir "$DIR"; then

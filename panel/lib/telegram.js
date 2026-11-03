@@ -41,12 +41,16 @@ const STATUS_TEXT = {
 };
 
 class Telegram {
-  constructor(store, { filesDir, onPublish, onReject }) {
+  // isPublishing(draftId) – czy publikacja tego draftu już trwa (server.js → runner.publishing)
+  constructor(store, { filesDir, onPublish, onReject, isPublishing = null }) {
     this.store = store;
     this.filesDir = filesDir;
     this.onPublish = onPublish;
     this.onReject = onReject;
+    this.isPublishing = isPublishing;
     this.running = false;
+    this.tasks = new Set(); // publikacje rozpoczęte kliknięciem ✅ (w tle – zamykanie panelu na nie czeka)
+    this.current = null; // obsługiwana właśnie aktualizacja
     this.conn = { ok: false, code: 'idle', error: '', username: '' };
     this.abort = null;
     this.tokenSeen = null;
@@ -122,6 +126,24 @@ class Telegram {
     this.loop().catch((e) => console.error(tr('Telegram poller zatrzymany:'), e));
   }
 
+  // Zamykanie panelu: koniec odbioru wiadomości, obietnica końca obsługiwanej aktualizacji i publikacji w tle
+  stop() {
+    this.running = false;
+    if (this.abort) this.abort.abort();
+    return this.settled();
+  }
+
+  // obietnica końca zadań w tle (publikacje po ✅) i bieżącej aktualizacji
+  async settled() {
+    await Promise.allSettled([this.current, ...this.tasks]);
+  }
+
+  track(promise) {
+    this.tasks.add(promise);
+    promise.finally(() => this.tasks.delete(promise)).catch(() => {});
+    return promise;
+  }
+
   async loop() {
     const tg = this.store.state.telegram;
     while (this.running) {
@@ -157,10 +179,13 @@ class Telegram {
         );
         this.setStatus(true, 'ok');
         for (const u of updates) {
+          if (!this.running) break; // zamykanie panelu – reszta paczki przyjdzie po starcie (offset bez zmian)
           // Offset zapisujemy PRZED obsługą – kliknięcie nigdy nie zostanie opublikowane dwa razy.
           tg.offset = u.update_id + 1;
           this.store.saveState(true);
-          await this.handle(u).catch((e) => console.error(tr('Obsługa aktualizacji Telegrama:'), e.message));
+          this.current = this.handle(u).catch((e) => console.error(tr('Obsługa aktualizacji Telegrama:'), e.message));
+          await this.current;
+          this.current = null;
         }
       } catch (e) {
         if (e.name === 'AbortError') continue; // zmiana tokenu w ustawieniach
@@ -248,6 +273,10 @@ class Telegram {
 
     const draft = this.readDraft(draftId);
     if (!draft) return answer(tr('Nie znaleziono draftu na dysku'));
+    // publikacja tego draftu już trwa (podwójne tapnięcie, dwóch administratorów): bez drugiej publikacji i bez
+    // zmiany przycisków – pierwsze kliknięcie pokazuje „⏳ Publikuję…”, a wynik przyjdzie w raporcie
+    if (this.isPublishing && this.isPublishing(draftId))
+      return answer(tr('⏳ Ten draft właśnie się publikuje – wynik przyjdzie w raporcie'));
 
     if (m[1] === 'rej') {
       await answer(tr('❌ Odrzucono'));
@@ -257,6 +286,14 @@ class Telegram {
     const busy = unknown === 'confirm' ? tr('⏳ Zapisuję…') : tr('⏳ Publikuję…');
     await answer(busy);
     await this.try('editMessageReplyMarkup', markup(busy));
+    // Publikacja w tle: kolejne kliknięcia (też w innych draftach) nie czekają na start n8n (do 30 s). Blokada
+    // „publikacja w toku” działa od razu – onPublish (runner.start) zapisuje przebieg, zanim zacznie czekać na n8n.
+    this.track(this.startPublish(draft, ctx, m[1]));
+  }
+
+  // action: pub | pua | puc – ten sam przycisk ponawia po błędzie
+  async startPublish(draft, ctx, action) {
+    const draftId = ctx.draftId;
     try {
       await this.onPublish(draft, ctx);
     } catch (e) {
@@ -266,7 +303,7 @@ class Telegram {
         reply_markup: {
           inline_keyboard: [
             [
-              { text: tr('🔁 Spróbuj ponownie'), callback_data: `${m[1]}:${draftId}` },
+              { text: tr('🔁 Spróbuj ponownie'), callback_data: `${action}:${draftId}` },
               { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },
             ],
           ],

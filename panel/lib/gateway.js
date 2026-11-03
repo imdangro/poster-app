@@ -9,6 +9,25 @@ const { UPSTREAM } = require('./accounts');
 const { tr } = require('./i18n');
 
 const SERVICES = ['telegram', 'x', 'meta', 'apify'];
+// Zapytania, które n8n może wysłać przez bramkę: tylko te, których używa workflow Postera (węzły HTTP w
+// workflows/src/build.py i węzły Code – zgodność z workflow sprawdza test panel/test/gateway.test.js). Przejęte n8n
+// (podatność, konto właściciela) nie użyje tokenów botów do niczego innego, np. setWebhook / getUpdates bota Telegram,
+// odczytu wiadomości z X albo tokenu i skrzynki strony na Facebooku. [metoda, ścieżka, warunek na parametry zapytania]
+const ALLOWED = {
+  telegram: [['POST', /^\/(sendMessage|sendPhoto|editMessageReplyMarkup)$/]],
+  x: [['POST', /^\/2\/(tweets|media\/upload)$/]],
+  meta: [['POST', /^\/v\d+\.\d+\/\d+\/(photos|feed)$/]],
+  apify: [['POST', /^\/v2\/acts\/[^/]+\/run-sync-get-dataset-items$/]],
+};
+// n8n wysyła grafiki i wideo do 50 MB (limit wysyłki Bot API Telegrama) – ciało czeka w pamięci, bo przy wygasłym tokenie
+// OAuth bramka wysyła je drugi raz
+const MAX_BODY = 50 * 1024 * 1024;
+
+// Czy zapytanie n8n jest na liście dozwolonych (rest – ścieżka po nazwie usługi, query – „?a=b” albo '')
+function gatewayAllows(service, method, rest, query = '') {
+  const params = new URLSearchParams(String(query).replace(/^\?/, ''));
+  return (ALLOWED[service] || []).some(([m, path, check]) => m === method && path.test(rest) && (!check || check(params)));
+}
 const DROP_REQUEST = new Set([
   'host',
   'connection',
@@ -72,13 +91,21 @@ class Gateway {
     if (botId !== '_' && !bot) throw new HttpError(404, tr('Bot {0} nie istnieje (usunięty w panelu?)', botId));
     if (!bot && ['x', 'meta'].includes(service)) throw new HttpError(400, tr('Konto platformy wymaga ID bota'));
 
-    const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req, 100 * 1024 * 1024);
-    const headers = {};
-    for (const [k, v] of Object.entries(req.headers)) if (!DROP_REQUEST.has(k)) headers[k] = v;
-
     const st = (this.stats[service] = this.stats[service] || { calls: 0, errors: 0 });
     st.calls++;
     st.lastAt = new Date().toISOString();
+    // spoza listy dozwolonych – odmowa, zanim bramka przeczyta ciało i doklei klucze
+    if (!gatewayAllows(service, req.method, rest, query)) {
+      const what = `${req.method} /${service}${rest.slice(0, 80)}`;
+      st.errors++;
+      st.lastError = `HTTP 403 ${what}`;
+      console.warn(tr('Bramka: zablokowano {0} – workflow Postera nie wysyła takich zapytań', what));
+      throw new HttpError(403, tr('Bramka panelu przepuszcza tylko zapytania workflow Postera – {0} jest zablokowane', what));
+    }
+
+    const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req, MAX_BODY);
+    const headers = {};
+    for (const [k, v] of Object.entries(req.headers)) if (!DROP_REQUEST.has(k)) headers[k] = v;
 
     let auth = await this.auth(service, bot, false);
     let upstream = await this.forward(req.method, auth, rest + query, headers, body);
@@ -152,4 +179,4 @@ function gatewayError(res, e) {
   sendJson(res, e.status || 502, { error: { message: e.message, source: 'poster-panel' } });
 }
 
-module.exports = { Gateway, gatewayError };
+module.exports = { Gateway, gatewayError, gatewayAllows };

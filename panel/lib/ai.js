@@ -34,6 +34,10 @@ const TRANSIENT = new Set([408, 425, 429, 500, 502, 503, 504]);
 const retryMs = () => Number(process.env.POSTER_AI_RETRY_MS) || 4000;
 const PATIENT_ROUNDS = [4, 8, 15];
 const PATIENT_MAX_MS = 5 * 60 * 1000;
+// n8n czeka na tekst najwyżej 20 min (węzeł „AI: wybierz news i napisz posty”): przebieg bota mieści się w 19 min razem
+// z ponowieniami i dostawcą zapasowym – inaczej panel pracowałby dalej nad tekstem, na który n8n już nie czeka
+// (Ollama na słabym sprzęcie: jedno zapytanie do 15 min)
+const patientDeadlineMs = () => Number(process.env.POSTER_AI_DEADLINE_MS) || 19 * 60 * 1000;
 
 class AI {
   constructor(store) {
@@ -41,10 +45,8 @@ class AI {
   }
 
   // ------------------------------------------------------------------ klucze i adresy
-  // geminiTextKey – dawny osobny klucz do tekstu (store.js przenosi go do geminiApiKey)
   geminiKey() {
-    const sg = this.store.secrets.global;
-    return sg.geminiTextKey || sg.geminiApiKey || '';
+    return this.store.secrets.global.geminiApiKey || '';
   }
 
   openaiProvider(id) {
@@ -77,6 +79,8 @@ class AI {
     let chain = [{ provider: c.textProvider || 'gemini', model: c.textModel }];
     const waits = patient ? PATIENT_ROUNDS.map((x) => x * retryMs()) : [];
     const started = Date.now();
+    const deadline = patient ? started + patientDeadlineMs() : Infinity;
+    const left = () => deadline - Date.now();
     const lasting = []; // błędy, których ponowienie nie naprawi (klucz, model) – zostają w opisie
     for (let round = 0; ; round++) {
       const errors = [...lasting];
@@ -86,14 +90,16 @@ class AI {
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
             if (!model) throw new HttpError(400, tr('nie wybrano modelu (panel → bot → Tekst i grafika)'));
+            if (left() < 1000)
+              throw new HttpError(504, tr('skończył się czas na tekst ({0} min)', Math.round((deadline - started) / 60000)));
             const text =
               provider === 'gemini'
-                ? await this.geminiText({ model, system, user, schema, maxTokens, thinking: c.thinking })
-                : await this.openaiText({ provider, model, system, user, schema, maxTokens });
+                ? await this.geminiText({ model, system, user, schema, maxTokens, thinking: c.thinking, left })
+                : await this.openaiText({ provider, model, system, user, schema, maxTokens, left });
             return { text, provider, model, fallbackUsed: !!step.fallback, errors };
           } catch (e) {
             const label = `${(TEXT_PROVIDERS[provider] || {}).label || provider} (${model || '?'})`;
-            const retry = attempt === 1 && (e.transient || e.status === 502);
+            const retry = attempt === 1 && (e.transient || e.status === 502) && left() > retryMs();
             if (!retry) {
               errors.push(`${label}: ${e.message}`);
               if (e.transient) again.push(step);
@@ -105,7 +111,7 @@ class AI {
         }
       }
       const why = errors.join(' · ');
-      if (round >= waits.length || !again.length || Date.now() - started > PATIENT_MAX_MS) {
+      if (round >= waits.length || !again.length || Date.now() - started > PATIENT_MAX_MS || left() < waits[round] + 1000) {
         if (!round) throw new HttpError(502, tr('AI nie wygenerowało tekstu – {0}', why));
         const min = Math.max(1, Math.round((Date.now() - started) / 60000));
         throw new HttpError(502, tr('AI nie wygenerowało tekstu mimo ponawiania przez {0} min – {1}', min, why));
@@ -115,7 +121,8 @@ class AI {
     }
   }
 
-  async geminiText({ model, system, user, schema, maxTokens, thinking }) {
+  // left() – ile ms zostało na cały tekst (przebieg bota); każde zapytanie kończy się najpóźniej wtedy
+  async geminiText({ model, system, user, schema, maxTokens, thinking, left = () => Infinity }) {
     const key = this.geminiKey();
     if (!key) throw new HttpError(400, tr('brak klucza Google Gemini (Ustawienia)'));
     const generationConfig = { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: maxTokens };
@@ -129,7 +136,7 @@ class AI {
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: withThinking && think ? { ...generationConfig, thinkingConfig: think } : generationConfig,
         }),
-        timeout: 180000,
+        timeout: Math.max(1000, Math.min(180000, left())),
       });
       return r;
     };
@@ -150,7 +157,7 @@ class AI {
     return text;
   }
 
-  async openaiText({ provider, model, system, user, schema, maxTokens }) {
+  async openaiText({ provider, model, system, user, schema, maxTokens, left = () => Infinity }) {
     const p = this.openaiProvider(provider);
     const headers = { 'content-type': 'application/json' };
     if (p.key) headers.authorization = `Bearer ${p.key}`;
@@ -172,7 +179,7 @@ class AI {
           max_tokens: maxTokens,
           ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
         }),
-        timeout: p.slow ? 900000 : 180000,
+        timeout: Math.max(1000, Math.min(p.slow ? 900000 : 180000, left())),
       });
     let r = await call(true);
     // Część modeli nie obsługuje trybu JSON → ponów bez niego (i tak prosimy o JSON w poleceniu)
@@ -257,14 +264,4 @@ function apiFailure(r) {
   return e;
 }
 
-// Rozpoznanie formatu po nagłówku pliku
-function sniffImage(buf) {
-  if (!buf || buf.length < 12) return null;
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
-  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
-  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
-  if (buf.toString('ascii', 0, 3) === 'GIF') return 'image/gif';
-  return null;
-}
-
-module.exports = { AI, TEXT_PROVIDERS, sniffImage, toJsonSchema };
+module.exports = { AI, TEXT_PROVIDERS, toJsonSchema };

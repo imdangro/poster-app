@@ -2,8 +2,9 @@
 // Grafika do posta: zdjęcie ze źródła (RSS / og:image artykułu / tweet) albo post bez grafiki – według trybu bota.
 const crypto = require('crypto');
 const { PROJECT_URL, readLimited } = require('./util');
-const { sniffImage } = require('./ai');
+const { sniffImage, imageSize } = require('./media');
 const { convertWebp } = require('./ffmpeg');
+const { fetchUntrusted } = require('./net');
 const { tr } = require('./i18n');
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // limit X dla zdjęć
@@ -31,12 +32,20 @@ class Images {
   async findSourceImage(bot, news, warnings) {
     const tried = new Set();
     const recent = new Set(((this.store.state.recentImages || {})[bot.id] || []).map(String));
+    const trust = feedUrls(bot);
+    // adres z sieci lokalnej (fetchUntrusted): ostrzeżenie w drafcie, np. gdy zdjęcia bloga na NAS-ie mają inny host
+    // niż kanał RSS bota
+    const skipped = (e) => {
+      const w = e && e.blocked ? tr('pominięto adres z kanału: {0}', e.message) : '';
+      if (w && !warnings.includes(w)) warnings.push(w);
+      return null;
+    };
     const attempt = async (list) => {
       for (const url of list) {
         if (tried.size >= 8) return null;
         if (!url || tried.has(url) || SKIP_URL.test(url)) continue;
         tried.add(url);
-        const img = await download(url).catch(() => null);
+        const img = await download(url, { trust }).catch(skipped);
         if (!img) continue;
         const sha = crypto.createHash('sha1').update(img.buffer).digest('hex');
         if (recent.has(sha)) continue; // ten sam obrazek co w poprzednich postach = zwykle logo serwisu
@@ -53,7 +62,7 @@ class Images {
       warnings.push(tr('link Google News nie prowadzi wprost do artykułu – dodaj bezpośredni kanał RSS portalu'));
       return null;
     }
-    const og = await pageImages(pageUrl).catch(() => []);
+    const og = await pageImages(pageUrl, { trust }).catch((e) => skipped(e) || []);
     return attempt(og);
   }
 
@@ -67,13 +76,24 @@ class Images {
 }
 
 // ---------------------------------------------------------------------------------------------- sieć
-async function download(url) {
-  const res = await fetch(url, {
+// Adresy kanałów RSS bota: ich hosty są zaufane także w sieci lokalnej (np. własny blog na NAS-ie), resztę adresów
+// z treści kanałów fetchUntrusted pobiera tylko z internetu
+function feedUrls(bot) {
+  const s = (bot && bot.sources) || {};
+  return [...(Array.isArray(s.rss) ? s.rss.map((f) => f && f.url) : []), s.xRssTemplate].filter(Boolean);
+}
+
+// trust – adresy, których hosty wolno pobierać bez ograniczeń (feedUrls)
+async function download(url, { trust = [] } = {}) {
+  const res = await fetchUntrusted(url, {
     headers: { 'user-agent': UA, accept: 'image/jpeg,image/png;q=0.9,image/*;q=0.5' },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(15000),
+    timeout: 15000,
+    trust,
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    res.body.cancel().catch(() => {});
+    return null;
+  }
   let buffer = await readLimited(res, MAX_IMAGE_BYTES);
   if (!buffer || buffer.length < 2000) return null;
   let mimeType = sniffImage(buffer);
@@ -90,19 +110,22 @@ async function download(url) {
 }
 
 // og:image, twitter:image, link rel=image_src ze strony artykułu
-async function pageImages(pageUrl) {
-  return (await pageMeta(pageUrl)).images;
+async function pageImages(pageUrl, opts) {
+  return (await pageMeta(pageUrl, opts)).images;
 }
 
 // Znaczniki strony z <head>: tytuł i opis (og:/twitter:/<title>) oraz adresy zdjęć – np. do karty linku
-async function pageMeta(pageUrl) {
+async function pageMeta(pageUrl, { trust = [] } = {}) {
   const empty = { title: '', description: '', images: [] };
-  const res = await fetch(pageUrl, {
+  const res = await fetchUntrusted(pageUrl, {
     headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', 'accept-language': 'pl,en;q=0.8' },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(12000),
+    timeout: 12000,
+    trust,
   });
-  if (!res.ok) return empty;
+  if (!res.ok) {
+    res.body.cancel().catch(() => {});
+    return empty;
+  }
   const reader = res.body.getReader();
   let html = '';
   const decoder = new TextDecoder('utf-8');
@@ -161,33 +184,4 @@ function uniqueUrls(list) {
   return [...new Set((Array.isArray(list) ? list : []).map((u) => decodeEntities(u)).filter((u) => /^https?:\/\//i.test(u)))].slice(0, 8);
 }
 
-// ---------------------------------------------------------------------------------------------- wymiary obrazu
-function imageSize(buf) {
-  try {
-    if (!buf || buf.length < 24) return {};
-    if (buf[0] === 0x89 && buf[1] === 0x50) return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
-    if (buf[0] === 0xff && buf[1] === 0xd8) {
-      let i = 2;
-      while (i + 9 < buf.length) {
-        if (buf[i] !== 0xff) {
-          i++;
-          continue;
-        }
-        const marker = buf[i + 1];
-        if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
-          i += 2;
-          continue;
-        }
-        const len = buf.readUInt16BE(i + 2);
-        // SOF0–SOF15 z wyjątkiem DHT (C4), JPG (C8) i DAC (CC)
-        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
-          return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
-        }
-        i += 2 + len;
-      }
-    }
-  } catch (e) {}
-  return {};
-}
-
-module.exports = { Images, imageSize, pageImages, pageMeta, downloadImage: download };
+module.exports = { Images, pageImages, pageMeta, downloadImage: download, feedUrls };

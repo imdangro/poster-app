@@ -18,6 +18,8 @@ let dataDir;
 let mock;
 const mockHits = [];
 const n8nJobs = []; // zlecenia panelu do n8n (webhook „poster”)
+let n8nDelay = 0; // ms do odpowiedzi webhooka n8n (wolne n8n – zapytania panelu są w drodze naraz)
+let n8nReject = false; // webhook z Header Auth odrzuca token panelu (brak poświadczenia albo inny token w n8n)
 // atrapa Gemini: tyle kolejnych zapytań dostaje HTTP 503 (przeciążony model), geminiBadKey – HTTP 400 (zły klucz);
 // licznik wszystkich zapytań
 let geminiBusy = 0;
@@ -62,8 +64,12 @@ before(async () => {
         res.end(JSON.stringify(obj));
       };
       if (req.url === '/webhook/poster') {
+        if (n8nReject) {
+          res.writeHead(403);
+          return res.end('Authorization data is wrong!');
+        }
         n8nJobs.push(JSON.parse(body));
-        return send({ ok: true, executionId: 77 });
+        return setTimeout(() => send({ ok: true, executionId: 77 }), n8nDelay);
       }
       // Gemini: wersje posta – pola ze schematu odpowiedzi
       if (/:generateContent$/.test(req.url)) {
@@ -205,7 +211,7 @@ test('TikTok i wideo tylko w wersji PRO', async () => {
   const ib = `http://127.0.0.1:${internal}`;
   const headers = { 'x-poster-token': TOKEN, 'content-type': 'application/json' };
   const anim = await fetch(`${ib}/internal/bots/${bot.id}/animation`, { method: 'POST', headers, body: '{}' });
-  const gw = await fetch(`${ib}/gw/${bot.id}/tiktok/v2/user/info/`, { headers });
+  const gw = await fetch(`${ib}/gw/${bot.id}/tiktok/v2/post/publish/status/fetch/`, { method: 'POST', headers, body: '{}' });
   assert.match(startMsg, /Nieznana platforma/);
   assert.equal(settings.options.tiktokPrivacy, undefined);
   assert.equal(bot.publishing.tiktok, undefined);
@@ -327,15 +333,40 @@ test('klucz licencyjny z panelu (oba wydania): sprawdzenie bez aktywacji, polece
   assert.equal(anon.status, 401);
 });
 
-test('API wymaga logowania, a zmiany – typu JSON (ochrona przed CSRF)', async () => {
+test('API wymaga logowania, a zmiany – typu JSON z tej samej strony (ochrona przed CSRF)', async () => {
   assert.equal((await fetch(url('/api/settings'))).status, 401);
   assert.equal((await fetch(url('/api/settings'), { headers: { cookie } })).status, 200);
+  const botsBefore = (await (await json('GET', '/api/overview')).json()).bots.length;
   const form = await fetch(url('/api/bots'), {
     method: 'POST',
     headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
     body: 'name=x',
   });
   assert.equal(form.status, 415);
+  // „prosty” fetch z obcej strony (przeglądarka wysyła go bez pytania CORS): typ treści tylko udaje JSON
+  const sneaky = await fetch(url('/api/bots'), {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'text/plain; x=application/json' },
+    body: JSON.stringify({ name: 'x' }),
+  });
+  assert.equal(sneaky.status, 415);
+  // inna aplikacja pod adresem NAS-a (inny port) albo sąsiednia subdomena: ta sama witryna, inne pochodzenie
+  const sameSite = await json('POST', '/api/bots', { name: 'x' }, { 'sec-fetch-site': 'same-site' });
+  assert.equal(sameSite.status, 403);
+  assert.match((await sameSite.json()).error.message, /z innej strony/);
+  assert.equal((await json('POST', '/api/bots', { name: 'x' }, { 'sec-fetch-site': 'cross-site' })).status, 403);
+  // starsza przeglądarka bez Sec-Fetch-Site: decyduje Origin
+  assert.equal((await json('POST', '/api/bots', { name: 'x' }, { origin: 'http://127.0.0.1:1' })).status, 403);
+  assert.equal((await json('POST', '/api/bots', { name: 'x' }, { origin: 'null' })).status, 403);
+  assert.equal((await json('POST', '/api/logout', {}, { 'sec-fetch-site': 'same-site' })).status, 403, 'także bez logowania');
+  assert.equal((await (await json('GET', '/api/overview')).json()).bots.length, botsBefore, 'żaden bot nie powstał');
+  // panel w przeglądarce (same-origin), starsza przeglądarka z Origin panelu i reverse proxy (X-Forwarded-Host)
+  const preview = (headers) => json('POST', '/api/schedule/preview', { schedule: {} }, headers);
+  const own = await preview({ 'sec-fetch-site': 'same-origin' });
+  assert.equal(own.status, 200);
+  assert.deepEqual((await own.json()).hours, [8, 12, 16, 20], 'podgląd harmonogramu działa (w PRO także)');
+  assert.equal((await preview({ origin: `http://127.0.0.1:${ui}` })).status, 200);
+  assert.equal((await preview({ origin: 'https://poster.example.pl', 'x-forwarded-host': 'poster.example.pl' })).status, 200);
 });
 
 test('pliki draftów tylko po zalogowaniu i bez wychodzenia poza katalog', async () => {
@@ -347,10 +378,11 @@ test('pliki draftów tylko po zalogowaniu i bez wychodzenia poza katalog', async
 test('API wewnętrzne i bramka wymagają PANEL_INTERNAL_TOKEN', async () => {
   const ib = `http://127.0.0.1:${internal}`;
   assert.equal((await fetch(`${ib}/internal/health`)).status, 200);
-  assert.equal((await fetch(`${ib}/gw/_/telegram/getMe`)).status, 403);
-  assert.equal((await fetch(`${ib}/gw/_/telegram/getMe`, { headers: { 'x-poster-token': 'zly-token-1234567890' } })).status, 403);
+  const send = (headers) => fetch(`${ib}/gw/_/telegram/sendMessage`, { method: 'POST', headers, body: '{}' });
+  assert.equal((await send({})).status, 403);
+  assert.equal((await send({ 'x-poster-token': 'zly-token-1234567890' })).status, 403);
   // poprawny token, ale bez tokenu bota Telegram w panelu
-  assert.equal((await fetch(`${ib}/gw/_/telegram/getMe`, { headers: { 'x-poster-token': TOKEN } })).status, 401);
+  assert.equal((await send({ 'x-poster-token': TOKEN })).status, 401);
 });
 
 test('bramka dokleja token Telegrama, a przeglądarka i usługa nie widzą sekretów', async () => {
@@ -359,10 +391,21 @@ test('bramka dokleja token Telegrama, a przeglądarka i usługa nie widzą sekre
   const view = await (await fetch(url('/api/settings'), { headers: { cookie } })).text();
   assert.ok(!view.includes(secret), 'token nie trafia do przeglądarki');
 
-  const r = await fetch(`http://127.0.0.1:${internal}/gw/_/telegram/getMe`, { headers: { 'x-poster-token': TOKEN } });
+  const r = await fetch(`http://127.0.0.1:${internal}/gw/_/telegram/sendMessage`, {
+    method: 'POST',
+    headers: { 'x-poster-token': TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: 1, text: 'test' }),
+  });
   assert.equal(r.status, 200);
   const hit = mockHits.at(-1);
-  assert.equal(hit.url, `/bot${secret}/getMe`);
+  assert.equal(hit.url, `/bot${secret}/sendMessage`);
+  // poza listą zapytań workflow (np. przejęcie odbioru wiadomości bota) – odmowa bez doklejania tokenu
+  const hook = await fetch(`http://127.0.0.1:${internal}/gw/_/telegram/setWebhook`, {
+    method: 'POST',
+    headers: { 'x-poster-token': TOKEN },
+  });
+  assert.equal(hook.status, 403);
+  assert.notEqual(mockHits.at(-1).url, `/bot${secret}/setWebhook`);
   assert.equal(hit.headers['x-poster-token'], undefined, 'sekret panelu nie wychodzi poza bramkę');
 });
 
@@ -458,6 +501,48 @@ test('post przez /api/compose: do akceptacji; PRO – kilka botów i zaplanowane
   assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
 });
 
+test('ten sam post wysłany dwa razy naraz (dwie karty, ponowienie): jedno zlecenie dla n8n, drugie zapytanie – 409', async () => {
+  const settings = { global: { telegram: { chatId: '-100123' } }, secrets: { geminiApiKey: 'AIza-test-key' } };
+  assert.equal((await json('PUT', '/api/settings', settings)).status, 200);
+  const { bot } = await (await json('POST', '/api/bots', { name: 'Piekarnia' })).json();
+  assert.equal((await json('PUT', `/api/bots/${bot.id}`, { publishing: { x: true } })).status, 200);
+  const before = n8nJobs.length;
+  n8nDelay = 300; // n8n odpowiada wolno – oba zapytania czekają na odpowiedź w tym samym czasie
+  try {
+    const one = { text: 'Świeże pieczywo', platforms: ['x'], posts: { x: 'Świeże pieczywo' }, image: { source: 'none' }, publishNow: true };
+    const single = await Promise.all([1, 2].map(() => json('POST', `/api/bots/${bot.id}/compose`, one)));
+    assert.deepEqual(single.map((r) => r.status).sort(), [200, 409]);
+    const many = {
+      bots: [{ id: bot.id, platforms: ['x'], posts: { x: 'Chleb na zakwasie' } }],
+      text: 'Chleb na zakwasie',
+      image: { source: 'none' },
+      publishNow: true,
+    };
+    const batch = await Promise.all([1, 2].map(() => json('POST', '/api/compose', many)));
+    assert.deepEqual(batch.map((r) => r.status).sort(), [200, 409]);
+  } finally {
+    n8nDelay = 0;
+  }
+  assert.equal(n8nJobs.length - before, 2, 'po jednym zleceniu na każdy post');
+  assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
+});
+
+test('n8n odrzuca token panelu (webhook z Header Auth): czytelny błąd z poleceniem naprawy', async () => {
+  assert.equal((await json('PUT', '/api/settings', { global: { telegram: { chatId: '-100123' } } })).status, 200);
+  const { bot } = await (await json('POST', '/api/bots', { name: 'Token' })).json();
+  assert.equal((await json('PUT', `/api/bots/${bot.id}`, { publishing: { x: true } })).status, 200);
+  n8nReject = true;
+  try {
+    const post = { text: 'Test tokenu', platforms: ['x'], posts: { x: 'Test tokenu' }, image: { source: 'none' } };
+    const r = await json('POST', `/api/bots/${bot.id}/compose`, post);
+    assert.equal(r.status, 502);
+    assert.match((await r.json()).error.message, /odrzucił token panelu .*sudo bash scripts\/import-to-n8n\.sh/);
+  } finally {
+    n8nReject = false;
+  }
+  assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
+});
+
 test('bot kanału YouTube (PRO): test kanału, pierwsze sprawdzenie, film z kolejki dla n8n, film wraca po błędzie', async () => {
   const settings = { global: { telegram: { chatId: '-100123' } }, secrets: { geminiApiKey: 'AIza-test-key' } };
   assert.equal((await json('PUT', '/api/settings', settings)).status, 200);
@@ -521,6 +606,68 @@ test('AI przeciążone (503): przebieg bota ponawia w kolejnych rundach, edytor 
   assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
 });
 
+test('test kanału RSS: wpisany adres także w sieci lokalnej, przekierowanie i kanał ze strony – tylko do internetu', async () => {
+  let otherHits = 0;
+  const other = http.createServer((req, res) => {
+    otherHits++;
+    res.end('<rss><channel><item><title>Sekret</title></item></channel></rss>');
+  });
+  const otherFeed = () => `http://127.0.0.1:${other.address().port}/feed.xml`;
+  const page = (href) => `<!doctype html><html><head><link rel="alternate" type="application/rss+xml" href="${href}"></head></html>`;
+  const feeds = http.createServer((req, res) => {
+    if (req.url === '/feed.xml')
+      return res.end('<rss><channel><item><title>Wpis A</title></item><item><title>Wpis B</title></item></channel></rss>');
+    if (req.url === '/strona') return res.end(page('/feed.xml'));
+    if (req.url === '/strona-obca') return res.end(page(otherFeed()));
+    if (req.url === '/przekierowanie') {
+      res.writeHead(302, { location: otherFeed() });
+      return res.end();
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await Promise.all([other, feeds].map((s) => new Promise((r) => s.listen(0, '127.0.0.1', r))));
+  const base = `http://127.0.0.1:${feeds.address().port}`;
+  const check = async (u) => (await json('POST', '/api/test/rss', { url: u })).json();
+  try {
+    // adres wpisany w panelu (np. RSSHub albo blog na NAS-ie) – zaufany
+    let r = await check(`${base}/feed.xml`);
+    assert.equal(r.ok, true, r.message);
+    assert.deepEqual(r.titles, ['Wpis A', 'Wpis B']);
+    r = await check(`${base}/strona`);
+    assert.equal(r.discovered, `${base}/feed.xml`);
+    // strona albo przekierowanie wskazuje inny serwer w sieci lokalnej – bez połączenia
+    r = await check(`${base}/strona-obca`);
+    assert.equal(r.ok, false);
+    assert.match(r.message, /^To strona WWW, a nie kanał RSS/);
+    r = await check(`${base}/przekierowanie`);
+    assert.match(r.message, /^Brak połączenia: 127\.0\.0\.1 – port \d+ \(Poster pobiera tylko z portów 80 i 443\)$/);
+    assert.equal(otherHits, 0);
+  } finally {
+    feeds.close();
+    other.close();
+  }
+});
+
+test('wyloguj na wszystkich urządzeniach (tylko z ważnej sesji); zły adres API – 400 zamiast błędu serwera', async () => {
+  const anon = await fetch(url('/api/logout'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ everywhere: true }),
+  });
+  assert.equal(anon.status, 401, 'bez sesji nikt nie wyloguje właściciela');
+  const bad = await json('GET', '/api/bots/%zz');
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error.message, /^(Niepoprawny adres|Invalid address)$/);
+
+  const second = (await json('POST', '/api/login', { password: 'mojehaslo123' })).headers.get('set-cookie').split(';')[0];
+  assert.equal((await json('POST', '/api/logout', { everywhere: true })).status, 200);
+  for (const c of [cookie, second]) assert.equal((await fetch(url('/api/settings'), { headers: { cookie: c } })).status, 401);
+  const again = await json('POST', '/api/login', { password: 'mojehaslo123' });
+  cookie = again.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(url('/api/settings'), { headers: { cookie } })).status, 200);
+});
+
 test('reset hasła działa od razu: stara sesja wylogowana, nowy kod ustawia hasło', async () => {
   const out = execFileSync(process.execPath, [path.join(ROOT, 'reset-password.js')], {
     env: { PATH: process.env.PATH, POSTER_DATA_DIR: dataDir },
@@ -534,4 +681,19 @@ test('reset hasła działa od razu: stara sesja wylogowana, nowy kod ustawia has
   const r = await json('POST', '/api/setup', { password: 'nowehaslo123', code }, { 'x-forwarded-proto': 'https' });
   assert.equal(r.status, 200);
   assert.match(r.headers.get('set-cookie'), /; Secure/);
+});
+
+test('zmiana hasła: limit nieudanych prób obecnego hasła (z przejętą sesją nie da się go zgadywać)', async () => {
+  const l = await json('POST', '/api/login', { password: 'nowehaslo123' });
+  assert.equal(l.status, 200);
+  cookie = l.headers.get('set-cookie').split(';')[0];
+  let status;
+  let n = 0;
+  do {
+    status = (await json('POST', '/api/password', { current: 'zlehaslo123', password: 'innehaslo999' })).status;
+    n++;
+  } while (status === 400 && n < 20);
+  assert.equal(status, 429);
+  assert.ok(n <= 9, `blokada po ${n} próbach`);
+  assert.equal((await json('POST', '/api/password', { current: 'nowehaslo123', password: 'innehaslo999' })).status, 429);
 });

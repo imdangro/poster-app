@@ -52,17 +52,43 @@ ensure_key N8N_ENCRYPTION_KEY 32 "$(m "Klucz szyfrujący poświadczenia n8n – 
   "Key that encrypts n8n credentials – NEVER change it after the first start")"
 ensure_key PANEL_INTERNAL_TOKEN 24 "$(m "Wspólny sekret panelu i n8n (generowany automatycznie)" "Shared secret of the panel and n8n (generated automatically)")"
 
+# Wersja n8n: puste N8N_VERSION = wersja sprawdzona z workflow tego wydania (docker-compose.yml), więc n8n aktualizuje się
+# razem z Posterem. 2.40.7 to wartość z .env.example wersji 1.0–1.3 (przepisana przy instalacji, nie wybór
+# użytkownika) – czyścimy ją; inną, świadomie przypiętą, zostawiamy z przypomnieniem. Komunikaty na stderr – update.sh
+# ukrywa pozostałe komunikaty tego skryptu.
+N8N_PINNED="$(grep -E '^N8N_VERSION=' .env | tail -n1 | cut -d= -f2- | tr -d '\r[:space:]' || true)"
+N8N_TESTED="$(sed -n 's/.*N8N_VERSION:-\([0-9][0-9.]*\)}.*/\1/p' docker-compose.yml | head -n1)"
+case "$N8N_PINNED" in
+  2.40.7)
+    sed -i 's/^N8N_VERSION=.*/N8N_VERSION=/' .env
+    info "$(m "n8n: wersja nie jest już przypięta w .env – n8n będzie aktualizowany razem z Posterem (teraz $N8N_TESTED)." \
+      "n8n: the version is no longer pinned in .env – n8n is updated together with Poster (now $N8N_TESTED).")" >&2
+    ;;
+  '' | "$N8N_TESTED") ;;
+  *)
+    warn "$(m "n8n: w .env przypięta jest wersja $N8N_PINNED, a to wydanie Postera sprawdzono z $N8N_TESTED. Żeby n8n aktualizował się razem z Posterem, zostaw puste N8N_VERSION= (sudo nano .env)." \
+      "n8n: .env pins version $N8N_PINNED, while this Poster release was tested with $N8N_TESTED. To update n8n together with Poster, leave N8N_VERSION= empty (sudo nano .env).")" >&2
+    ;;
+esac
+
 # 3) Katalogi danych + uprawnienia dla użytkownika 'node' z kontenerów n8n i panelu (UID/GID 1000)
 mkdir -p data/n8n data/files data/panel
 chown -R "${N8N_UID}:${N8N_GID}" data
 chmod -R u+rwX,g+rwX,o-rwx data
-info "$(m "Katalogi data/n8n, data/files i data/panel należą do ${N8N_UID}:${N8N_GID} (chmod u+rwX,g+rwX)." \
-  "The data/n8n, data/files and data/panel directories belong to ${N8N_UID}:${N8N_GID} (chmod u+rwX,g+rwX).")"
+# data/panel (klucze API, tokeny kont, hasło panelu, licencja) – tylko dla właściciela: panel działa jako ten użytkownik,
+# a grupa (na NAS-ie często wszyscy użytkownicy) nie dostaje dostępu do sekretów nawet do najbliższego zapisu panelu
+chmod -R u+rwX,go-rwx data/panel
+info "$(m "Katalogi data/n8n, data/files i data/panel należą do ${N8N_UID}:${N8N_GID} (chmod u+rwX,g+rwX; data/panel – tylko właściciel)." \
+  "The data/n8n, data/files and data/panel directories belong to ${N8N_UID}:${N8N_GID} (chmod u+rwX,g+rwX; data/panel – owner only).")"
 
-# Katalog projektu dla panelu – w kontenerze go nie zna, a pokazuje gotowe polecenia (np. przejście na PRO)
-printf '{\n  "projectDir": "%s"\n}\n' "$(printf '%s' "$PROJECT_DIR" | sed 's/\\/\\\\/g; s/"/\\"/g')" >data/panel/install.json
-chown "${N8N_UID}:${N8N_GID}" data/panel/install.json
-chmod 640 data/panel/install.json
+# Katalog projektu dla panelu – w kontenerze go nie zna, a pokazuje gotowe polecenia (np. przejście na PRO).
+# Plik tymczasowy poza data/panel (katalog kontenera) i zamiana nazwy (mv -T): root nie pójdzie za dowiązaniem
+# symbolicznym podłożonym w data/panel ani przy zapisie, ani przy chown
+install_tmp="$(mktemp "$PROJECT_DIR/.install.json.XXXXXX")"
+printf '{\n  "projectDir": "%s"\n}\n' "$(printf '%s' "$PROJECT_DIR" | sed 's/\\/\\\\/g; s/"/\\"/g')" >"$install_tmp"
+chown "${N8N_UID}:${N8N_GID}" "$install_tmp"
+chmod 640 "$install_tmp"
+mv -fT "$install_tmp" data/panel/install.json
 
 # 4) Szybka kontrola
 ls -ln data
@@ -77,14 +103,13 @@ fi
 
 NAS_IP_VAL="$(grep -E '^NAS_IP=' .env | tail -n1 | cut -d= -f2 || true)"
 PANEL_PORT_VAL="$(grep -E '^PANEL_PORT=' .env | tail -n1 | cut -d= -f2 || true)"
-N8N_PORT_VAL="$(grep -E '^N8N_PORT=' .env | tail -n1 | cut -d= -f2 || true)"
 if [ "$UI_LANG" = en ]; then
   cat <<EOF
 
 Done. Next:
   1. Check .env (NAS / server IP, time zone):   sudo nano .env
   2. Start the stack (also builds the panel):   sudo docker compose up -d --build
-  3. n8n: http://${NAS_IP_VAL:-NAS_IP}:${N8N_PORT_VAL:-5678} → create the owner account right away, then:
+  3. n8n – the owner account (login and password) and the workflow:
                                                 sudo bash scripts/import-to-n8n.sh
   4. Control panel: http://${NAS_IP_VAL:-NAS_IP}:${PANEL_PORT_VAL:-7080} → set the password, keys and bots.
      One-time code for the password:            sudo docker compose logs panel | grep -i code
@@ -95,7 +120,7 @@ else
 Gotowe. Dalej:
   1. Sprawdź .env (IP NAS-a, strefa czasowa):   sudo nano .env
   2. Uruchom stos (zbuduje też panel):          sudo docker compose up -d --build
-  3. n8n: http://${NAS_IP_VAL:-IP_NAS}:${N8N_PORT_VAL:-5678} → od razu załóż konto właściciela, potem:
+  3. n8n – konto właściciela (login i hasło) i workflow:
                                                 sudo bash scripts/import-to-n8n.sh
   4. Panel sterowania: http://${NAS_IP_VAL:-IP_NAS}:${PANEL_PORT_VAL:-7080} → ustaw hasło, klucze i boty.
      Jednorazowy kod do ustawienia hasła:     sudo docker compose logs panel | grep -i kod

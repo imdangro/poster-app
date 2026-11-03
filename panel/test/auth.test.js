@@ -37,21 +37,21 @@ test('kod przyjmowany bez względu na wielkość liter i myślniki, zły kod odr
   assert.equal(auth.checkSetupCode(undefined), false);
 });
 
-test('po ustawieniu hasła kod przestaje działać, a logowanie sprawdza hasło', () => {
+test('po ustawieniu hasła kod przestaje działać, a logowanie sprawdza hasło', async () => {
   const auth = new Auth(tmpDir(), { log: quiet });
   const code = auth.setupCode();
-  auth.setPassword('dobrehaslo123');
+  await auth.setPassword('dobrehaslo123');
   assert.equal(auth.needsSetup, false);
   assert.equal(auth.setupCode(), null);
   assert.equal(auth.checkSetupCode(code), false);
-  assert.equal(auth.verify('dobrehaslo123'), true);
-  assert.equal(auth.verify('zlehaslo123'), false);
-  assert.throws(() => auth.setPassword('krotkie'), /co najmniej 8 znaków/);
+  assert.equal(await auth.verify('dobrehaslo123'), true);
+  assert.equal(await auth.verify('zlehaslo123'), false);
+  await assert.rejects(auth.setPassword('krotkie'), /co najmniej 8 znaków/);
 });
 
-test('sesja: podpisane ciasteczko, podróbka i wygasłe odrzucone', () => {
+test('sesja: podpisane ciasteczko, podróbka i wygasłe odrzucone', async () => {
   const auth = new Auth(tmpDir(), { log: quiet });
-  auth.setPassword('dobrehaslo123');
+  await auth.setPassword('dobrehaslo123');
   const cookie = cookieOf(auth.createCookie(req()));
   assert.equal(auth.isAuthenticated(req({ cookie })), true);
   assert.equal(auth.isAuthenticated(req({ cookie: cookie.slice(0, -2) + 'xx' })), false);
@@ -60,19 +60,19 @@ test('sesja: podpisane ciasteczko, podróbka i wygasłe odrzucone', () => {
   assert.equal(auth.isAuthenticated(req({})), false);
 });
 
-test('flaga Secure tylko za proxy z HTTPS', () => {
+test('flaga Secure tylko za proxy z HTTPS', async () => {
   const auth = new Auth(tmpDir(), { log: quiet });
-  auth.setPassword('dobrehaslo123');
+  await auth.setPassword('dobrehaslo123');
   assert.doesNotMatch(auth.createCookie(req()), /Secure/);
   assert.match(auth.createCookie(req({ 'x-forwarded-proto': 'https' })), /; Secure/);
   assert.match(auth.clearCookie(req({ 'x-forwarded-proto': 'https, http' })), /; Secure/);
   assert.match(auth.createCookie(req()), /HttpOnly; SameSite=Lax/);
 });
 
-test('reset hasła w innym procesie działa bez restartu panelu i wylogowuje sesje', () => {
+test('reset hasła w innym procesie działa bez restartu panelu i wylogowuje sesje', async () => {
   const dir = tmpDir();
   const auth = new Auth(dir, { log: quiet });
-  auth.setPassword('starehaslo123');
+  await auth.setPassword('starehaslo123');
   const cookie = cookieOf(auth.createCookie(req()));
   assert.equal(auth.isAuthenticated(req({ cookie })), true);
 
@@ -85,15 +85,15 @@ test('reset hasła w innym procesie działa bez restartu panelu i wylogowuje ses
 
   assert.equal(auth.needsSetup, true);
   assert.equal(auth.isAuthenticated(req({ cookie })), false);
-  assert.equal(auth.verify('starehaslo123'), false);
+  assert.equal(await auth.verify('starehaslo123'), false);
   assert.equal(auth.checkSetupCode(code), true);
 });
 
-test('usunięty auth.json: panel sam tworzy nowy kod', () => {
+test('usunięty auth.json: panel sam tworzy nowy kod', async () => {
   const dir = tmpDir();
   const logs = [];
   const auth = new Auth(dir, { log: (m) => logs.push(m) });
-  auth.setPassword('starehaslo123');
+  await auth.setPassword('starehaslo123');
   writeJsonAtomic(path.join(dir, 'auth.json'), {}); // np. ręczna edycja pliku
   assert.equal(auth.needsSetup, true);
   assert.match(auth.setupCode(), CODE_RE);
@@ -111,4 +111,36 @@ test('limit prób: po 8 nieudanych kolejna próba zablokowana', () => {
     (e) => e.status === 429,
   );
   assert.doesNotThrow(() => auth.checkRate('10.0.0.2'));
+});
+
+test('limit prób: wspólny dla wszystkich adresów (podrobione X-Forwarded-For), adres klienta za proxy w sieci lokalnej', () => {
+  const auth = new Auth(tmpDir(), { log: quiet });
+  // 40 nieudanych prób z różnych adresów – potem blokada dla wszystkich (na 15 min)
+  for (let i = 0; i < 40; i++) {
+    auth.checkRate(`198.51.100.${i}`);
+    auth.fail(`198.51.100.${i}`);
+  }
+  assert.throws(
+    () => auth.checkRate('203.0.113.7'),
+    (e) => e.status === 429,
+  );
+  // odwrotne proxy w sieci lokalnej: adres klienta z X-Forwarded-For; bezpośrednie połączenie z internetu – adres połączenia
+  const r = (remote, xff) => ({ socket: { remoteAddress: remote }, headers: xff ? { 'x-forwarded-for': xff } : {} });
+  assert.equal(auth.clientKey(r('::ffff:192.168.1.5', '203.0.113.9, 192.168.1.5')), '203.0.113.9');
+  assert.equal(auth.clientKey(r('127.0.0.1', '203.0.113.9')), '203.0.113.9');
+  assert.equal(auth.clientKey(r('93.184.216.34', '203.0.113.9')), '93.184.216.34');
+  assert.equal(auth.clientKey(r('::ffff:192.168.1.5')), '192.168.1.5');
+});
+
+test('wyloguj na wszystkich urządzeniach: każde wydane ciasteczko przestaje działać, hasło bez zmian', async () => {
+  const auth = new Auth(tmpDir(), { log: quiet });
+  await auth.setPassword('dobrehaslo1');
+  const phone = req({ cookie: cookieOf(auth.createCookie()) });
+  const laptop = req({ cookie: cookieOf(auth.createCookie()) });
+  assert.equal(auth.isAuthenticated(phone), true);
+  auth.logoutEverywhere();
+  assert.equal(auth.isAuthenticated(phone), false);
+  assert.equal(auth.isAuthenticated(laptop), false);
+  assert.equal(await auth.verify('dobrehaslo1'), true);
+  assert.equal(auth.isAuthenticated(req({ cookie: cookieOf(auth.createCookie()) })), true, 'nowe logowanie działa');
 });

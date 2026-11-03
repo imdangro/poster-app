@@ -4,27 +4,36 @@
 # Kroki: 1) pobranie nowej wersji z GitHuba (git pull w kontenerze alpine/git; bez hasła po
 #           jednorazowym sudo bash scripts/setup-deploy-key.sh),
 #        2) uzupełnienie .env o nowe klucze + uprawnienia katalogów (init-nas.sh),
-#        3) przebudowa i restart kontenerów (docker compose up -d --build),
+#        3) nowe obrazy n8n i RSSHub, przebudowa panelu na aktualnym obrazie bazowym i restart kontenerów,
 #        4) import i publikacja workflow w n8n (import-to-n8n.sh).
 # Wersja PRO z licencją (scripts/upgrade-to-pro.sh): przed pobraniem skrypt odświeża datę końca aktualizacji, a gdy
 # aktualizacje wygasły, kończy bez pobierania – zainstalowana wersja działa dalej.
-# Opcje: --no-pull (pomiń pobieranie), --no-workflow (bez importu workflow).
+# Opcje: --no-pull (bez pobierania programu z GitHuba), --no-images (bez pobierania nowych obrazów Dockera),
+#        --no-workflow (bez importu workflow).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 . scripts/lang.sh
 
+# git w kontenerze: obraz przypięty digestem (kompilacja alpine/git z 25.10.2026) – skrypty działają jako root
+# z całym katalogiem projektu, więc nowa wersja obrazu nie trafi tu bez wydania Postera. Ta sama wartość jest
+# w scripts/update.sh, upgrade-to-pro.sh, setup-deploy-key.sh i docs/install.sh (test panel/test/scripts.test.js).
+GIT_IMAGE=alpine/git:3ed2e3d@sha256:e8ceedc73bd80992ae8d58a7d24c58b8322146c354f1d2e81a97db4452068ec0
+
 PULL=1
 WORKFLOW=1
+IMAGES=1
 for arg in "$@"; do
   case "$arg" in
     --no-pull) PULL=0 ;;
     --no-workflow) WORKFLOW=0 ;;
+    --no-images) IMAGES=0 ;;
     *) echo "$(m "Nieznana opcja: $arg" "Unknown option: $arg")" >&2; exit 2 ;;
   esac
 done
 
 info() { printf '\033[1;34m[update]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[%s]\033[0m %s\n' "$(m uwaga note)" "$*"; }
 die() { printf '\033[1;31m[%s]\033[0m %s\n' "$(m błąd error)" "$*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "$(m "Uruchom przez sudo: sudo bash scripts/update.sh" "Run it with sudo: sudo bash scripts/update.sh")"
 
@@ -77,7 +86,7 @@ if [ "$PULL" -eq 1 ]; then
   # użytkownika NAS-a – bez tego git przerywa z błędem „detected dubious ownership”
   pull() {
     # shellcheck disable=SC2086
-    docker run --rm $1 -v "$PWD":/git alpine/git -c safe.directory=/git pull --ff-only
+    docker run --rm $1 -v "$PWD":/git "$GIT_IMAGE" -c safe.directory=/git pull --ff-only
   }
   # licencja wygasła albo jest nieaktywna: repozytorium PRO zwykle już odmawia dostępu – zamiast surowego błędu gita
   # („Permission denied (publickey)”) tylko nasz komunikat; gdy dostęp jeszcze jest, pobieramy jak zwykle
@@ -99,11 +108,36 @@ if [ "$PULL" -eq 1 ]; then
   exec bash scripts/update.sh --no-pull "$@"
 fi
 
+# Klucz hosta GitHuba znany z góry (scripts/github-known-hosts): połączenie SSH z setup-deploy-key.sh
+# i upgrade-to-pro.sh dawniej ufało kluczowi z pierwszego połączenia (accept-new) – teraz tylko kluczowi GitHuba
+if grep -qF poster-known-hosts .git/config 2>/dev/null; then
+  cp scripts/github-known-hosts .git/poster-known-hosts
+  sed -i 's/StrictHostKeyChecking=accept-new/StrictHostKeyChecking=yes/g' .git/config
+fi
+
 info "$(m "Uzupełniam .env i uprawnienia..." "Updating .env and permissions...")"
 bash scripts/init-nas.sh >/dev/null
 
-info "$(m "Buduję panel i uruchamiam kontenery..." "Building the panel and starting the containers...")"
-docker compose up -d --build --remove-orphans
+# Poprawki bezpieczeństwa obrazów: nowe obrazy n8n (wersja z .env albo sprawdzona z workflow – docker-compose.yml)
+# i RSSHub, a panel budowany na aktualnym obrazie bazowym (Node.js, Alpine, ffmpeg). Bez sieci do Docker Hub – zostają
+# dotychczasowe obrazy, a aktualizacja programu i tak się kończy.
+if [ "$IMAGES" -eq 1 ]; then
+  info "$(m "Pobieram nowe obrazy n8n i RSSHub..." "Pulling new n8n and RSSHub images...")"
+  docker compose pull n8n rsshub ||
+    warn "$(m "Nie udało się pobrać nowych obrazów – zostają dotychczasowe (sprawdź połączenie z Docker Hub i ponów aktualizację)." \
+      "Could not pull the new images – the current ones stay (check the connection to Docker Hub and run the update again).")"
+  info "$(m "Buduję panel na aktualnym obrazie bazowym..." "Building the panel on an up-to-date base image...")"
+  if ! docker compose build --pull; then
+    warn "$(m "Nie udało się pobrać obrazu bazowego panelu – buduję na dotychczasowym." \
+      "Could not pull the panel's base image – building on the current one.")"
+    docker compose build
+  fi
+else
+  docker compose build
+fi
+
+info "$(m "Uruchamiam kontenery..." "Starting the containers...")"
+docker compose up -d --remove-orphans
 
 if [ "$WORKFLOW" -eq 1 ]; then
   bash scripts/import-to-n8n.sh

@@ -4,10 +4,14 @@
 ARG NODE_IMAGE=node:24-alpine
 FROM ${NODE_IMAGE}
 ENV NODE_ENV=production
-# (błąd instalacji nie blokuje budowy panelu – wtedy zdjęcia WebP są pomijane)
-RUN apk add --no-cache ffmpeg || echo 'UWAGA: nie udało się zainstalować ffmpeg – zdjęcia WebP będą pomijane'
+# ffmpeg jest wymagany – nieudana instalacja zatrzymuje budowę obrazu (3 próby na chwilowy błąd serwera pakietów
+# Alpine), zamiast cicho zbudować panel, który pominie zdjęcia WebP
+RUN for i in 1 2 3; do apk add --no-cache ffmpeg && exit 0; sleep 5; done; \
+  echo 'Nie udało się zainstalować ffmpeg (apk) – sprawdź połączenie NAS-a z internetem i ponów aktualizację' >&2; exit 1
 WORKDIR /app
-COPY --chown=node:node . .
+# Kod należy do roota i jest tylko do odczytu dla procesu panelu (USER node): przejęty proces nie podmieni programu.
+COPY . .
+RUN chmod -R u=rwX,go=rX /app
 USER node
 EXPOSE 7080 7081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

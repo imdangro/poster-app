@@ -34,11 +34,13 @@ const linkMode = (!compose && cfg.image.mode === 'link') || !hasImage;
 const textOnly = compose && !draft.news.url;
 
 // --- Telegram: nagłówek z informacją, skąd jest grafika ------------------------------------------
+// HTML Telegrama: cudzysłów też – adresy trafiają do href="…"
 const esc = (s) =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 const noImage = textOnly ? tr('🚫 Bez grafiki – X i Facebook: sam tekst') : tr('🚫 Bez grafiki – X i Facebook: post z linkiem');
 const imageLine = !hasImage
   ? noImage
