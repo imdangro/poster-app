@@ -10,8 +10,9 @@ const vm = require('vm');
 const CODE = fs.readFileSync(path.join(__dirname, '../../workflows/src/code/parse_llm.js'), 'utf8');
 const tr = (s, ...args) => String(s).replace(/\{(\d+)\}/g, (_, i) => String(args[i]));
 
-// news – wybrany news (kandydat); ai, cfg, res – zmiany w odpowiedzi AI, w Config i w odpowiedzi panelu
-async function draft(news, { ai: aiChanges = {}, cfg: cfgChanges = {}, res: resChanges = {} } = {}) {
+// news – wybrany news (kandydat); ai, cfg, res, prompt – zmiany w odpowiedzi AI, w Config, w odpowiedzi panelu
+// i w wyniku „Przygotuj prompt LLM” (need – teksty zamówione dla włączonych platform)
+async function draft(news, { ai: aiChanges = {}, cfg: cfgChanges = {}, res: resChanges = {}, prompt: promptChanges = {} } = {}) {
   const cfg = {
     botId: 'b1',
     botName: 'Kawiarnia',
@@ -28,7 +29,7 @@ async function draft(news, { ai: aiChanges = {}, cfg: cfgChanges = {}, res: resC
     instructions: '',
     ...cfgChanges,
   };
-  const nodes = { Config: cfg, 'Przygotuj prompt LLM': { candidates: [news] } };
+  const nodes = { Config: cfg, 'Przygotuj prompt LLM': { candidates: [news], ...promptChanges } };
   const ai = {
     selected_index: 0,
     news_title: 'Nowa sala',
@@ -102,8 +103,8 @@ test('tekst AI z adresem, kontem albo kontaktem spoza źródła: ostrzeżenie w 
 
   d = await draft(NEWS, {
     ai: {
+      post_x: 'Kod na sklep-promo.shop #kawa',
       post_fb_insta: 'Zgłoszenia: +48 512 345 678 i u @okazje24. Szczegóły: https://bit.ly/abc oraz www.okazja.co',
-      script_tiktok: 'Kod na sklep-promo.shop',
     },
   });
   assert.equal(d.outside.length, 5);
@@ -113,4 +114,35 @@ test('tekst AI z adresem, kontem albo kontaktem spoza źródła: ostrzeżenie w 
   // konto ze źródła, ale inne niż w tekście
   d = await draft(NEWS, { ai: { post_x: 'Organizator: @PodLipa_promo #kawa' } });
   assert.deepEqual(d.outside, ['@PodLipa_promo']);
+});
+
+// teksty w wiadomościach Telegrama: [teksty postów (wariant z grafiką), wariant z linkiem, ostatnia wiadomość z przyciskami]
+const texts = (d) => [d.telegram.messages[0].text, d.telegram.messages[0].textLink, d.telegram.messages[1].text];
+
+test('draft tylko z tekstami platform włączonych w bocie: bez tekstu X i skryptu TikToka, gdy są wyłączone', async () => {
+  const ai = { post_x: 'Tekst X, którego nie zamówiono', script_tiktok: 'Skrypt na sklep-promo.shop' };
+  let d = await draft(NEWS, { ai, cfg: { enableX: false }, prompt: { need: { x: false, fb: true, tiktok: false } } });
+  let [posts, link, last] = texts(d);
+  for (const t of [posts, link, last]) assert.doesNotMatch(t, /<b>X<\/b>|TikTok|Tekst X/, t);
+  assert.match(posts, /^📘📸 <b>Facebook \/ Instagram<\/b> · 7 znaków\n<pre>Post FB<\/pre>$/);
+  assert.match(link, /📘 <b>Facebook<\/b> \(post z linkiem\)/);
+  assert.match(last, /🧠 <i>Tekst: gemini\/gemini-3.8-flash<\/i>/);
+  assert.ok(d.telegram.messages[1].reply_markup.inline_keyboard[0][0].callback_data.startsWith('pub:'), 'przyciski jak zawsze');
+  assert.deepEqual([d.post_x, d.post_x_link, d.script_tiktok], ['', '', '']);
+  assert.deepEqual(d.targets, ['facebook']);
+  assert.equal(d.outside, undefined, 'tekst, którego nie ma w drafcie, nie jest sprawdzany');
+
+  // bez żadnej platformy – jeden uniwersalny tekst i „✅ Zatwierdź”
+  d = await draft(NEWS, { ai, cfg: { enableX: false, enableFacebook: false }, prompt: { need: { x: false, fb: true, tiktok: false } } });
+  [posts] = texts(d);
+  assert.match(posts, /^📝 <b>Tekst posta<\/b> \(żadna platforma nie jest włączona\) · 7 znaków\n<pre>Post FB<\/pre>$/);
+  assert.equal(d.telegram.messages[1].reply_markup.inline_keyboard[0][0].text, '✅ Zatwierdź');
+  assert.deepEqual(d.targets, []);
+
+  // sam X: bez posta FB/IG
+  d = await draft(NEWS, { cfg: { enableFacebook: false }, prompt: { need: { x: true, fb: false, tiktok: false } } });
+  [posts] = texts(d);
+  assert.match(posts, /^🐦 <b>X<\/b> · \d+\/280\n<pre>/);
+  assert.doesNotMatch(posts, /Facebook|Instagram|Tekst posta/);
+  assert.equal(d.post_fb_insta, '');
 });

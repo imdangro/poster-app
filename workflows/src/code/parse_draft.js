@@ -16,13 +16,25 @@ const chosen = (k) => !Array.isArray(draft.platforms) || draft.platforms.include
 // ponownie, confirm – post jest na profilu (nic nie publikujemy, podsumowanie zapisze go jako udany).
 const retryUnknown = ctx.unknown === 'retry';
 const pending = (k) => ctx.unknown !== 'confirm' && !prev[k]?.ok && (!prev[k]?.unknown || retryUnknown);
+// Draft z newsów ma teksty tylko dla platform włączonych w chwili jego powstania – platformę włączoną później
+// pomijamy z powodem w raporcie, zamiast wysłać pusty post.
+const textOf = {
+  x: draft.post_x,
+  facebook: draft.post_fb_insta,
+};
+const hasText = (k) => String(textOf[k] || '').trim() !== '';
 
 const todo = {
-  x: cfg.enableX && chosen('x') && pending('x'),
-  facebook: cfg.enableFacebook && chosen('facebook') && pending('facebook'),
+  x: cfg.enableX && chosen('x') && hasText('x') && pending('x'),
+  facebook: cfg.enableFacebook && chosen('facebook') && hasText('facebook') && pending('facebook'),
 };
 // platformy pominięte, bo wymagają grafiki
 const skipped = {};
+// platformy pominięte, bo draft nie ma dla nich tekstu (powstał, gdy były wyłączone)
+const noText = {
+  x: cfg.enableX && chosen('x') && !hasText('x'),
+  facebook: cfg.enableFacebook && chosen('facebook') && !hasText('facebook'),
+};
 
 return [
   {
@@ -30,6 +42,7 @@ return [
       ...draft,
       todo,
       skipped,
+      noText,
       hasImage,
       linkMode,
       // X: w trybie linku – tekst z adresem artykułu (X sam pokaże kartę z podglądem)

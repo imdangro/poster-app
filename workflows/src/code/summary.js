@@ -2,7 +2,7 @@
 const cfg = $('Config').first().json;
 const ctx = $('Kontekst publikacji').first().json;
 const draft = $('Parsuj draft').first().json;
-const { todo, skipped = {}, alreadyPublished, hasImage, xText, xWithImage, fbWithImage, fbLink, ...base } = draft;
+const { todo, skipped = {}, noText = {}, alreadyPublished, hasImage, xText, xWithImage, fbWithImage, fbLink, ...base } = draft;
 
 const out = (name) => {
   try {
@@ -94,8 +94,9 @@ const enabled = {
   x: cfg.enableX && chosen('x'),
   facebook: cfg.enableFacebook && chosen('facebook'),
 };
-// platformy pominięte z braku grafiki (np. Instagram) nie psują statusu – nie ma czego ponawiać
-const active = Object.keys(enabled).filter((k) => enabled[k] && !(skipped[k] && !results[k]?.ok));
+// platformy pominięte z braku grafiki (np. Instagram) albo tekstu (draft sprzed włączenia platformy) nie psują
+// statusu – nie ma czego ponawiać
+const active = Object.keys(enabled).filter((k) => enabled[k] && !((skipped[k] || noText[k]) && !results[k]?.ok));
 const okCount = active.filter((k) => results[k]?.ok).length;
 const unsure = active.filter((k) => !results[k]?.ok && results[k]?.unknown);
 const status = !active.length
@@ -121,6 +122,8 @@ const line = (k) => {
   if (!enabled[k]) return `${label[k]}: ${tr('⏭️ wyłączone w panelu')}`;
   const r = results[k];
   if (skipped[k] && !r?.ok) return `${label[k]}: ${tr('⏭️ pominięto – draft bez grafiki')}`;
+  if (noText[k] && !r?.ok)
+    return `${label[k]}: ${tr('⏭️ pominięto – draft nie ma tekstu dla tej platformy (powstał, gdy była wyłączona)')}`;
   if (r?.ok) {
     const what = r.url ? tr('<a href="{0}">zobacz post</a>', esc(r.url)) : esc(r.note || 'OK');
     return `${label[k]}: ✅ ${what}${r.warning ? ` ⚠️ ${esc(r.warning)}` : ''}`;
@@ -147,7 +150,7 @@ const text = [
   `${icon} ${esc(draft.news?.title || '')}`,
   '',
   ...['x', 'facebook'].filter(chosen).map(line),
-  ...(manual ? [] : [tr('   ↳ Instagram i TikTok ręcznie: grafika i teksty powyżej')]),
+  ...(manual || !cfg.enableFacebook ? [] : [tr('   ↳ Instagram ręcznie: grafika i tekst Facebooka powyżej')]),
   ...(unsure.length ? ['', tr('👀 Sprawdź profil: jeśli post tam jest – „✅ Jest na profilu”, jeśli nie – „📤 Nie ma – wyślij”.')] : []),
   who,
 ].join('\n');

@@ -544,8 +544,8 @@ sticky("sources", [src, rss, norm, apify_if, apify, norm_apify, fresh, dedup], b
        4)
 sticky("llm", [prompt, llm, parse, own], bi(
     "2️⃣ AI: tekst · text (JSON Schema)",
-    "Panel (`/internal/bots/{id}/llm`) wysyła zapytanie do dostawcy wybranego w bocie – **Gemini** albo API zgodnego z OpenAI (np. **Ollama**). AI wybiera 1 news i pisze `post_x`, `post_fb_insta` i `script_tiktok`. Limity (X 280 zn., FB/IG 2200 zn./30 #) pilnowane w kodzie. **✍️ Własny post**: *Post własny: przygotuj* składa draft z tekstów z panelu (AI dopasowało je już w edytorze).",
-    "The panel (`/internal/bots/{id}/llm`) sends the request to the provider chosen in the bot – **Gemini** or an OpenAI-compatible API (e.g. **Ollama**). AI picks 1 story and writes `post_x`, `post_fb_insta` and `script_tiktok`. Limits (X 280 chars, FB/IG 2200 chars/30 #) are enforced in code. **✍️ Own post**: *Post własny: przygotuj* builds the draft from the texts sent by the panel (AI already adapted them in the editor)."),
+    "Panel (`/internal/bots/{id}/llm`) wysyła zapytanie do dostawcy wybranego w bocie – **Gemini** albo API zgodnego z OpenAI (np. **Ollama**). AI wybiera 1 news i pisze teksty tylko dla platform włączonych w bocie: `post_x` (X) i `post_fb_insta` (Facebook). Limity (X 280 zn., FB/IG 2200 zn./30 #) pilnowane w kodzie. **✍️ Własny post**: *Post własny: przygotuj* składa draft z tekstów z panelu (AI dopasowało je już w edytorze).",
+    "The panel (`/internal/bots/{id}/llm`) sends the request to the provider chosen in the bot – **Gemini** or an OpenAI-compatible API (e.g. **Ollama**). AI picks 1 story and writes texts only for the platforms enabled in the bot: `post_x` (X) and `post_fb_insta` (Facebook). Limits (X 280 chars, FB/IG 2200 chars/30 #) are enforced in code. **✍️ Own post**: *Post własny: przygotuj* builds the draft from the texts sent by the panel (AI already adapted them in the editor)."),
        5)
 sticky("image", [img_req, extract, has_img_if, save_img, save_draft], bi(
     "3️⃣ Grafika (wg trybu bota) · Image (by the bot's mode)",
@@ -554,8 +554,8 @@ sticky("image", [img_req, extract, has_img_if, save_img, save_draft], bi(
        6)
 sticky("telegram", [tg_head_if, tg_photo, tg_head, tg_prep, tg_posts, tg_script, rep_draft, auto_if], bi(
     "4️⃣ Telegram (akceptacja + backup · approval + backup)",
-    "Grafika (albo sam nagłówek) → teksty postów → skrypt TikTok z przyciskami ✅/❌ (**po kolei**, przyciski zawsze pod ostatnią wiadomością). Publikacja startuje po kliknięciu ✅ (własny post z „Publikuj teraz” – od razu); grafikę i teksty możesz też wrzucić ręcznie na Instagram i TikTok.",
-    "Image (or just the header) → post texts → TikTok script with the ✅/❌ buttons (**one by one**, so the buttons are always under the last message). Publishing starts after a ✅ click (an own post with “Publish now” – at once); you can also post the image and texts to Instagram and TikTok by hand."),
+    "Grafika (albo sam nagłówek) → teksty postów dla platform włączonych w bocie → wiadomość z przyciskami ✅/❌ (**po kolei**, przyciski zawsze pod ostatnią wiadomością). Publikacja startuje po kliknięciu ✅ (własny post z „Publikuj teraz” – od razu); grafikę i tekst Facebooka możesz też wrzucić ręcznie na Instagram.",
+    "Image (or just the header) → post texts for the platforms enabled in the bot → a message with the ✅/❌ buttons (**one by one**, so the buttons are always under the last message). Publishing starts after a ✅ click (an own post with “Publish now” – at once); you can also post the image and the Facebook text to Instagram by hand."),
        3)
 sticky("publish", [ctx, rd_draft, pdraft, done_if, tg_done, rep_done, x_if, x_img_if, x_rd, x_up, x_post, fb_if, fb_img_if, fb_rd,
                    fb_post, fb_feed], bi("5️⃣ Publikacja · Publishing: X → Facebook", [

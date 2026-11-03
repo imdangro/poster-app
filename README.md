@@ -7,7 +7,7 @@ a **web control panel** + **n8n (Community Edition)** in Docker.
 The bot collects the latest news from RSS feeds, Google News and X profiles, and AI (Google Gemini or a model on your own
 hardware, e.g. Ollama) picks the most important story and writes the posts. The image is **the photo from the article** (free),
 and when there is none – a post with a link. The package lands in **Telegram** with ✅/❌ buttons. After approval the bot
-publishes to **X and Facebook**, and you can post the image, text and video script from the draft to Instagram and TikTok by hand.
+publishes to **X and Facebook**, and you can also post the image and the Facebook text from the draft to Instagram by hand.
 
 You can also **write your own post** at any time (*✍️ New post* in the panel): AI adapts it to X and Facebook, and you
 edit the versions and publish right away or after approval in Telegram ([“📣 Your own post”](#-your-own-post)).
@@ -58,11 +58,11 @@ flowchart LR
 | Keys and tokens | Only in the panel (`data/panel/secrets.json`, chmod 600). n8n **stores no keys**: it calls APIs through the panel gateway, which adds the keys and refreshes the X token itself |
 | Reading X without the paid API | **RSSHub** (self-hosted, `auth_token` cookie of a separate account) → RSS feed. Alternatives: Apify, Nitter |
 | Deduplication | In the panel: key `x:<tweet id>` or the URL without `utm_*`, plus a filter of identical titles and a list of recent topics passed to the LLM |
-| Text (AI) | **Gemini** or any OpenAI-compatible API, e.g. **Ollama** on your own hardware. Always clean JSON by schema: `post_x`, `post_fb_insta`, `script_tiktok` |
+| Text (AI) | **Gemini** or any OpenAI-compatible API, e.g. **Ollama** on your own hardware. Always clean JSON by schema, only with texts for the platforms enabled in the bot: `post_x` (X) and `post_fb_insta` (Facebook) |
 | Image | Mode in the bot: **📷 photo from the article** (RSS / og:image / tweet), **🔗 post with a link** or **🚫 no image**. When the article has no photo, X and Facebook get a post with a link |
 | Costs | “Cost of one post” card: AI text and publishing on X. Images are always free |
 | Human-in-the-Loop | Telegram bot with buttons. The panel **polls** Telegram (long polling), so a click works instantly and **the NAS does not have to be exposed to the internet** |
-| Publishing | X API v2 (OAuth2 + `media.write`), Meta Graph API (FB `/{page}/photos` or `/{page}/feed`). Instagram and TikTok: image, texts and video script in the draft for manual posting |
+| Publishing | X API v2 (OAuth2 + `media.write`), Meta Graph API (FB `/{page}/photos` or `/{page}/feed`). Instagram: image and Facebook text in the draft for manual posting |
 | Archive | Every draft (JSON + image) is saved in `data/files` on the NAS; the panel shows a draft gallery |
 
 ## ⭐ PRO version
@@ -84,7 +84,7 @@ Poster LITE is free and open source (AGPL). The PRO version is the same program 
 | Instagram | by hand | ✅ |
 | Threads and Bluesky (text, image, link card) | – | ✅ |
 | Telegram channel (a photo with a caption or a post with a link preview) | – | ✅ |
-| TikTok: video from the post image (animation, free) | script to record by hand | ✅ |
+| TikTok: video from the post image (animation, free) | – | ✅ |
 | Website / blog mode: every new article on your site becomes posts | – | ✅ |
 | YouTube channel: every new video from your channel becomes posts (no YouTube login) | – | ✅ |
 | AI text: Gemini, Ollama, custom OpenAI-compatible API | ✅ | ✅ |
@@ -394,7 +394,7 @@ These messages in the n8n logs are **harmless**:
 | **Bot → Accounts** | Connecting accounts: X (OAuth2) and a Facebook page (page token) |
 | **Bot → History** | The bot's runs and drafts |
 | **Bot → Advanced** | Duplicate memory (reset), **deleting the bot** |
-| **Drafts** | Draft gallery with images, texts to copy (also for posting to Instagram and TikTok by hand), publishing results and downloading the image |
+| **Drafts** | Draft gallery with images, texts to copy (the Facebook text also for posting to Instagram by hand), publishing results and downloading the image |
 | **Settings** | Gemini key, **AI providers** (Ollama, custom OpenAI-compatible API), Telegram bot (+ chat ID detection, admins), X app, Graph API version, Apify, **panel language**, **draft files** (deleting old ones, free disk space), panel password, **PRO edition** (license key after the purchase) |
 
 <details>
@@ -498,6 +498,7 @@ The panel downloads article photos and pages only from the internet – from the
    For a group, add the bot to the group and send `/start` there.
 3. In a group also enter the **admin IDs** (your user ID), so that only you can click ✅ – without this list any member of the group can approve drafts (the panel warns about it next to the bot).
 4. If the Telegram bot had a webhook before, remove it: `curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"`.
+5. A draft has texts only for the platforms enabled in the bot (*Bot → Publishing*) – e.g. with just Facebook there is no X text. You can also paste the Facebook text on Instagram by hand. New drafts get a platform you enable later, and earlier drafts skip it with a note in the report.
 
 ### Google Gemini
 You create the key in [Google AI Studio](https://aistudio.google.com/apikey) and paste it in **panel → Settings → Google Gemini**.
@@ -568,7 +569,7 @@ The link goes into the X post in the *🔗 post with a link* image mode and in a
    - asks the panel for the text (`/internal/bots/<id>/llm` – the provider chosen in the bot) and for the article photo
      (`/internal/bots/<id>/image`, by the bot's image mode);
    - saves the draft in `data/files`;
-   - sends Telegram the image (or just the header when the draft has no image), then the post texts, and finally the script with the buttons (one by one, so the buttons are always under the last message);
+   - sends Telegram the image (or just the header when the draft has no image), then the post texts for the platforms enabled in the bot, and finally a message with the buttons – with the video script and caption when TikTok is enabled (one by one, so the buttons are always under the last message);
    - reports the draft to the panel.
 3. **The ✅ click** is received by the panel (long polling `getUpdates`): it replies “⏳ Publishing…” right away and gives n8n a `kind: "publish"` job for this draft with the current bot configuration.
 4. **Your own post** (*✍️ New post*): the panel writes the versions for the platforms (AI router, see below), and n8n

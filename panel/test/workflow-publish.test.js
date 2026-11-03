@@ -128,3 +128,14 @@ test('🔁 pomija niepewne platformy; „📤 Nie ma – wyślij” wysyła je p
   assert.deepEqual(done.buttons, [['noop']]);
   assert.equal(done.results.x.url, 'https://x.com/i/status/43');
 });
+
+test('platforma włączona po powstaniu draftu (draft nie ma jej tekstu) – pominięta z powodem, status według pozostałych', async () => {
+  const parsed = await parseDraft({ ...DRAFT, post_x: '', post_x_link: '' });
+  assert.deepEqual([parsed.todo.x, parsed.noText.x, parsed.todo.facebook, parsed.noText.facebook], [false, true, true, false]);
+  const r = summary(parsed, { 'Facebook: opublikuj tekst/link': { id: '1_2' } });
+  assert.equal(r.status, 'published');
+  assert.match(r.text, /🐦 X: ⏭️ pominięto – draft nie ma tekstu dla tej platformy \(powstał, gdy była wyłączona\)/);
+  assert.match(r.text, /📘 Facebook: ✅ /);
+  assert.deepEqual(r.buttons, [['noop']]);
+  assert.equal(r.saved.noText, undefined, 'informacja tylko dla tej publikacji – nie w pliku draftu');
+});

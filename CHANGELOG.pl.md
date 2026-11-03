@@ -7,6 +7,15 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.4.1 – 2026-11-03
+
+- **Draft tylko z tekstami platform, na które publikujesz:** wiadomość z draftem w Telegramie i szczegóły draftu
+  w panelu mają teksty tylko dla platform włączonych w bocie (*Bot → Publikacja*), a AI pisze tylko te teksty – draft
+  jest krótszy, a zapytanie do AI tańsze. Wcześniej draft miał zawsze tekst na X i skrypt wideo TikToka, także gdy bot
+  publikował np. tylko na Facebooku i Instagramie. Skrypt wideo i podpis TikToka powstają tylko przy włączonym TikToku
+  (wersja PRO), a tekst Facebooka możesz jak dotąd wkleić ręcznie na Instagramie. Platformę włączoną po powstaniu draftu
+  publikacja tego draftu pomija z dopiskiem w raporcie – nowe drafty już ją mają.
+
 ## 1.4.0 – 2026-11-03
 
 - **Bezpieczeństwo panelu:** panel przyjmuje zmiany tylko z własnej strony. Inna aplikacja pod adresem NAS-a (inny

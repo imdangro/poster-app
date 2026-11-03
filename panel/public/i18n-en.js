@@ -642,6 +642,7 @@ window.POSTER_I18N.en = {
   'Konto Bluesky i publikacja postów są w wersji PRO.': 'The Bluesky account and publishing are in the PRO version.',
   'Ta platforma jest w wersji PRO': 'This platform is in the PRO version',
   'Kanał Telegram': 'Telegram channel',
+  'Tekst posta': 'Post text',
   'Posty na kanale Telegram (tekst, zdjęcie, link) – w wersji PRO.':
     'Posts in a Telegram channel (text, image, link) – in the PRO version.',
   'Publikacja postów na kanale Telegram jest w wersji PRO.': 'Publishing posts in a Telegram channel is in the PRO version.',

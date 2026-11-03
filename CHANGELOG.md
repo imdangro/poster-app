@@ -7,6 +7,15 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.4.1 – 2026-11-03
+
+- **A draft only has texts for the platforms you publish to:** the draft message in Telegram and the draft details in
+  the panel have texts only for the platforms enabled in the bot (*Bot → Publishing*), and AI writes only these texts –
+  the draft is shorter and the AI request cheaper. Before, a draft always had an X text and a TikTok video script, also
+  when the bot published e.g. only to Facebook and Instagram. The TikTok video script and caption are written only when
+  TikTok is enabled (PRO edition), and you can still paste the Facebook text on Instagram by hand. Publishing a draft
+  skips a platform enabled after the draft was created, with a note in the report – new drafts already have it.
+
 ## 1.4.0 – 2026-11-03
 
 - **Panel security:** the panel accepts changes only from its own page. Another app at the NAS address (another port),

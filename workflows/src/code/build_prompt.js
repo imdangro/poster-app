@@ -1,5 +1,6 @@
 // Buduje zapytanie do AI z wymuszonym schematem JSON. Panel wysyła je do dostawcy wybranego w bocie
 // (Gemini albo API zgodne z OpenAI, np. Ollama). Tu edytujesz ton i zasady postów.
+// Oszczędnie: AI pisze teksty tylko dla platform włączonych w bocie (niżej: need).
 const cfg = $('Config').first().json;
 
 // Wejście: odpowiedź panelu – tylko newsy, których ten bot jeszcze nie widział + jego ostatnie tematy
@@ -16,17 +17,17 @@ if (!candidates.length) {
 
 const fmt = (iso) => DateTime.fromISO(iso).setZone($now.zoneName).toFormat('dd.LL HH:mm');
 
-// Nazwy sekcji skryptu model przepisuje dosłownie, więc są w języku postów: po polsku polskie, w innych językach
-// angielskie (HOOK, CTA i B-ROLL to i tak nazwy z branży).
-const polishPosts = /^(pol|pl$)/i.test(String(cfg.language || '').trim());
-const [DETAILS, ON_SCREEN] = polishPosts ? ['ROZWINIĘCIE', 'NAPISY NA EKRANIE'] : ['DETAILS', 'ON-SCREEN TEXT'];
-const SCRIPT_FORMAT = `
-  🎣 HOOK (0–3 s): ...
-  📰 NEWS (3–10 s): ...
-  🔎 ${DETAILS} (10–45 s): ...
-  📣 CTA (45–60 s): ...
-  🎥 B-ROLL: 3–5 punktów z sugestiami ujęć/materiałów
-  💬 ${ON_SCREEN}: 3–5 krótkich haseł`;
+// Teksty tylko dla platform włączonych w bocie – krótszy draft i mniej tokenów. Bot bez żadnej włączonej platformy
+// dostaje jeden tekst (post FB/IG), żeby draft nie był pusty. Draft wie z „need”, które teksty zamówiono.
+const need = { x: !!cfg.enableX, fb: !!cfg.enableFacebook || !cfg.enableX, tiktok: false };
+
+// Pola tekstów według need.
+function textFields(d) {
+  const fields = [];
+  if (need.x) fields.push(['post_x', d.x]);
+  if (need.fb) fields.push(['post_fb_insta', d.fb]);
+  return fields;
+}
 
 const instructionsBlock = cfg.instructions
   ? `\nDODATKOWE WYTYCZNE WŁAŚCICIELA PROFILU (stosuj je, o ile nie łamią zasad powyżej):\n${cfg.instructions}\n`
@@ -52,21 +53,15 @@ const newsList = candidates
   )
   .join('\n');
 
-const newsFields = [
+const fields = [
   ['selected_index', 'numer wybranego newsa z listy [n].'],
   ['news_title', `krótki, rzeczowy tytuł wybranego newsa (po ${cfg.language}).`],
   ['why_selected', '1 zdanie – dlaczego ten news.'],
-  [
-    'post_x',
-    'dynamiczny wpis na X, MAKSYMALNIE 260 znaków łącznie ze spacjami, emoji i hashtagami; mocne pierwsze słowa; 2–3 trafne hashtagi na końcu.',
-  ],
-  [
-    'post_fb_insta',
-    'angażujący post na Facebook/Instagram, 600–1500 znaków: hook w pierwszej linii, krótkie akapity, emoji jako punktory, pytanie lub CTA do komentowania, na końcu linia ze źródłem i 5–10 hashtagów (maks. 15).',
-  ],
-  ['script_tiktok', `skrypt wideo 30–60 s w formacie:${SCRIPT_FORMAT}`],
+  ...textFields({
+    x: 'dynamiczny wpis na X, MAKSYMALNIE 260 znaków łącznie ze spacjami, emoji i hashtagami; mocne pierwsze słowa; 2–3 trafne hashtagi na końcu.',
+    fb: 'angażujący post na Facebook/Instagram, 600–1500 znaków: hook w pierwszej linii, krótkie akapity, emoji jako punktory, pytanie lub CTA do komentowania, na końcu linia ze źródłem i 5–10 hashtagów (maks. 15).',
+  }),
 ];
-const fields = newsFields;
 
 const system = `Jesteś doświadczonym redaktorem newsowym i social media managerem profilu "${cfg.brandName}" o tematyce: ${cfg.topic}.
 Piszesz w języku: ${cfg.language}. Znasz specyfikę X (Twitter), Facebooka, Instagrama i TikToka.
@@ -107,4 +102,4 @@ const schema = {
   propertyOrdering: names,
 };
 
-return [{ json: { candidates, llm: { system, user, schema, maxTokens: 8192 } } }];
+return [{ json: { candidates, need, llm: { system, user, schema, maxTokens: 8192 } } }];

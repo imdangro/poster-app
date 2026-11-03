@@ -86,6 +86,8 @@ class Drafts {
       mode: d.mode === 'manual' ? 'manual' : 'news',
       // własny post: platformy wybrane w edytorze (null = wszystkie włączone w bocie) i tekst autora
       platforms: Array.isArray(d.platforms) ? d.platforms : null,
+      // draft z newsów: platformy włączone w chwili jego powstania (null = draft sprzed tej informacji)
+      targets: Array.isArray(d.targets) ? d.targets : null,
       composeText: d.composeText || '',
       // post z linkiem (tryb „link” albo brak grafiki): X dostał post_x_link
       linkMode: d.linkMode === true || !(d.image && d.image.file),

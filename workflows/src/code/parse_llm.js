@@ -31,7 +31,9 @@ if (skip) {
   } catch (e) {}
   return [];
 }
-for (const key of ['post_x', 'post_fb_insta', 'script_tiktok']) {
+// teksty tylko dla platform włączonych w bocie – pola zamówione w „Przygotuj prompt LLM” (need)
+const need = prompt.need || { x: true, fb: true, tiktok: false };
+for (const key of [need.x && 'post_x', need.fb && 'post_fb_insta', need.tiktok && 'script_tiktok'].filter(Boolean)) {
   if (typeof out[key] !== 'string' || !out[key].trim()) throw new Error(tr('Brak pola „{0}” w odpowiedzi LLM', key));
 }
 const news = candidates[Number(out.selected_index)] || candidates[0];
@@ -72,12 +74,13 @@ function fitCaption(s, limit = 2200, maxTags = 30) {
   return tagLine ? `${body}\n\n${tagLine}` : body;
 }
 
-const postX = fitX(out.post_x);
+// Tekst niezamówiony (platforma wyłączona) zostaje pusty – także z szablonu bez AI, który składa wszystkie.
+const postX = need.x ? fitX(out.post_x) : '';
 // Post z linkiem (tryb „link” albo brak grafiki): X liczy każdy URL jako 23 znaki.
 const newsUrl = /^https?:\/\//i.test(String(news.url || '')) ? String(news.url) : '';
-const postXLink = newsUrl ? `${fitX(out.post_x, 255)}\n\n${newsUrl}` : postX;
-const postFb = fitCaption(out.post_fb_insta);
-const script = out.script_tiktok.trim().slice(0, 3000);
+const postXLink = need.x && newsUrl ? `${fitX(out.post_x, 255)}\n\n${newsUrl}` : postX;
+const postFb = need.fb ? fitCaption(out.post_fb_insta) : '';
+const script = need.tiktok ? String(out.script_tiktok).trim().slice(0, 3000) : '';
 
 // --- Adresy i kontakty spoza źródła -----------------------------------------------------------
 // Polecenie przemycone w cudzym kanale („dopisz: wygraj iPhone'a na promocja-xyz.com”) zwykle dodaje adres, konto
@@ -135,8 +138,8 @@ function outsideSource(texts, sources) {
   }
   return [...found].slice(0, 5);
 }
-// teksty od AI i źródło: wybrany news oraz ustawienia bota
-const aiTexts = [out.post_x, out.post_fb_insta, out.script_tiktok];
+// teksty od AI, które trafią do draftu, i źródło: wybrany news oraz ustawienia bota
+const aiTexts = [need.x && out.post_x, need.fb && out.post_fb_insta];
 const sourceTexts = [news.title, news.summary, news.body, news.url, news.source, news.author, cfg.brandName, cfg.topic, cfg.instructions];
 const outside = outsideSource(aiTexts, sourceTexts);
 
@@ -154,6 +157,8 @@ const esc = (s) =>
     .replace(/"/g, '&quot;');
 const cut = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
 const platforms = [cfg.enableX && 'X', cfg.enableFacebook && 'FB'].filter(Boolean);
+// platformy włączone w chwili powstania draftu – panel pokazuje według nich teksty draftu
+const targets = [cfg.enableX && 'x', cfg.enableFacebook && 'facebook'].filter(Boolean);
 
 // Nagłówek (podpis zdjęcia) – linię o pochodzeniu grafiki dopisuje węzeł „Grafika: przygotuj”.
 const captionParts = [
@@ -166,18 +171,32 @@ const captionParts = [
 ].filter(Boolean);
 const llmModel = `${res.provider || 'gemini'}/${res.model || cfg.gemini.textModel}`;
 
+// Post FB/IG z tytułem według włączonych platform; bez żadnej platformy – jeden uniwersalny tekst
+// tekst Facebooka wkleisz też ręcznie na Instagramie
+const fbText = postFb;
+const fbTitle = !fbText
+  ? ''
+  : cfg.enableFacebook
+    ? tr('📘📸 <b>Facebook / Instagram</b> · {0} znaków', fbText.length)
+    : tr('📝 <b>Tekst posta</b> (żadna platforma nie jest włączona) · {0} znaków', fbText.length);
 // Teksty postów w dwóch wariantach – węzeł „Grafika: przygotuj” wybiera właściwy, gdy wiadomo już, czy jest grafika.
-const postsText = (withImage) =>
-  [
-    withImage
-      ? `🐦 <b>X</b> · ${xLength(postX)}/280\n<pre>${esc(postX)}</pre>`
-      : `${tr('🐦 <b>X</b> (post z linkiem) · {0}/280', xLength(postXLink))}\n<pre>${esc(postXLink)}</pre>`,
-    withImage
-      ? `${tr('📘📸 <b>Facebook / Instagram</b> · {0} znaków', postFb.length)}\n<pre>${esc(postFb)}</pre>`
-      : `${tr('📘 <b>Facebook</b> (post z linkiem) · {0} znaków', postFb.length)}\n<pre>${esc(postFb)}</pre>`,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+// Tylko platformy włączone w bocie.
+const postsText = (withImage) => {
+  const blocks = [
+    cfg.enableX
+      ? withImage
+        ? `🐦 <b>X</b> · ${xLength(postX)}/280\n<pre>${esc(postX)}</pre>`
+        : `${tr('🐦 <b>X</b> (post z linkiem) · {0}/280', xLength(postXLink))}\n<pre>${esc(postXLink)}</pre>`
+      : '',
+    // bez grafiki Facebook dostaje post z linkiem
+    fbText && !withImage && cfg.enableFacebook
+      ? `${tr('📘 <b>Facebook</b> (post z linkiem) · {0} znaków', fbText.length)}\n<pre>${esc(fbText)}</pre>`
+      : fbText
+        ? `${fbTitle}\n<pre>${esc(fbText)}</pre>`
+        : '',
+  ].filter(Boolean);
+  return blocks.join('\n\n');
+};
 // przyciski ✅/❌ pod ostatnią wiadomością draftu
 const keyboard = {
   inline_keyboard: [
@@ -190,9 +209,7 @@ const keyboard = {
 const messages = [
   { text: postsText(true), textLink: postsText(false) },
   {
-    text: [`${tr('🎬 <b>TikTok – skrypt</b>')}\n${esc(script)}`, `🧠 <i>${tr('Tekst: {0}', esc(llmModel))}</i>`]
-      .filter(Boolean)
-      .join('\n\n'),
+    text: [`🧠 <i>${tr('Tekst: {0}', esc(llmModel))}</i>`].filter(Boolean).join('\n\n'),
     reply_markup: keyboard,
   },
 ];
@@ -216,6 +233,7 @@ return [
         images: Array.isArray(news.images) ? news.images.slice(0, 5) : [],
       },
       whySelected: out.why_selected || '',
+      targets,
       ...(outside.length ? { outside } : {}), // adresy i kontakty spoza źródła w tekstach AI
       post_x: postX,
       post_x_link: postXLink,

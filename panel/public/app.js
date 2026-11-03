@@ -3333,6 +3333,9 @@
     // własny post: tylko platformy wybrane w edytorze
     const chosen = (k) => !d.platforms || d.platforms.includes(k);
     const manual = d.mode === 'manual';
+    // draft z newsów ma teksty tylko dla platform włączonych w chwili jego powstania (targets) – podpisy według nich
+    const on = (k) => !d.targets || d.targets.includes(k);
+    const fbLabel = manual ? 'Facebook' : on('facebook') ? 'Facebook / Instagram' : tr('Tekst posta');
     const linkLabel = manual ? tr('Link w poście') : tr('Źródło');
     modal({
       title: d.title || d.draftId,
@@ -3371,7 +3374,7 @@
           manual ? block(tr('Twój tekst'), d.composeText) : null,
           // post z linkiem: na X poszedł wariant z adresem artykułu
           chosen('x') ? block('X', d.linkMode && d.post_x_link ? d.post_x_link : d.post_x) : null,
-          chosen('facebook') ? block(manual ? 'Facebook' : 'Facebook / Instagram', d.post_fb_insta) : null,
+          chosen('facebook') ? block(fbLabel, d.post_fb_insta) : null,
           block(tr('Skrypt TikTok'), d.script_tiktok),
         ),
       ),

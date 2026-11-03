@@ -7,7 +7,7 @@
 Bot zbiera najświeższe wiadomości z kanałów RSS, Google News i profili X, a AI (Google Gemini albo model na Twoim
 sprzęcie, np. Ollama) wybiera najważniejszą i pisze posty. Grafika to **zdjęcie z artykułu** (0 zł), a gdy go brak –
 post z linkiem. Pakiet trafia na **Telegram** z przyciskami ✅/❌. Po akceptacji bot publikuje na **X i Facebooku**,
-a grafikę, tekst i skrypt wideo z draftu wrzucisz ręcznie na Instagram i TikTok.
+a grafikę i tekst Facebooka z draftu możesz też wrzucić ręcznie na Instagram.
 
 Możesz też w każdej chwili **napisać własny post** (*✍️ Nowy post* w panelu): AI dopasuje go do X i Facebooka, a Ty
 poprawiasz wersje i publikujesz od razu albo po akceptacji w Telegramie ([„📣 Własny post”](#-własny-post)).
@@ -58,11 +58,11 @@ flowchart LR
 | Klucze i tokeny | Tylko w panelu (`data/panel/secrets.json`, chmod 600). n8n **nie przechowuje żadnych kluczy**: woła API przez bramkę panelu, która dokleja klucze i sama odświeża token X |
 | Odczyt X bez płatnego API | **RSSHub** (self-hosted, ciasteczko `auth_token` z osobnego konta) → kanał RSS. Alternatywy: Apify, Nitter |
 | Deduplikacja | W panelu: klucz `x:<id tweeta>` lub URL bez `utm_*`, do tego filtr tych samych tytułów i lista ostatnich tematów przekazywana do LLM |
-| Tekst (AI) | **Gemini** albo dowolne API zgodne z OpenAI, np. **Ollama** na Twoim sprzęcie. Zawsze czysty JSON wg schematu: `post_x`, `post_fb_insta`, `script_tiktok` |
+| Tekst (AI) | **Gemini** albo dowolne API zgodne z OpenAI, np. **Ollama** na Twoim sprzęcie. Zawsze czysty JSON wg schematu, tylko z tekstami dla platform włączonych w bocie: `post_x` (X) i `post_fb_insta` (Facebook) |
 | Grafika | Tryb w bocie: **📷 zdjęcie z artykułu** (RSS / og:image / tweet), **🔗 post z linkiem** albo **🚫 bez grafiki**. Gdy artykuł nie ma zdjęcia, X i Facebook dostają post z linkiem |
 | Koszty | Karta „Koszt jednego posta”: tekst AI i publikacja na X. Grafika zawsze kosztuje 0 zł |
 | Human-in-the-Loop | Bot Telegrama z przyciskami. Panel **odpytuje** Telegram (long-polling), więc kliknięcie działa od razu, a **NAS nie musi być wystawiony do internetu** |
-| Publikacja | X API v2 (OAuth2 + `media.write`), Meta Graph API (FB `/{page}/photos` albo `/{page}/feed`). Instagram i TikTok: grafika, teksty i skrypt wideo w drafcie do ręcznej publikacji |
+| Publikacja | X API v2 (OAuth2 + `media.write`), Meta Graph API (FB `/{page}/photos` albo `/{page}/feed`). Instagram: grafika i tekst Facebooka w drafcie do ręcznej publikacji |
 | Archiwum | Każdy draft (JSON + grafika) zapisuje się w `data/files` na NAS-ie; panel pokazuje galerię draftów |
 
 ## ⭐ Wersja PRO
@@ -84,7 +84,7 @@ Poster LITE jest darmowy i otwarty (AGPL). Wersja PRO to ten sam program z dodat
 | Instagram | ręcznie | ✅ |
 | Threads i Bluesky (tekst, zdjęcie, karta linku) | – | ✅ |
 | Kanał Telegram (zdjęcie z podpisem albo post z podglądem linku) | – | ✅ |
-| TikTok: wideo z grafiki posta (animacja, 0 zł) | skrypt do ręcznego nagrania | ✅ |
+| TikTok: wideo z grafiki posta (animacja, 0 zł) | – | ✅ |
 | Tryb strony / bloga: każdy nowy artykuł z Twojej strony to posty | – | ✅ |
 | Kanał YouTube: każdy nowy film z Twojego kanału to posty (bez logowania do YouTube) | – | ✅ |
 | Tekst AI: Gemini, Ollama, własne API zgodne z OpenAI | ✅ | ✅ |
@@ -394,7 +394,7 @@ Te komunikaty w logach n8n są **niegroźne**:
 | **Bot → Konta** | Połączenie kont: X (OAuth2) i strona Facebook (token strony) |
 | **Bot → Historia** | Uruchomienia i drafty bota |
 | **Bot → Zaawansowane** | Pamięć duplikatów (reset), **usuwanie bota** |
-| **Drafty** | Galeria draftów z grafikami, tekstami do skopiowania (także do ręcznej publikacji na Instagramie i TikToku), wynikami publikacji i pobieraniem grafiki |
+| **Drafty** | Galeria draftów z grafikami, tekstami do skopiowania (tekst Facebooka także do ręcznej publikacji na Instagramie), wynikami publikacji i pobieraniem grafiki |
 | **Ustawienia** | Klucz Gemini, **Dostawcy AI** (Ollama, własne API zgodne z OpenAI), bot Telegram (+ wykrywanie ID czatu, administratorzy), aplikacja X, wersja Graph API, Apify, **język panelu**, **pliki draftów** (usuwanie starych, wolne miejsce na dysku), hasło panelu, **Wersja PRO** (klucz licencyjny po zakupie) |
 
 <details>
@@ -497,6 +497,7 @@ Zdjęcia i strony artykułów panel pobiera tylko z internetu – z sieci lokaln
    Dla grupy dodaj bota do grupy i napisz w niej `/start`.
 3. W grupie wpisz też **ID administratorów** (swoje user ID), żeby tylko Ty mógł klikać ✅ – bez tej listy drafty zatwierdzi każdy uczestnik grupy (panel ostrzega o tym przy bocie).
 4. Jeśli bot Telegrama miał wcześniej webhook, usuń go: `curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"`.
+5. Draft ma teksty tylko dla platform włączonych w bocie (*Bot → Publikacja*) – np. przy samym Facebooku nie ma tekstu na X. Tekst Facebooka wkleisz też ręcznie na Instagramie. Platformę włączoną później dostaną nowe drafty, a wcześniejsze pominą ją z dopiskiem w raporcie.
 
 ### Google Gemini
 Klucz utworzysz w [Google AI Studio](https://aistudio.google.com/apikey) i wklejasz w **panelu → Ustawienia → Google Gemini**.
@@ -567,7 +568,7 @@ Link trafia do posta na X w trybie grafiki *🔗 post z linkiem* i w poście bez
    - prosi panel o tekst (`/internal/bots/<id>/llm` – dostawca wybrany w bocie) i o zdjęcie z artykułu
      (`/internal/bots/<id>/image`, wg trybu grafiki bota);
    - zapisuje draft w `data/files`;
-   - wysyła do Telegrama grafikę (albo sam nagłówek, gdy draft jest bez grafiki), potem teksty postów, a na końcu skrypt z przyciskami (po kolei, więc przyciski są zawsze pod ostatnią wiadomością);
+   - wysyła do Telegrama grafikę (albo sam nagłówek, gdy draft jest bez grafiki), potem teksty postów dla platform włączonych w bocie, a na końcu wiadomość z przyciskami – przy włączonym TikToku ze skryptem wideo i podpisem (po kolei, więc przyciski są zawsze pod ostatnią wiadomością);
    - zgłasza draft panelowi.
 3. **Kliknięcie ✅** odbiera panel (long-polling `getUpdates`): od razu odpowiada „⏳ Publikuję…” i zleca n8n `kind: "publish"` dla tego draftu z aktualną konfiguracją bota.
 4. **Własny post** (*✍️ Nowy post*): wersje na platformy pisze panel (router AI, jak niżej), a n8n dostaje
