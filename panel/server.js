@@ -21,6 +21,8 @@ const { createApi } = require('./lib/api');
 const { AI } = require('./lib/ai');
 const { Images } = require('./lib/images');
 const { Compose } = require('./lib/compose');
+const { Similar } = require('./lib/similar');
+const { DraftPhoto } = require('./lib/draftphoto');
 const { createLicenseKey } = require('./lib/license');
 
 const env = process.env;
@@ -67,6 +69,8 @@ const ai = new AI(store);
 const images = new Images(store);
 const gateway = new Gateway(store, accounts);
 const drafts = new Drafts(FILES_DIR, store);
+// sprawdzanie powtórek: pamięć postów botów z ostatnich 90 dni i porównanie z nowym draftem (bez AI)
+const similar = new Similar(store, { dataDir: DATA_DIR, drafts });
 const runner = new Runner(store, {
   n8nUrl: (env.N8N_INTERNAL_URL || 'http://n8n:5678').replace(/\/+$/, ''),
   n8nPublicUrl: info.n8nPublicUrl,
@@ -100,18 +104,22 @@ const telegram = new Telegram(store, {
   },
   onReject: async (draft, ctx) => {
     drafts.markRejected(ctx.draftId, ctx.from);
+    runner.rememberPost(() => similar.rejected(draft.botId || (defaultBot() || {}).id, ctx.draftId));
     const gen = store.state.runs.find((r) => r.draftId === ctx.draftId && ['generate', 'compose'].includes(r.kind));
     if (gen) store.updateRun(gen.id, { status: 'rejected', message: tr('odrzucony w Telegramie ({0})', ctx.from) });
   },
 });
+// zdjęcie w odpowiedzi na draft w Telegramie: podmiana grafiki draftu przed ✅
+telegram.photo = new DraftPhoto(store, { telegram, filesDir: FILES_DIR, isPublishing: (draftId) => !!runner.publishing(draftId) });
 runner.telegram = telegram;
 runner.ai = ai;
+runner.similar = similar;
 // własny post (✍️ Nowy post): wersje na platformy i zlecenie dla n8n
 const compose = new Compose(store, { dataDir: DATA_DIR, ai, runner, images });
 
 // klucz licencyjny wklejony w panelu: sprawdzenie w Polarze bez aktywacji i polecenie scripts/upgrade-to-pro.sh
 const licenseKey = createLicenseKey(DATA_DIR);
-const api = createApi({ store, auth, runner, accounts, telegram, drafts, gateway, info, ai, compose, licenseKey });
+const api = createApi({ store, auth, runner, accounts, telegram, drafts, gateway, info, ai, compose, licenseKey, similar });
 
 // ---------------------------------------------------------------------------------------------- UI :7080
 const PUBLIC = path.join(__dirname, 'public');
@@ -283,6 +291,9 @@ const internalServer = http.createServer(async (req, res) => {
       });
       return sendJson(res, 200, { articles: fresh, recentTopics: (store.state.recentTopics[bot.id] || []).slice(-15) });
     }
+    // Sprawdzanie powtórek: posty bota podobne do nowego draftu (workflow pyta po napisaniu tekstu przez AI)
+    const sm = req.url.match(/^\/internal\/bots\/([a-z0-9]+)\/similar$/);
+    if (sm) return sendJson(res, 200, similar.check(store.requireBot(sm[1]), body));
     // Tekst AI i grafika posta (zdjęcie ze źródła)
     const am = req.url.match(/^\/internal\/bots\/([a-z0-9]+)\/(llm|image)$/);
     if (am) {

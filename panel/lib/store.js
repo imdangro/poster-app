@@ -69,8 +69,16 @@ function defaultBot(id, name) {
     schedule: { mode: 'interval', every: 4, from: 8, to: 20, hours: [8, 12, 16, 20], minute: 0, jitter: 0, days: [...ALL_DAYS] },
     publishing: {
       x: false,
+      // api – publikacja przez X API (płatne, konto podłączone w bocie); link – ręcznie przez oficjalny link X (web
+      // intent): przycisk „📝 Otwórz na X” w Telegramie, publikuje użytkownik, bez API i bez opłat
+      xMode: 'api',
       facebook: false,
+      // post na Facebooku bez linku, a link w pierwszym komentarzu strony (uprawnienie pages_manage_engagement)
+      fbLinkComment: false,
     },
+    // sprawdzanie powtórek przed akceptacją (lib/similar.js): porównanie draftu z postami bota z ostatnich `days` dni;
+    // sensitivity – próg podobieństwa (low = tylko bardzo podobne, high = wyłapie więcej, częściej fałszywy alarm)
+    similar: { enabled: true, days: 60, sensitivity: 'medium' },
     // czat Telegram tylko tego bota (PRO); puste = czat z Ustawień
     telegram: { chatId: '' },
     accounts: { x: null, meta: null },
@@ -171,6 +179,13 @@ function sanitizeBot(input, existing) {
   const p = i.publishing || {};
   const flags = ['x', 'facebook'];
   for (const k of flags) if (k in p) b.publishing[k] = bool(p[k]);
+  if ('xMode' in p) b.publishing.xMode = oneOf(p.xMode, ['api', 'link'], 'api');
+  if ('fbLinkComment' in p) b.publishing.fbLinkComment = bool(p.fbLinkComment);
+
+  const sm = i.similar && typeof i.similar === 'object' ? i.similar : {};
+  if ('enabled' in sm) b.similar.enabled = bool(sm.enabled, true);
+  if ('days' in sm) b.similar.days = [30, 60, 90].includes(Number(sm.days)) ? Number(sm.days) : 60;
+  if ('sensitivity' in sm) b.similar.sensitivity = oneOf(sm.sensitivity, ['low', 'medium', 'high'], 'medium');
 
   if ('paused' in i) b.paused = bool(i.paused);
 
@@ -457,7 +472,7 @@ class Store {
 
 function mergeDefaults(def, obj) {
   const out = { ...def, ...obj };
-  const groups = ['sources', 'content', 'schedule', 'publishing', 'telegram', 'accounts'];
+  const groups = ['sources', 'content', 'schedule', 'publishing', 'similar', 'telegram', 'accounts'];
   for (const k of groups) out[k] = { ...def[k], ...(obj[k] || {}) };
   return out;
 }

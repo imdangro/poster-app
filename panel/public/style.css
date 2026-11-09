@@ -588,6 +588,9 @@ svg.i {
 .plat.telegram {
   background: #229ed9;
 }
+.plat.webhook {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+}
 .plat.gemini {
   background: linear-gradient(135deg, #4285f4, #9b72cb 60%, #d96570);
 }

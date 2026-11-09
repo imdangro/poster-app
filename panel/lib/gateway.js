@@ -16,7 +16,11 @@ const SERVICES = ['telegram', 'x', 'meta', 'apify'];
 const ALLOWED = {
   telegram: [['POST', /^\/(sendMessage|sendPhoto|editMessageReplyMarkup)$/]],
   x: [['POST', /^\/2\/(tweets|media\/upload)$/]],
-  meta: [['POST', /^\/v\d+\.\d+\/\d+\/(photos|feed)$/]],
+  meta: [
+    ['POST', /^\/v\d+\.\d+\/\d+\/(photos|feed)$/],
+    // link w pierwszym komentarzu pod postem strony (ID posta: <strona>_<post>)
+    ['POST', /^\/v\d+\.\d+\/\d+(?:_\d+)?\/comments$/],
+  ],
   apify: [['POST', /^\/v2\/acts\/[^/]+\/run-sync-get-dataset-items$/]],
 };
 // n8n wysyła grafiki i wideo do 50 MB (limit wysyłki Bot API Telegrama) – ciało czeka w pamięci, bo przy wygasłym tokenie

@@ -28,7 +28,31 @@ const draftId = `d${$now.toFormat('yyyyLLdd-HHmm')}-${Math.random().toString(36)
 const postX = c.posts.x || '';
 const postFb = c.posts.facebook || '';
 const names = { x: 'X', facebook: 'FB' };
-const platforms = c.platforms.map((k) => names[k]);
+// X ręcznie przez link: oficjalny link X do nowego posta (web intent) z gotowym tekstem – publikuje użytkownik
+// w aplikacji X, bez płatnego API (link z posta panel dopisał już do tekstu X). Za długi adres – tekst do skopiowania.
+const xManual = has('x') && cfg.xMode === 'link' && !!postX;
+function xIntent(text) {
+  const q = encodeURIComponent(String(text || '').trim())
+    .replace(/%3A/g, ':')
+    .replace(/%2F/g, '/')
+    .replace(/%40/g, '@')
+    .replace(/%2C/g, ',');
+  const link = `https://x.com/intent/tweet?text=${q}`;
+  return link.length <= 2000 ? link : '';
+}
+const xIntentUrl = xManual ? xIntent(postX) : '';
+// Facebook: link w pierwszym komentarzu – w poście zostaje sam tekst (link z końca tekstu panelu usuwamy)
+const fbComment = has('facebook') && cfg.fbLinkComment && !!c.link;
+const fbShown = fbComment
+  ? postFb
+      .split(c.link)
+      .join('')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  : postFb;
+// platformy, na które publikuje ✅ (X ręcznie publikuje człowiek – przycisk „Otwórz na X”)
+const platforms = c.platforms.filter((k) => !(k === 'x' && cfg.xMode === 'link')).map((k) => names[k]);
 
 // Nagłówek (podpis zdjęcia) – linię o grafice dopisuje węzeł „Grafika: przygotuj” (przed ostatnią linią)
 const captionParts = [
@@ -36,27 +60,44 @@ const captionParts = [
   `📝 <b>${esc(cut(c.title, 200))}</b>`,
   c.link ? tr('🔗 <a href="{0}">link w poście</a>', esc(c.link)) : '',
   c.publishNow
-    ? tr('🚀 Publikuję teraz – zlecenie z panelu ({0}).', platforms.join(', '))
+    ? platforms.length
+      ? tr('🚀 Publikuję teraz – zlecenie z panelu ({0}).', platforms.join(', '))
+      : tr('🚀 Zlecenie z panelu – na X publikujesz sam przyciskiem pod ostatnią wiadomością.')
     : tr('👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.'),
 ].filter(Boolean);
 
 // Teksty postów – w Telegramie najwyżej 4096 znaków na wiadomość, więc długie teksty skracamy tylko w podglądzie
 const blocks = [
-  has('x') && [`🐦 <b>X</b> · ${xLength(postX)}/280`, postX],
-  has('facebook') && [tr('📘 <b>Facebook</b> · {0} znaków', postFb.length), postFb],
+  has('x') && [
+    xManual
+      ? xIntentUrl
+        ? tr('🐦 <b>X</b> · ręcznie – przycisk „📝 Otwórz na X” · {0}/280', xLength(postX))
+        : tr('🐦 <b>X</b> · ręcznie – skopiuj tekst do X · {0}/280', xLength(postX))
+      : `🐦 <b>X</b> · ${xLength(postX)}/280`,
+    postX,
+  ],
+  has('facebook') && [
+    fbComment
+      ? tr('📘 <b>Facebook</b> · {0} znaków · link w pierwszym komentarzu', fbShown.length)
+      : tr('📘 <b>Facebook</b> · {0} znaków', postFb.length),
+    fbShown,
+  ],
 ].filter(Boolean);
 const room = Math.floor(3600 / blocks.length);
 const postsText = blocks
   .map(([title, text]) => `${title}\n<pre>${esc(text.length > room ? `${text.slice(0, room - 1)}…` : text)}</pre>`)
   .join('\n\n');
 
-// przyciski ✅/❌ pod ostatnią wiadomością draftu (bez nich, gdy autor kliknął „Publikuj teraz”)
+// przyciski ✅/❌ pod ostatnią wiadomością draftu (bez nich, gdy autor kliknął „Publikuj teraz”); X ręcznie – osobny
+// wiersz z oficjalnym linkiem X
+const xRow = xIntentUrl ? [{ text: tr('📝 Otwórz na X'), url: xIntentUrl }] : null;
 const keyboard = {
   inline_keyboard: [
     [
-      { text: tr('✅ Publikuj ({0})', platforms.join(' + ')), callback_data: `pub:${draftId}` },
+      { text: platforms.length ? tr('✅ Publikuj ({0})', platforms.join(' + ')) : tr('✅ Zatwierdź'), callback_data: `pub:${draftId}` },
       { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },
     ],
+    ...(xRow ? [xRow] : []),
   ],
 };
 const info = [`🧠 <i>${c.ai ? tr('Tekst: {0} (dopasowany do platform)', esc(c.ai)) : tr('Tekst: Twój, bez AI')}</i>`]
@@ -64,7 +105,7 @@ const info = [`🧠 <i>${c.ai ? tr('Tekst: {0} (dopasowany do platform)', esc(c.
   .join('\n\n');
 const messages = [
   { text: postsText, textLink: postsText },
-  { text: info, reply_markup: c.publishNow ? undefined : keyboard },
+  { text: info, reply_markup: c.publishNow ? (xRow ? { inline_keyboard: [xRow] } : undefined) : keyboard },
 ];
 
 return [
@@ -93,6 +134,7 @@ return [
       // X: link (jeśli jest) panel dopisał już na końcu tekstu
       post_x: postX,
       post_x_link: postX,
+      ...(xIntentUrl ? { xIntent: xIntentUrl } : {}), // X ręcznie: oficjalny link X z gotowym tekstem
       post_fb_insta: postFb,
       script_tiktok: '',
       // grafika dla węzła „Grafika: panel”: zdjęcie wgrane w panelu albo brak

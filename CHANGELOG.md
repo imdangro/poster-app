@@ -7,6 +7,36 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.5.0 – 2026-11-09
+
+- **X without the paid API – by hand via a link:** in *Bot → Publishing → X* you choose "Via API (automatic)" or "By
+  hand via link (free)". In link mode the draft in Telegram gets a **📝 Open on X** button – X's official link to a new
+  post with the text and link ready. You post it yourself, with no credits in the X Developer Console and no connected
+  X account. ✅ publishes the other platforms, the X button stays under the draft, the report shows "📝 manual" for X,
+  and the link is also in the draft details in the panel. You attach the photo yourself. The default is unchanged – X
+  via the API.
+- **Facebook: link in the first comment** (option in *Bot → Publishing → Facebook*, off by default): the post goes out
+  without the link – with the photo if the draft has one – and the Page immediately adds a comment with the link under
+  it. A failed comment does not break publishing: the post is on the Page, and the report shows a warning. Own posts
+  use the same bot setting.
+  **Manual step – only when you turn this option on:** the Meta token needs the `pages_manage_engagement` and
+  `pages_read_user_content` permissions (Meta requires both), and the system user needs the "Community activity" right
+  (or full control) on the Page. Generate a new token and
+  save it in **Accounts → Facebook** ([README](README.md) → "Meta").
+- **Accounts → Facebook shows the token permissions** and the rights on the Page (read when you save the token) and
+  what is missing for the link comment. With the option on, the gaps are also a warning on the bot, and the Telegram
+  report points to this card.
+- **Repeat check before approval:** the panel compares a new draft with the bot's posts from the last 60 days and with
+  drafts waiting for a decision – keywords and word pairs, no AI and no cost. When the same story was already in a post
+  (e.g. the same news from another site, or told by the AI in other words), the draft in Telegram gets
+  "🔁 Similar to the post from …" with a link to the post, and in the panel – a 🔁 badge and a list of similar posts.
+  Settings in *Bot → Publishing → Repeat check*: a switch (on by default), a window of 30, 60 or 90 days and the
+  sensitivity. At the start the panel fills the post memory with the drafts on disk.
+- **Your own photo in a draft:** in Telegram, reply to any message of the draft with your photo (or a JPG, PNG or WebP
+  file, up to 20 MB). The bot replaces the draft's image (JPG up to 2048 px) and sends back a preview, and ✅ then
+  publishes your photo – also on the platforms that were skipped without a photo. It works before publishing and only
+  for people who can click ✅. The draft details in the panel show "📷 Your photo".
+
 ## 1.4.1 – 2026-11-03
 
 - **A draft only has texts for the platforms you publish to:** the draft message in Telegram and the draft details in

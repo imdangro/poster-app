@@ -31,8 +31,8 @@ function sources(files, version) {
     }));
 }
 
-// prompty AI zostają po polsku (bez tr())
-const PROMPT_FILES = ['panel/lib/compose-prompt.js'];
+// prompty AI zostają po polsku (bez tr()), a słowa pospolite do porównywania tekstów (sprawdzanie powtórek) to dane
+const PROMPT_FILES = ['panel/lib/compose-prompt.js', 'panel/lib/similar-words.js'];
 const SERVER_FILES = [
   'panel/server.js',
   'panel/reset-password.js',

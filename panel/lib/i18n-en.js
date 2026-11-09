@@ -292,6 +292,40 @@ module.exports = {
   'Planowanie postów – w wersji PRO': 'Scheduling posts – in the PRO version',
   'nie wybrano modelu (panel → bot → Tekst i grafika)': 'no model selected (panel → bot → Text & images)',
   'nie wybrano modelu tekstowego (zakładka Tekst i grafika)': 'no text model selected (Text & images tab)',
+  'Telegram nie podał pliku zdjęcia': 'Telegram did not provide the photo file',
+  'Nie udało się pobrać zdjęcia z Telegrama: {0}': 'Could not download the photo from Telegram: {0}',
+  'Nie udało się pobrać zdjęcia z Telegrama (HTTP {0})': 'Could not download the photo from Telegram (HTTP {0})',
   'Pominięto /post spoza dozwolonego czatu/użytkownika': 'Skipped /post from a chat or user that is not allowed',
   '✍️ Post z Telegrama (/post) jest w wersji PRO: {0}': '✍️ Posting from Telegram (/post) is in the PRO edition: {0}',
+  ręcznie: 'by hand',
+  'ręcznie przez link': 'by hand via link',
+  'uprawnienia tokenu Meta nie są jeszcze sprawdzone – wklej token jeszcze raz i kliknij „Zapisz nowy token” (Konta → Facebook)':
+    'the Meta token permissions have not been checked yet – paste the token again and click “Save new token” (Accounts → Facebook)',
+  'token Meta nie ma uprawnień: {0} – wygeneruj nowy token z nimi i zapisz go w Konta → Facebook':
+    'the Meta token lacks the permissions: {0} – generate a new token with them and save it in Accounts → Facebook',
+  'konto, z którego jest token, nie może moderować strony – w Ustawieniach firmy Meta (Użytkownicy systemowi → przypisane zasoby → strona) włącz „Aktywność społeczności” albo pełną kontrolę, potem zapisz token ponownie':
+    'the account the token belongs to cannot moderate the Page – in Meta Business settings (System users → assigned assets → Page) turn on “Community activity” or full control, then save the token again',
+  'link w komentarzu na Facebooku nie zadziała: {0}': 'the link comment on Facebook will not work: {0}',
+  '🔁 podobny do wcześniejszego posta': '🔁 similar to an earlier post',
+  'Wyślij zdjęcie jako zdjęcie albo plik JPG, PNG lub WebP': 'Send the photo as a photo or as a JPG, PNG or WebP file',
+  '⛔ Zdjęcie w drafcie podmieni tylko osoba, która może zatwierdzać drafty (Ustawienia → Telegram → ID administratorów).':
+    '⛔ Only a person who can approve drafts can replace the photo in a draft (Settings → Telegram → Admin IDs).',
+  '❗ Zdjęcie może mieć najwyżej 20 MB': '❗ The photo can be at most 20 MB',
+  'Zdjęcie może mieć najwyżej 20 MB': 'The photo can be at most 20 MB',
+  'Zdjęcie draftu {0} podmienione ({1})': 'Photo of draft {0} replaced ({1})',
+  'Zdjęcie draftu {0}:': 'Photo of draft {0}:',
+  '🖼 <b>Zdjęcie podmienione</b> · <code>{0}</code>': '🖼 <b>Photo replaced</b> · <code>{0}</code>',
+  '✅ pod draftem opublikuje to zdjęcie.': '✅ under the draft will publish this photo.',
+  'X i Facebook: post z linkiem (tryb grafiki bota) – zdjęcie trafi na pozostałe platformy.':
+    "X and Facebook: a post with a link (the bot's image mode) – the photo goes to the other platforms.",
+  '❗ Nie udało się podmienić zdjęcia: {0}': '❗ Could not replace the photo: {0}',
+  '❗ Nie znaleziono draftu <code>{0}</code> na dysku.': '❗ Draft <code>{0}</code> was not found on disk.',
+  '⏳ Ten draft właśnie się publikuje – zdjęcie podmienisz tylko przed ✅.':
+    '⏳ This draft is being published right now – you can replace the photo only before ✅.',
+  'ℹ️ Ten draft jest odrzucony – zdjęcia już nie podmienię.': 'ℹ️ This draft was rejected – I will not replace its photo.',
+  'ℹ️ Ten draft jest już po publikacji – zdjęcie podmienisz tylko przed ✅.':
+    'ℹ️ This draft has already been published – you can replace the photo only before ✅.',
+  'Nie udało się odczytać zdjęcia WebP (animowane?) – wyślij JPG albo PNG': 'Could not read the WebP photo (animated?) – send a JPG or PNG',
+  'Nie udało się odczytać wymiarów zdjęcia': 'Could not read the photo dimensions',
+  'Niepoprawne ID draftu': 'Invalid draft ID',
 };

@@ -347,9 +347,17 @@ tg_script = http("Telegram: wyślij skrypt i przyciski", (x3 + 660, Y_GEN), "POS
 # auto = publikacja od razu (Config.autoPublish): własny post z „Publikuj teraz”
 AUTO = "(" + CFG + ".autoPublish === true)"
 HELD = ""
+# similar / outside – ile podobnych wcześniejszych postów i adresów spoza źródła (komunikat w historii uruchomień);
+# chatId + messages – wiadomości draftu w Telegramie (nagłówek, teksty, przyciski): odpowiedź zdjęciem na dowolną
+# z nich podmienia grafikę draftu (panel: lib/draftphoto.js)
+TGP_HEAD = "($('Telegram: przygotuj teksty').first().json.posts.reply_parameters || {}).message_id"
+TGP_POSTS = "($('Telegram: wyślij teksty postów').first().json.result || {}).message_id"
 DRAFT_EVENT = ("={{ JSON.stringify({ type: 'draft', runId: " + CFG + ".runId, botId: " + CFG + ".botId, "
                "draftId: " + IMGP + ".draftId, title: " + IMGP + ".news.title, "
-               "image: (" + IMGP + ".image || {}).source || 'none', auto: " + AUTO + HELD + " }) }}")
+               "image: (" + IMGP + ".image || {}).source || 'none', auto: " + AUTO + HELD + ", "
+               "similar: (" + IMGP + ".similar || []).length, outside: (" + IMGP + ".outside || []).length, "
+               "chatId: " + CFG + ".telegram.chatId, "
+               "messages: [" + TGP_HEAD + ", " + TGP_POSTS + ", ($json.result || {}).message_id].filter(Boolean) }) }}")
 rep_draft = http("Panel: zgłoś draft", (x3 + 880, Y_GEN), "POST", "{{ " + CFG + ".panelUrl }}/internal/events",
                  json_body=DRAFT_EVENT, timeout=15000, on_error="continueRegularOutput")
 auto_if = if_node("Publikować bez akceptacji?", (x3 + 1100, Y_GEN), "={{ " + AUTO + " }}", "true")
@@ -414,15 +422,25 @@ fb_rd = read_file("FB: wczytaj grafikę", (xp + 2200, Y_PUB - 240), IMG)
 fb_post = http(
     "Facebook: opublikuj post", (xp + 2420, Y_PUB - 240), "POST",
     GRAPH + "/{{ " + CFG + ".meta.pageId }}/photos",
-    multipart=[("source", ("binary", "data")), ("message", "={{ " + DRAFT + ".post_fb_insta }}"),
+    multipart=[("source", ("binary", "data")), ("message", "={{ " + DRAFT + ".fbMessage }}"),
                ("published", "true")],
     timeout=120000, on_error="continueRegularOutput",
 )
 fb_feed = http(
     "Facebook: opublikuj tekst/link", (xp + 2420, Y_PUB - 60), "POST",
     GRAPH + "/{{ " + CFG + ".meta.pageId }}/feed",
-    json_body="={{ JSON.stringify(Object.assign({ message: " + DRAFT + ".post_fb_insta }, "
+    json_body="={{ JSON.stringify(Object.assign({ message: " + DRAFT + ".fbMessage }, "
               + DRAFT + ".fbLink ? { link: " + DRAFT + ".fbLink } : {})) }}",
+    timeout=60000, on_error="continueRegularOutput",
+)
+# link w pierwszym komentarzu: post bez linku, a strona dodaje komentarz z adresem (uprawnienie pages_manage_engagement);
+# ID posta: post_id ze zdjęcia (/photos) albo id z /feed
+fbc_if = if_node("FB: link w komentarzu?", (xp + 2640, Y_PUB - 150),
+                 "={{ !!(" + DRAFT + ".fbComment && ($json.post_id || $json.id)) }}", "true")
+fb_comment = http(
+    "Facebook: link w komentarzu", (xp + 2640, Y_PUB - 330), "POST",
+    GRAPH + "/{{ $json.post_id || $json.id }}/comments",
+    json_body="={{ JSON.stringify({ message: " + DRAFT + ".fbComment }) }}",
     timeout=60000, on_error="continueRegularOutput",
 )
 connect(x_if, fb_if, out=1)
@@ -431,6 +449,9 @@ connect(fb_if, fb_img_if, out=0)
 connect(fb_img_if, fb_rd, out=0)
 connect(fb_img_if, fb_feed, out=1)
 chain(fb_rd, fb_post)
+connect(fb_post, fbc_if)
+connect(fb_feed, fbc_if)
+connect(fbc_if, fb_comment, out=0)
 
 
 # Report
@@ -448,8 +469,8 @@ rep_pub = http("Panel: zgłoś wynik publikacji", (XR + 880, Y_PUB), "POST", "{{
                json_body="={{ JSON.stringify($('Podsumowanie publikacji').first().json.panelEvent) }}",
                timeout=15000, on_error="continueRegularOutput")
 connect(fb_if, summary, out=1)
-connect(fb_post, summary)
-connect(fb_feed, summary)
+connect(fbc_if, summary, out=1)
+connect(fb_comment, summary)
 chain(summary, save_status, tg_report, tg_buttons, rep_pub)
 
 # ------------------------------------------------------------------------------------------------

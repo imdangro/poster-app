@@ -1,5 +1,6 @@
 'use strict';
-// ffmpeg w kontenerze panelu (instaluje go panel/Dockerfile): konwersja zdjęć WebP do JPG/PNG.
+// ffmpeg w kontenerze panelu (instaluje go panel/Dockerfile): konwersja zdjęć WebP do JPG/PNG, zmniejszanie
+// i przycinanie zdjęć (własne zdjęcie w drafcie, /post).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -55,4 +56,34 @@ async function convertWebp(buffer) {
   }
 }
 
-module.exports = { ffmpeg, convertWebp };
+// JPG do `maxSide` px (domyślnie 2048 – mieści się w limicie zdjęć X 5 MB), opcjonalnie środek kadru w proporcjach
+// `ratio` (szerokość / wysokość, np. 0,8 = 4:5 pod Instagram). Najpierw zmniejszenie, potem przycięcie. Wymiary
+// parzyste (JPG z podpróbkowaniem kolorów); przycinany bok liczony z ostatecznego drugiego boku i zaokrąglony w dół –
+// proporcje zostają w zakresie Instagrama (np. ≥ 4:5). flatten – przezroczystość (PNG) na białym tle zamiast czarnego.
+async function fitJpeg({ buffer, width, height }, { ratio = null, maxSide = 2048, flatten = false } = {}) {
+  const even = (n) => Math.max(2, Math.floor(n / 2) * 2);
+  const r = ratio || width / height;
+  const tall = width / height < r; // za wąskie – przycinamy wysokość, za szerokie – szerokość
+  const scale = Math.min(1, maxSide / (tall ? Math.max(width, width / r) : Math.max(height * r, height)));
+  const sw = scale < 1 ? even(width * scale) : width;
+  const sh = scale < 1 ? even(height * scale) : height;
+  const w = tall ? even(sw) : even(even(sh) * r);
+  const h = tall ? even(even(sw) / r) : even(sh);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'poster-fit-'));
+  const src = path.join(dir, 'in');
+  const out = path.join(dir, 'out.jpg');
+  try {
+    fs.writeFileSync(src, buffer);
+    const fit = [...(scale < 1 ? [`scale=${sw}:${sh}`] : []), `crop=${w}:${h}:${Math.floor((sw - w) / 2)}:${Math.floor((sh - h) / 2)}`];
+    const filter = flatten
+      ? ['-filter_complex', `[0:v]${fit.join(',')},format=rgba[f];color=c=white:s=${w}x${h}[bg];[bg][f]overlay=shortest=1`]
+      : ['-vf', fit.join(',')];
+    await ffmpeg(['-y', '-hide_banner', '-loglevel', 'error', '-i', src, ...filter, '-frames:v', '1', '-q:v', '3', out], 30000);
+    const jpg = fs.readFileSync(out);
+    return { buffer: jpg, width: w, height: h };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+module.exports = { ffmpeg, convertWebp, fitJpeg };

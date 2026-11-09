@@ -24,8 +24,38 @@ const textOf = {
 };
 const hasText = (k) => String(textOf[k] || '').trim() !== '';
 
+// X ręcznie przez link: bez publikacji przez API – raport ma stan „ręcznie” i przycisk z oficjalnym linkiem X do
+// nowego posta (web intent; draft z trybu API dostaje go teraz). Za długi adres – tekst do skopiowania z draftu.
+const xManual = cfg.enableX && cfg.xMode === 'link' && chosen('x') && hasText('x');
+function xIntent(text) {
+  const q = encodeURIComponent(String(text || '').trim())
+    .replace(/%3A/g, ':')
+    .replace(/%2F/g, '/')
+    .replace(/%40/g, '@')
+    .replace(/%2C/g, ',');
+  const link = `https://x.com/intent/tweet?text=${q}`;
+  return link.length <= 2000 ? link : '';
+}
+const xIntentUrl = !xManual
+  ? ''
+  : /^https:\/\/x\.com\/intent\//.test(String(draft.xIntent || ''))
+    ? draft.xIntent
+    : xIntent(draft.post_x_link || draft.post_x);
+
+// Facebook: link w pierwszym komentarzu – post bez linku (ze zdjęciem, gdy draft je ma, także w trybie „link”),
+// a po publikacji strona dodaje komentarz z adresem. Adres z tekstu posta (własny post dopisuje go na końcu) usuwamy.
+const fbComment = cfg.enableFacebook && cfg.fbLinkComment && url ? url : '';
+const fbMessage = fbComment
+  ? String(draft.post_fb_insta || '')
+      .split(url)
+      .join('')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  : String(draft.post_fb_insta || '');
+
 const todo = {
-  x: cfg.enableX && chosen('x') && hasText('x') && pending('x'),
+  x: cfg.enableX && cfg.xMode !== 'link' && chosen('x') && hasText('x') && pending('x'),
   facebook: cfg.enableFacebook && chosen('facebook') && hasText('facebook') && pending('facebook'),
 };
 // platformy pominięte, bo wymagają grafiki
@@ -48,8 +78,13 @@ return [
       // X: w trybie linku – tekst z adresem artykułu (X sam pokaże kartę z podglądem)
       xText: linkMode ? draft.post_x_link || draft.post_x : draft.post_x,
       xWithImage: hasImage && !linkMode,
-      fbWithImage: hasImage && !linkMode,
-      fbLink: url,
+      xManual,
+      ...(xIntentUrl ? { xIntent: xIntentUrl } : {}),
+      // link w komentarzu: zdjęcie draftu idzie na Facebook także w trybie „link”
+      fbWithImage: hasImage && (!linkMode || !!fbComment),
+      fbLink: fbComment ? '' : url,
+      fbMessage,
+      fbComment,
       alreadyPublished: draft.status === 'published',
       // komunikat dla węzła „Telegram: już opublikowany”
       alreadyPublishedText: tr('ℹ️ Draft {0} był już opublikowany – pomijam.', draft.draftId),

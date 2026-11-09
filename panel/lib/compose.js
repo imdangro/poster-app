@@ -13,6 +13,7 @@ const { promptFor } = require('./compose-prompt');
 const { tr } = require('./i18n');
 
 const PLATFORMS = ['x', 'facebook'];
+const withText = (list) => list; // platformy z własnym tekstem
 const NAMES = { x: 'X', facebook: 'Facebook' };
 const IMAGE_SOURCES = ['upload', 'none'];
 const MAX = { text: 5000, link: 1000, hint: 300, x: 280, facebook: 6000, instagram: 2200, tiktok: 2200, videoTitle: 60 };
@@ -122,7 +123,7 @@ function readInput(body) {
 // Wersje bez AI: tekst autora przycięty do limitów platform (link na X i Facebooku)
 function plainVariants({ text, link, platforms }) {
   const v = {};
-  for (const k of platforms) v[k] = variantFor(k, text, link);
+  for (const k of withText(platforms)) v[k] = variantFor(k, text, link);
   return v;
 }
 function variantFor(k, s, link) {
@@ -133,7 +134,7 @@ function variantFor(k, s, link) {
 
 // Teksty na wybrane platformy: brak tekstu, limity znaków (X liczy po swojemu), hashtagi Instagrama → errors
 function checkPosts(platforms, posts, errors) {
-  for (const k of platforms) {
+  for (const k of withText(platforms)) {
     const s = posts[k];
     if (!s) errors.push(tr('Brak tekstu dla: {0}', NAMES[k]));
     else if (k === 'x' && xLength(s) > MAX.x) errors.push(tr('Wpis na X ma {0}/{1} znaków – skróć go', xLength(s), MAX.x));
@@ -160,7 +161,7 @@ function parseAdapt(raw, input) {
   const key = { x: 'post_x', facebook: 'post_facebook' };
   const variants = {};
   const missing = [];
-  for (const k of input.platforms) {
+  for (const k of withText(input.platforms)) {
     const s = str(out[key[k]]);
     if (!s) missing.push(NAMES[k]);
     variants[k] = variantFor(k, s || input.text, input.link);
@@ -190,7 +191,8 @@ class Compose {
   view(bot) {
     const acc = bot.accounts || {};
     const account = {
-      x: acc.x ? `@${acc.x.username || '?'}` : null,
+      // X ręcznie przez link: konto API niepotrzebne – publikujesz przyciskiem „Otwórz na X”
+      x: acc.x ? `@${acc.x.username || '?'}` : bot.publishing.xMode === 'link' ? tr('ręcznie przez link') : null,
       facebook: acc.meta ? acc.meta.pageName || acc.meta.pageId : null,
     };
     const c = bot.content;
@@ -208,7 +210,8 @@ class Compose {
   // Wersje na platformy: AI (ai !== false) albo tekst autora przycięty do limitów
   async adapt(bot, body) {
     const input = readInput(body);
-    if (body && body.ai === false) {
+    // bez AI albo bez platform z własnym tekstem – nie ma czego dopasować
+    if ((body && body.ai === false) || !withText(input.platforms).length) {
       const plain = { variants: plainVariants(input), ai: null };
       return plain;
     }
@@ -231,7 +234,7 @@ class Compose {
       errors.push(tr('Platformy wyłączone w ustawieniach bota: {0} (zakładka Publikacja)', off.map((k) => NAMES[k]).join(', ')));
 
     const posts = {};
-    for (const k of input.platforms) posts[k] = str(b.posts && b.posts[k]).replace(/\r\n?/g, '\n');
+    for (const k of withText(input.platforms)) posts[k] = str(b.posts && b.posts[k]).replace(/\r\n?/g, '\n');
     checkPosts(input.platforms, posts, errors);
 
     const im = b.image || {};
@@ -444,6 +447,7 @@ module.exports = {
   titleOf,
   readInput,
   checkPosts,
+  withText,
   promptFor,
   plainVariants,
   variantFor,

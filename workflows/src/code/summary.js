@@ -2,7 +2,21 @@
 const cfg = $('Config').first().json;
 const ctx = $('Kontekst publikacji').first().json;
 const draft = $('Parsuj draft').first().json;
-const { todo, skipped = {}, noText = {}, alreadyPublished, hasImage, xText, xWithImage, fbWithImage, fbLink, ...base } = draft;
+const {
+  todo,
+  skipped = {},
+  noText = {},
+  alreadyPublished,
+  hasImage,
+  xText,
+  xWithImage,
+  xManual,
+  fbWithImage,
+  fbLink,
+  fbMessage,
+  fbComment,
+  ...base
+} = draft;
 
 const out = (name) => {
   try {
@@ -69,16 +83,36 @@ if (todo.x) {
       ? failure(firstErr('X: opublikuj post'), true)
       : failure(firstErr('X: upload grafiki', 'X: opublikuj post') || tr('brak odpowiedzi API'));
 }
+// Facebook: link w pierwszym komentarzu – błąd komentarza nie psuje posta (ostrzeżenie w raporcie, link dodasz ręcznie)
+const fbCommentResult = () => {
+  if (!draft.fbComment) return {};
+  const cm = out('Facebook: link w komentarzu');
+  if (cm && !cm.error && cm.id) return { comment: String(cm.id) };
+  // przyczynę (uprawnienie tokenu, prawa na stronie) pokazuje panel: Konta → Facebook
+  return {
+    warning: tr('link w komentarzu nie został dodany: {0} – sprawdź panel: Konta → Facebook', err(cm) || tr('brak odpowiedzi API')),
+  };
+};
 if (todo.facebook) {
   // zdjęcie z opisem (/photos) albo post z linkiem (/feed)
   const fb = out('Facebook: opublikuj post') || out('Facebook: opublikuj tekst/link');
   const postId = fb && !fb.error ? fb.post_id || fb.id : null;
   results.facebook = postId
-    ? { ok: true, id: postId, url: `https://www.facebook.com/${postId}`, at: now, ...(draft.fbWithImage ? {} : { kind: 'link' }) }
+    ? {
+        ok: true,
+        id: postId,
+        url: `https://www.facebook.com/${postId}`,
+        at: now,
+        ...(draft.fbWithImage ? {} : { kind: 'link' }),
+        ...fbCommentResult(),
+      }
     : noAnswer(fb)
       ? failure(firstErr('Facebook: opublikuj post', 'Facebook: opublikuj tekst/link'), true)
       : failure(firstErr('FB: wczytaj grafikę', 'Facebook: opublikuj post', 'Facebook: opublikuj tekst/link') || tr('brak odpowiedzi API'));
 }
+
+// X ręcznie przez link: Poster nie publikuje przez API – publikuje człowiek przyciskiem „📝 Otwórz na X”
+if (draft.xManual && !results.x?.ok) results.x = { manual: true, ...(draft.xIntent ? { intent: draft.xIntent } : {}), at: now };
 
 // „✅ Jest na profilu” w Telegramie: niepewne platformy zapisujemy jako opublikowane (bez linku – sprawdził człowiek)
 if (ctx.unknown === 'confirm') {
@@ -96,7 +130,8 @@ const enabled = {
 };
 // platformy pominięte z braku grafiki (np. Instagram) albo tekstu (draft sprzed włączenia platformy) nie psują
 // statusu – nie ma czego ponawiać
-const active = Object.keys(enabled).filter((k) => enabled[k] && !((skipped[k] || noText[k]) && !results[k]?.ok));
+// X ręcznie przez link też – na X publikuje człowiek
+const active = Object.keys(enabled).filter((k) => enabled[k] && !((skipped[k] || noText[k]) && !results[k]?.ok) && !results[k]?.manual);
 const okCount = active.filter((k) => results[k]?.ok).length;
 const unsure = active.filter((k) => !results[k]?.ok && results[k]?.unknown);
 const status = !active.length
@@ -124,9 +159,12 @@ const line = (k) => {
   if (skipped[k] && !r?.ok) return `${label[k]}: ${tr('⏭️ pominięto – draft bez grafiki')}`;
   if (noText[k] && !r?.ok)
     return `${label[k]}: ${tr('⏭️ pominięto – draft nie ma tekstu dla tej platformy (powstał, gdy była wyłączona)')}`;
+  if (r?.manual)
+    return `${label[k]}: 📝 ${r.intent ? tr('ręcznie – przycisk „📝 Otwórz na X” pod draftem') : tr('ręcznie – skopiuj tekst z draftu do X')}`;
   if (r?.ok) {
     const what = r.url ? tr('<a href="{0}">zobacz post</a>', esc(r.url)) : esc(r.note || 'OK');
-    return `${label[k]}: ✅ ${what}${r.warning ? ` ⚠️ ${esc(r.warning)}` : ''}`;
+    const comment = r.comment ? ` · ${tr('💬 link w komentarzu')}` : '';
+    return `${label[k]}: ✅ ${what}${comment}${r.warning ? ` ⚠️ ${esc(r.warning)}` : ''}`;
   }
   if (r?.unknown) return `${label[k]}: ⚠️ ${tr('brak odpowiedzi – post mógł się opublikować ({0})', esc(r.error))}`;
   return `${label[k]}: ❌ ${esc(r?.error || tr('nie wykonano'))}`;
@@ -136,7 +174,9 @@ const header = {
   partial: tr('⚠️ <b>Opublikowano częściowo</b>'),
   failed: tr('❌ <b>Publikacja nieudana</b>'),
   unknown: tr('⚠️ <b>Nie wiadomo, czy opublikowano</b>'),
-  approved: tr('✅ <b>Zatwierdzono</b> (brak platform do publikacji)'),
+  approved: draft.xManual
+    ? tr('✅ <b>Zatwierdzono</b> · na X publikujesz ręcznie')
+    : tr('✅ <b>Zatwierdzono</b> (brak platform do publikacji)'),
 }[status];
 
 const icon = manual ? '✍️' : '📰';
@@ -158,8 +198,12 @@ const text = [
 const done = status === 'published' || status === 'approved';
 // niepewna publikacja: decyzja po sprawdzeniu profilu (puc – jest, pua – wyślij ponownie); 🔁 – zwykłe błędy
 const failedLeft = active.some((k) => !results[k]?.ok && !results[k]?.unknown);
+// X ręcznie: przycisk z oficjalnym linkiem X zostaje pod draftem także po publikacji pozostałych platform
+const xRow = draft.xManual && draft.xIntent ? [[{ text: tr('📝 Otwórz na X'), url: draft.xIntent }]] : [];
 const replyMarkup = done
-  ? { inline_keyboard: [[{ text: status === 'published' ? tr('✅ Opublikowano') : tr('✅ Zatwierdzono'), callback_data: 'noop' }]] }
+  ? {
+      inline_keyboard: [[{ text: status === 'published' ? tr('✅ Opublikowano') : tr('✅ Zatwierdzono'), callback_data: 'noop' }], ...xRow],
+    }
   : {
       inline_keyboard: [
         ...(unsure.length
@@ -174,6 +218,7 @@ const replyMarkup = done
           ...(failedLeft || !unsure.length ? [{ text: tr('🔁 Ponów nieudane'), callback_data: `pub:${draft.draftId}` }] : []),
           { text: tr('🗑 Porzuć'), callback_data: `rej:${draft.draftId}` },
         ],
+        ...xRow,
       ],
     };
 

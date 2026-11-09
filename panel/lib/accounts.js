@@ -134,8 +134,10 @@ class Accounts {
     const graph = (p, t) => fetchJson(`${UPSTREAM.meta}/${v}/${p}`, { headers: { authorization: `Bearer ${t}` } });
 
     let pageToken = token;
+    // prawa konta tokenu na stronie (tasks: CREATE_CONTENT, MODERATE, MANAGE…) – tylko przy tokenie użytkownika
+    let tasks = null;
     // Token użytkownika → lista stron, którymi zarządza (każda ma własny token strony)
-    const acc = await graph('me/accounts?fields=id,name,access_token&limit=100', token);
+    const acc = await graph('me/accounts?fields=id,name,access_token,tasks&limit=100', token);
     if (acc.ok && acc.data && Array.isArray(acc.data.data)) {
       const pages = acc.data.data;
       if (!pages.length) throw new HttpError(400, tr('Ten token nie ma dostępu do żadnej strony Facebook (uprawnienie pages_show_list)'));
@@ -147,6 +149,7 @@ class Accounts {
       }
       pageId = page.id;
       pageToken = page.access_token;
+      if (Array.isArray(page.tasks)) tasks = page.tasks.map(String);
     } else {
       // Token strony: /me zwraca samą stronę
       const me = await graph('me?fields=id,name', token);
@@ -157,15 +160,32 @@ class Accounts {
     }
     const page = await graph(`${pageId}?fields=id,name`, pageToken);
     if (!page.ok || !page.data) throw new HttpError(400, tr('Nie mogę odczytać strony: {0}', apiError(page)));
+    const scopes = await this.metaScopes(graph, token);
     this.store.botSecrets(bot.id).meta = { pageToken };
     bot.accounts.meta = {
       pageId,
       pageName: page.data.name || '',
       connectedAt: new Date().toISOString(),
+      // uprawnienia tokenu i prawa na stronie przy łączeniu (null – Meta ich nie podała); link w komentarzu sprawdza
+      // je w metaCommentProblems()
+      scopes,
+      tasks,
     };
     this.store.saveSecrets();
     this.store.saveConfig();
     return bot.accounts.meta;
+  }
+
+  // Uprawnienia (scopes) tokenu Meta: token użytkownika (też systemowego) – me/permissions, token strony – debug_token
+  // tym samym tokenem. Błąd odczytu nie przerywa łączenia – wynik null.
+  async metaScopes(graph, token) {
+    const perms = await graph('me/permissions', token).catch(() => null);
+    if (perms && perms.ok && perms.data && Array.isArray(perms.data.data)) {
+      return perms.data.data.filter((p) => p && p.status === 'granted').map((p) => String(p.permission));
+    }
+    const dbg = await graph(`debug_token?input_token=${encodeURIComponent(token)}`, token).catch(() => null);
+    const d = dbg && dbg.ok && dbg.data && dbg.data.data;
+    return d && Array.isArray(d.scopes) ? d.scopes.map(String) : null;
   }
 
   disconnect(botId, platform) {
@@ -174,7 +194,8 @@ class Accounts {
     if (!known.includes(platform)) throw new HttpError(400, tr('Nieznana platforma'));
     bot.accounts[platform] = null;
     delete this.store.botSecrets(bot.id)[platform];
-    if (platform === 'x') bot.publishing.x = false;
+    // X ręcznie przez link działa bez konta API – zostaje włączony
+    if (platform === 'x' && bot.publishing.xMode !== 'link') bot.publishing.x = false;
     if (platform === 'meta') bot.publishing.facebook = false;
     this.store.saveSecrets();
     this.store.saveConfig();
@@ -230,4 +251,30 @@ function apiError(r) {
   return r ? `HTTP ${r.status}${r.text ? ` – ${r.text.slice(0, 160)}` : ''}` : tr('brak odpowiedzi');
 }
 
-module.exports = { Accounts, UPSTREAM, apiError };
+// Uprawnienia tokenu do komentarza w imieniu strony: pages_manage_engagement działa tylko razem z
+// pages_read_user_content (zależność uprawnień Meta – bez niej komentarz kończy się błędem #200)
+const COMMENT_SCOPES = ['pages_manage_engagement', 'pages_read_user_content'];
+
+// Czego brakuje do linku w pierwszym komentarzu na Facebooku (komentarz w imieniu strony): uprawnienia
+// z COMMENT_SCOPES w tokenie i prawa moderowania strony (task MODERATE albo MANAGE) konta, z którego jest token.
+// meta – bot.accounts.meta; konto połączone przed tą wersją nie ma scopes (undefined) – trzeba zapisać token ponownie.
+function metaCommentProblems(meta) {
+  if (!meta) return [];
+  if (meta.scopes === undefined)
+    return [
+      tr('uprawnienia tokenu Meta nie są jeszcze sprawdzone – wklej token jeszcze raz i kliknij „Zapisz nowy token” (Konta → Facebook)'),
+    ];
+  const out = [];
+  const lacking = Array.isArray(meta.scopes) ? COMMENT_SCOPES.filter((s) => !meta.scopes.includes(s)) : [];
+  if (lacking.length)
+    out.push(tr('token Meta nie ma uprawnień: {0} – wygeneruj nowy token z nimi i zapisz go w Konta → Facebook', lacking.join(', ')));
+  if (Array.isArray(meta.tasks) && !meta.tasks.some((t) => t === 'MODERATE' || t === 'MANAGE'))
+    out.push(
+      tr(
+        'konto, z którego jest token, nie może moderować strony – w Ustawieniach firmy Meta (Użytkownicy systemowi → przypisane zasoby → strona) włącz „Aktywność społeczności” albo pełną kontrolę, potem zapisz token ponownie',
+      ),
+    );
+  return out;
+}
+
+module.exports = { Accounts, UPSTREAM, apiError, metaCommentProblems };

@@ -17,7 +17,7 @@ You set everything up in the panel at **`http://NAS_IP:7080`**, without SSH and 
 - the schedule (“every 4 h from 8 to 20”, “at 9:05, 13:05 and 18:05 on weekdays”);
 - the AI model, API keys and the X and Facebook accounts.
 
-> ⭐ **The PRO version** adds multiple bots, a website/blog mode, a YouTube channel bot, Instagram, Threads, Bluesky, a Telegram channel, TikTok with video, a
+> ⭐ **The PRO version** adds multiple bots, a website/blog mode, a YouTube channel bot, Instagram, Threads, Bluesky, a Telegram channel, TikTok with video, a webhook (Discord, Slack, Make, Zapier, n8n), a
 > brand image, scheduling your own posts (also on repeat) with a content calendar, an autopilot (publishing news without approval) and more
 > AI providers with a fallback provider –
 > [edition comparison](#-pro-version) and the [product page](https://posterapp.pl/en/).
@@ -58,6 +58,7 @@ flowchart LR
 | Keys and tokens | Only in the panel (`data/panel/secrets.json`, chmod 600). n8n **stores no keys**: it calls APIs through the panel gateway, which adds the keys and refreshes the X token itself |
 | Reading X without the paid API | **RSSHub** (self-hosted, `auth_token` cookie of a separate account) → RSS feed. Alternatives: Apify, Nitter |
 | Deduplication | In the panel: key `x:<tweet id>` or the URL without `utm_*`, plus a filter of identical titles and a list of recent topics passed to the LLM |
+| Repeats | Before approval, the panel compares the draft with the bot's posts from the last 30–90 days – keywords and word pairs, no AI and no cost. A similar draft gets “🔁 Similar to the post from …” with a link to the post in Telegram |
 | Text (AI) | **Gemini** or any OpenAI-compatible API, e.g. **Ollama** on your own hardware. Always clean JSON by schema, only with texts for the platforms enabled in the bot: `post_x` (X) and `post_fb_insta` (Facebook) |
 | Image | Mode in the bot: **📷 photo from the article** (RSS / og:image / tweet), **🔗 post with a link** or **🚫 no image**. When the article has no photo, X and Facebook get a post with a link |
 | Costs | “Cost of one post” card: AI text and publishing on X. Images are always free |
@@ -75,8 +76,10 @@ Poster LITE is free and open source (AGPL). The PRO version is the same program 
 | Sources: RSS, Google News, X profiles (RSSHub / Apify) | ✅ | ✅ |
 | Schedule, pause, “Run now” | ✅ | ✅ |
 | Draft approval in Telegram | ✅ | ✅ |
+| Repeat check before approval (no AI) | ✅ | ✅ |
+| Your own photo in a draft: reply with a photo in Telegram | ✅ | ✅ |
 | Publishing news without approval (autopilot) | – | ✅ |
-| Your own post: AI adapts your text to the platforms, “Publish now” | X and Facebook | X, Facebook, Instagram, Threads, Bluesky, Telegram channel, TikTok |
+| Your own post: AI adapts your text to the platforms, “Publish now” | X and Facebook | X, Facebook, Instagram, Threads, Bluesky, Telegram channel, TikTok, webhook |
 | Scheduling your own posts for a date and time, several bots at once | – | ✅ |
 | Recurring posts (series) with an AI rewrite before every repeat, content calendar | – | ✅ |
 | Posting from your phone: `/post` in Telegram – AI adapts the text, the draft comes back with ✅/❌ | – | ✅ |
@@ -84,6 +87,7 @@ Poster LITE is free and open source (AGPL). The PRO version is the same program 
 | Instagram | by hand | ✅ |
 | Threads and Bluesky (text, image, link card) | – | ✅ |
 | Telegram channel (a photo with a caption or a post with a link preview) | – | ✅ |
+| Webhook: posts to your address – Discord, Slack or JSON (Make, Zapier, n8n, your own script) | – | ✅ |
 | TikTok: video from the post image (animation, free) | – | ✅ |
 | Website / blog mode: every new article on your site becomes posts | – | ✅ |
 | YouTube channel: every new video from your channel becomes posts (no YouTube login) | – | ✅ |
@@ -390,7 +394,7 @@ These messages in the n8n logs are **harmless**:
 | **Bot → Sources** | RSS feeds with a *Test* button (a website address is enough – the panel finds its feed) and a Google News wizard. X profiles (RSSHub / Apify / off) with a test via RSSHub. Maximum news age, number of candidates for AI |
 | **Bot → Schedule** | Active / paused. *Every few hours* (every 1–24 h within a from–to window) or *At selected hours* (0–23 grid). Minute, **random offset** (up to 15/30/45 min), weekdays, preview of the next runs |
 | **Bot → Text & images** | Cost of one post. Text provider and model, Gemini “thinking”. **Where the image comes from** (photo from the article / post with a link / no image) |
-| **Bot → Publishing** | Switches for X and Facebook – publishing after clicking ✅ in Telegram |
+| **Bot → Publishing** | Switches for X and Facebook – publishing after clicking ✅ in Telegram. **Repeat check** (window of 30, 60 or 90 days, sensitivity) |
 | **Bot → Accounts** | Connecting accounts: X (OAuth2) and a Facebook page (page token) |
 | **Bot → History** | The bot's runs and drafts |
 | **Bot → Advanced** | Duplicate memory (reset), **deleting the bot** |
@@ -499,6 +503,7 @@ The panel downloads article photos and pages only from the internet – from the
 3. In a group also enter the **admin IDs** (your user ID), so that only you can click ✅ – without this list any member of the group can approve drafts (the panel warns about it next to the bot).
 4. If the Telegram bot had a webhook before, remove it: `curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"`.
 5. A draft has texts only for the platforms enabled in the bot (*Bot → Publishing*) – e.g. with just Facebook there is no X text. You can also paste the Facebook text on Instagram by hand. New drafts get a platform you enable later, and earlier drafts skip it with a note in the report.
+6. **Your own photo in a draft:** reply to any message of the draft with your photo (or a JPG, PNG or WebP file, up to 20 MB). The bot replaces the draft's image and sends back a preview – ✅ then publishes your photo. It works before publishing and only for people who can click ✅. In the *🔗 post with link* image mode X and Facebook still publish the link.
 
 ### Google Gemini
 You create the key in [Google AI Studio](https://aistudio.google.com/apikey) and paste it in **panel → Settings → Google Gemini**.
@@ -506,6 +511,15 @@ A key from a project **without billing** is enough – texts then fit within Goo
 in *Bot → Text & images* (suggestions from the list fetched for your key). Choose stable names (e.g. `gemini-3.8-flash`).
 Aliases like `gemini-flash-latest` return 503 more often. When the model is temporarily overloaded (503) or the request
 limit is used up (429), a bot run retries with growing pauses for about 2 minutes and only then sends an alert.
+
+### X without the API: by hand via a link (free)
+Don't want to pay for the X API? Set **Publishing → X → By hand via link (free)** in the bot. You then need no X developer
+app, no credits and no connected account – skip the steps of the next section.
+- The draft in Telegram gets a **📝 Open on X** button (X's official link to a new post). It opens X – the app or the
+  browser – with the text and the article link ready. You check the text and click *Post*.
+- ✅ publishes the other platforms, and the X button stays under the draft. The report shows "📝 manual" for X, and the
+  same link is in the panel: **Drafts → draft details → 📝 Open on X**.
+- You attach the photo yourself (it is in Telegram above the text). Without a photo X shows a preview of the article from the link.
 
 ### X (publishing via API v2)
 You need an X developer app to publish.
@@ -531,12 +545,22 @@ The link goes into the X post in the *🔗 post with a link* image mode and in a
 ### Meta: Facebook page
 1. In [Meta for Developers](https://developers.facebook.com) create an app of the *Business* type. You can generate the token in one of two ways:
    - best: *Business Manager → System users* → a token for the app with the permissions
-     `pages_show_list, pages_read_engagement, pages_manage_posts, business_management`
-     and the page assigned. Such a token does not expire;
+     `pages_show_list, pages_read_engagement, pages_manage_posts, pages_manage_engagement, pages_read_user_content, business_management`
+     and the page assigned (rights: content and community activity, or full control). Such a token does not expire;
    - or: *Graph API Explorer* → a user token with the permissions above, exchanged for a long-lived one.
 2. In the bot open **Accounts → Facebook**, paste the token and click **Check and connect**. The panel finds the page itself
    (with many pages it lets you choose) and fetches the page token.
 3. Switch the Meta app to **Live** mode (requires a privacy policy URL). In development mode posts may be visible only to the app's roles.
+4. **Link in the first comment** (option in *Bot → Publishing → Facebook*): the post goes out without the link, and the
+   Page immediately adds a comment with the link under it. For this the token needs the `pages_manage_engagement` and
+   `pages_read_user_content` permissions (they are in the list above) – Meta requires both, the first one alone ends with
+   the error "(#200) You do not have sufficient permissions". Account connected earlier without them: generate a new
+   token with these permissions and click **Check and connect** again. A permission missing from the app is added by Meta
+   itself when you click *Continue* in the token generation dialog. Commenting as the Page also needs the right to moderate: the system user
+   must have the page assigned with the **"Community activity"** right or full control (*Business settings → System
+   users → assigned assets*). After you save the token, the **Accounts → Facebook** card shows the token permissions, the
+   rights on the Page and what is missing for the comment. Without them the post still goes out, and the report shows a
+   warning that the comment was not added.
 
 ### X source: RSSHub (default)
 1. Create a **separate** X account. Do not use your main one, because scraping may end with the account being blocked.
@@ -629,6 +653,7 @@ The *Grafika: przygotuj* node turns `data` into a binary file (it goes to `sendP
 - **Posts without photos, although the articles have them.** The source is Google News (the links do not lead to the article) or the portal blocks downloading. Add the portal's direct RSS feed; the warning is visible in the draft caption in Telegram.
 - **“skipped an address from the feed: … leads to the local network” in a draft.** The article's photo or page is on the local network (e.g. a blog on the NAS) under a different name than the bot's RSS feed. In *Sources* enter the feed under the same name as the site, e.g. `https://blog.example.com/feed` – the panel downloads from the hosts of the bot's feeds also on the local network.
 - **“🔍 Check the text – addresses or contacts that are not in the source” in a draft.** AI added a website address, an @account, an e-mail or a phone number that is neither in the news nor in the bot's settings – e.g. it followed an instruction smuggled into someone else's feed. Check the text before ✅. Brand addresses and accounts that AI should add go in *Bot → General → Additional instructions for AI* – then they are not flagged.
+- **“🔁 Similar to the post from …” in a draft.** The bot already wrote about this story in recent days, or a draft about the same story is waiting for your decision – e.g. the same news from another site, or told by the AI in other words. Open *view post* and decide: ❌ if it is a repeat, ✅ if it is a new development. The panel compares words, not meaning: recurring topics (e.g. a monthly interest rate decision) can cause a false alarm – then set a lower sensitivity or a shorter window in *Bot → Publishing → Repeat check*. The panel does not recognize the same story in another language.
 - **SSRF protection (optional).** After enabling `N8N_SSRF_PROTECTION_ENABLED=true` add `N8N_SSRF_ALLOWED_HOSTNAMES=rsshub,panel`, otherwise n8n cannot connect to RSSHub and the panel in the Docker network.
 - **Buttons do not react.** Check the Telegram tile on the Dashboard. Clicks are accepted only from the chat in Settings; with an admin list, only from them.
 - **“Bot … has no connected X account/Facebook page”.** The platform is on in *Publishing*, but the account is not connected in the bot's *Accounts* tab.

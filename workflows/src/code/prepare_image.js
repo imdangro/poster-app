@@ -52,8 +52,9 @@ const parts = [...draft.telegram.captionParts];
 const at = compose ? parts.length - 1 : Math.min(3, parts.length);
 parts.splice(at, 0, imageLine + (!compose && cfg.image.mode === 'link' && hasImage ? tr(' · X/FB: post z linkiem') : ''));
 if (warnings.length) parts.push(`⚠️ ${esc(warnings.join(' · ').slice(0, 400))}`);
-// podpis zdjęcia w Telegramie: maks. 1024 znaki – najpierw odpadają uzasadnienie i ostrzeżenia (bez cięcia tagów HTML)
-for (const drop of ['⚠️', '💡', '🔗']) {
+// podpis zdjęcia w Telegramie: maks. 1024 znaki – najpierw odpadają uzasadnienie i ostrzeżenia (bez cięcia tagów HTML),
+// na końcu linia o podobnym poście (zostaje w panelu)
+for (const drop of ['⚠️', '💡', '🔗', '🔁']) {
   if (parts.join('\n').length <= 1024) break;
   const i = parts.findIndex((l) => l.startsWith(drop));
   if (i >= 0) parts.splice(i, 1);

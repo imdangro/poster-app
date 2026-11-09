@@ -17,7 +17,7 @@ Wszystko ustawiasz w panelu **`http://IP_NAS:7080`**, bez SSH i bez edycji `.env
 - harmonogram („co 4 h od 8 do 20”, „o 9:05, 13:05 i 18:05 w dni robocze”);
 - model AI, klucze API i konta X i Facebook.
 
-> ⭐ **Wersja PRO** dodaje wiele botów, tryb strony/bloga, bota kanału YouTube, Instagram, Threads, Bluesky, kanał Telegram, TikTok z wideo, grafikę
+> ⭐ **Wersja PRO** dodaje wiele botów, tryb strony/bloga, bota kanału YouTube, Instagram, Threads, Bluesky, kanał Telegram, TikTok z wideo, webhook (Discord, Slack, Make, Zapier, n8n), grafikę
 > marki, planowanie własnych postów (także cyklicznych) z kalendarzem treści, autopilot (publikację newsów bez akceptacji) i kolejnych
 > dostawców AI z dostawcą zapasowym –
 > [porównanie wersji](#-wersja-pro) i [strona produktu](https://posterapp.pl/).
@@ -58,6 +58,7 @@ flowchart LR
 | Klucze i tokeny | Tylko w panelu (`data/panel/secrets.json`, chmod 600). n8n **nie przechowuje żadnych kluczy**: woła API przez bramkę panelu, która dokleja klucze i sama odświeża token X |
 | Odczyt X bez płatnego API | **RSSHub** (self-hosted, ciasteczko `auth_token` z osobnego konta) → kanał RSS. Alternatywy: Apify, Nitter |
 | Deduplikacja | W panelu: klucz `x:<id tweeta>` lub URL bez `utm_*`, do tego filtr tych samych tytułów i lista ostatnich tematów przekazywana do LLM |
+| Powtórki | Przed akceptacją panel porównuje draft z postami bota z ostatnich 30–90 dni – słowa kluczowe i pary słów, bez AI i bez kosztów. Podobny draft dostaje w Telegramie „🔁 Podobny do posta z …” z linkiem do posta |
 | Tekst (AI) | **Gemini** albo dowolne API zgodne z OpenAI, np. **Ollama** na Twoim sprzęcie. Zawsze czysty JSON wg schematu, tylko z tekstami dla platform włączonych w bocie: `post_x` (X) i `post_fb_insta` (Facebook) |
 | Grafika | Tryb w bocie: **📷 zdjęcie z artykułu** (RSS / og:image / tweet), **🔗 post z linkiem** albo **🚫 bez grafiki**. Gdy artykuł nie ma zdjęcia, X i Facebook dostają post z linkiem |
 | Koszty | Karta „Koszt jednego posta”: tekst AI i publikacja na X. Grafika zawsze kosztuje 0 zł |
@@ -75,8 +76,10 @@ Poster LITE jest darmowy i otwarty (AGPL). Wersja PRO to ten sam program z dodat
 | Źródła: RSS, Google News, profile X (RSSHub / Apify) | ✅ | ✅ |
 | Harmonogram, pauza, „Uruchom teraz” | ✅ | ✅ |
 | Akceptacja draftów w Telegramie | ✅ | ✅ |
+| Sprawdzanie powtórek przed akceptacją (bez AI) | ✅ | ✅ |
+| Własne zdjęcie w drafcie: odpowiedź zdjęciem w Telegramie | ✅ | ✅ |
 | Publikacja newsów bez akceptacji (autopilot) | – | ✅ |
-| Własny post: AI dopasowuje Twój tekst do platform, „Publikuj teraz” | X i Facebook | X, Facebook, Instagram, Threads, Bluesky, kanał Telegram, TikTok |
+| Własny post: AI dopasowuje Twój tekst do platform, „Publikuj teraz” | X i Facebook | X, Facebook, Instagram, Threads, Bluesky, kanał Telegram, TikTok, webhook |
 | Planowanie własnych postów na dzień i godzinę, kilka botów naraz | – | ✅ |
 | Posty cykliczne (seria) z nową wersją tekstu od AI przed każdą powtórką, kalendarz treści | – | ✅ |
 | Post z telefonu: `/post` w Telegramie – AI dopasowuje tekst, draft wraca z ✅/❌ | – | ✅ |
@@ -84,6 +87,7 @@ Poster LITE jest darmowy i otwarty (AGPL). Wersja PRO to ten sam program z dodat
 | Instagram | ręcznie | ✅ |
 | Threads i Bluesky (tekst, zdjęcie, karta linku) | – | ✅ |
 | Kanał Telegram (zdjęcie z podpisem albo post z podglądem linku) | – | ✅ |
+| Webhook: posty na Twój adres – Discord, Slack albo JSON (Make, Zapier, n8n, własny skrypt) | – | ✅ |
 | TikTok: wideo z grafiki posta (animacja, 0 zł) | – | ✅ |
 | Tryb strony / bloga: każdy nowy artykuł z Twojej strony to posty | – | ✅ |
 | Kanał YouTube: każdy nowy film z Twojego kanału to posty (bez logowania do YouTube) | – | ✅ |
@@ -390,7 +394,7 @@ Te komunikaty w logach n8n są **niegroźne**:
 | **Bot → Źródła** | Kanały RSS z przyciskiem *Test* (wystarczy adres strony – panel sam znajdzie jej kanał) i kreatorem Google News. Profile X (RSSHub / Apify / wyłączone) z testem przez RSSHub. Maks. wiek newsa, liczba kandydatów dla AI |
 | **Bot → Harmonogram** | Aktywny / wstrzymany. *Co kilka godzin* (co 1–24 h w oknie od–do) lub *O wybranych godzinach* (siatka 0–23). Minuta, **losowe przesunięcie** (do 15/30/45 min), dni tygodnia, podgląd najbliższych uruchomień |
 | **Bot → Tekst i grafika** | Koszt jednego posta. Dostawca i model tekstu, „myślenie” Gemini. **Skąd grafika** (zdjęcie z artykułu / post z linkiem / bez grafiki) |
-| **Bot → Publikacja** | Włączniki X i Facebook – publikacja po kliknięciu ✅ w Telegramie |
+| **Bot → Publikacja** | Włączniki X i Facebook – publikacja po kliknięciu ✅ w Telegramie. **Sprawdzanie powtórek** (okno 30, 60 albo 90 dni, czułość) |
 | **Bot → Konta** | Połączenie kont: X (OAuth2) i strona Facebook (token strony) |
 | **Bot → Historia** | Uruchomienia i drafty bota |
 | **Bot → Zaawansowane** | Pamięć duplikatów (reset), **usuwanie bota** |
@@ -498,6 +502,7 @@ Zdjęcia i strony artykułów panel pobiera tylko z internetu – z sieci lokaln
 3. W grupie wpisz też **ID administratorów** (swoje user ID), żeby tylko Ty mógł klikać ✅ – bez tej listy drafty zatwierdzi każdy uczestnik grupy (panel ostrzega o tym przy bocie).
 4. Jeśli bot Telegrama miał wcześniej webhook, usuń go: `curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"`.
 5. Draft ma teksty tylko dla platform włączonych w bocie (*Bot → Publikacja*) – np. przy samym Facebooku nie ma tekstu na X. Tekst Facebooka wkleisz też ręcznie na Instagramie. Platformę włączoną później dostaną nowe drafty, a wcześniejsze pominą ją z dopiskiem w raporcie.
+6. **Własne zdjęcie w drafcie:** odpowiedz na dowolną wiadomość draftu swoim zdjęciem (albo plikiem JPG, PNG lub WebP, do 20 MB). Bot podmieni grafikę draftu i odeśle podgląd – ✅ opublikuje już Twoje zdjęcie. Działa przed publikacją i tylko dla osób, które mogą klikać ✅. W trybie grafiki *🔗 post z linkiem* X i Facebook dalej publikują link.
 
 ### Google Gemini
 Klucz utworzysz w [Google AI Studio](https://aistudio.google.com/apikey) i wklejasz w **panelu → Ustawienia → Google Gemini**.
@@ -505,6 +510,15 @@ Wystarczy klucz z projektu **bez billingu** – teksty mieszczą się wtedy w da
 w *Bot → Tekst i grafika* (podpowiedzi z listy pobranej dla Twojego klucza). Wybieraj stabilne nazwy (np. `gemini-3.8-flash`).
 Aliasy typu `gemini-flash-latest` częściej zwracają 503. Gdy model jest chwilowo przeciążony (503) albo skończy się
 limit zapytań (429), przebieg bota ponawia zapytanie z rosnącymi przerwami przez ok. 2 minuty i dopiero potem wysyła alert.
+
+### X bez API: ręcznie przez link (za darmo)
+Nie chcesz płacić za API X? Ustaw w bocie **Publikacja → X → Ręcznie przez link (za darmo)**. Aplikacja deweloperska X,
+kredyty i podłączone konto nie są wtedy potrzebne – kroki z następnej sekcji pomijasz.
+- Draft w Telegramie dostaje przycisk **📝 Otwórz na X** (oficjalny link X do nowego posta). Otwiera X – aplikację albo
+  przeglądarkę – z gotowym tekstem i linkiem do artykułu. Sprawdzasz tekst i klikasz *Opublikuj*.
+- ✅ publikuje pozostałe platformy, a przycisk X zostaje pod draftem. Raport pokazuje przy X „📝 ręcznie”, a ten sam
+  link jest w panelu: **Drafty → szczegóły draftu → 📝 Otwórz na X**.
+- Zdjęcie dołączasz sam (jest w Telegramie nad tekstem). Bez zdjęcia X pokaże podgląd artykułu z linku.
 
 ### X (publikacja przez API v2)
 Do publikacji potrzebujesz aplikacji deweloperskiej X.
@@ -530,12 +544,22 @@ Link trafia do posta na X w trybie grafiki *🔗 post z linkiem* i w poście bez
 ### Meta: strona na Facebooku
 1. W [Meta for Developers](https://developers.facebook.com) utwórz aplikację typu *Business*. Token wygenerujesz jednym z dwóch sposobów:
    - najlepiej: *Business Manager → Użytkownicy systemowi* → token dla aplikacji z uprawnieniami
-     `pages_show_list, pages_read_engagement, pages_manage_posts, business_management`
-     i przypisaną stroną. Taki token nie wygasa;
+     `pages_show_list, pages_read_engagement, pages_manage_posts, pages_manage_engagement, pages_read_user_content, business_management`
+     i przypisaną stroną (prawa: treść i aktywność społeczności albo pełna kontrola). Taki token nie wygasa;
    - albo: *Graph API Explorer* → token użytkownika z powyższymi uprawnieniami, wymieniony na długoterminowy.
 2. W bocie otwórz **Konta → Facebook**, wklej token i kliknij **Sprawdź i połącz**. Panel sam znajdzie stronę
    (przy wielu stronach da wybór) i pobierze token strony.
 3. Przełącz aplikację Meta w tryb **Live** (wymaga URL polityki prywatności). W trybie deweloperskim posty mogą być widoczne tylko dla ról aplikacji.
+4. **Link w pierwszym komentarzu** (opcja w *Bot → Publikacja → Facebook*): post idzie bez linku, a strona od razu
+   dodaje pod nim komentarz z linkiem. Do tego token potrzebuje uprawnień `pages_manage_engagement`
+   i `pages_read_user_content` (są na liście wyżej) – Meta wymaga obu, samo pierwsze kończy się błędem „(#200) You do
+   not have sufficient permissions”. Konto połączone wcześniej bez nich: wygeneruj nowy token z tymi uprawnieniami
+   i jeszcze raz kliknij **Sprawdź i połącz**. Uprawnienie spoza aplikacji Meta dodaje do niej sama po kliknięciu
+   *Continue* w oknie generowania tokenu. Komentarz w imieniu strony wymaga też prawa moderowania: użytkownik systemowy
+   musi mieć przypisaną stronę z prawem **„Aktywność społeczności”** albo pełną kontrolą (*Ustawienia firmy →
+   Użytkownicy systemowi → przypisane zasoby*). Po zapisaniu tokenu karta **Konta → Facebook** pokazuje uprawnienia
+   tokenu, prawa na stronie i to, czego brakuje do komentarza. Bez nich post i tak wyjdzie, a raport pokaże
+   ostrzeżenie, że komentarza nie dodano.
 
 ### Źródło X: RSSHub (domyślne)
 1. Załóż **osobne** konto X. Nie używaj głównego, bo scraping może skończyć się blokadą konta.
@@ -628,6 +652,7 @@ Węzeł *Grafika: przygotuj* zamienia `data` na plik binarny (trafia do `sendPho
 - **Posty bez zdjęć, choć artykuły je mają.** Źródło to Google News (linki nie prowadzą do artykułu) albo portal blokuje pobieranie. Dodaj bezpośredni kanał RSS portalu; ostrzeżenie widać w podpisie draftu w Telegramie.
 - **„pominięto adres z kanału: … prowadzi do sieci lokalnej” w drafcie.** Zdjęcie albo strona artykułu leży w sieci lokalnej (np. blog na NAS-ie) pod inną nazwą niż kanał RSS bota. W *Źródłach* wpisz kanał pod tą samą nazwą co strona, np. `https://blog.example.pl/feed` – z hostów kanałów bota panel pobiera także w sieci lokalnej.
 - **„🔍 Sprawdź tekst – adresy lub kontakty spoza źródła” w drafcie.** AI dopisało adres strony, @konto, e-mail albo telefon, których nie ma w newsie ani w ustawieniach bota – np. wykonało polecenie przemycone w cudzym kanale. Sprawdź tekst przed ✅. Adresy i konta marki, które AI ma dopisywać, podaj w *Bot → Ogólne → Dodatkowe wytyczne dla AI* – wtedy nie są oznaczane.
+- **„🔁 Podobny do posta z …” w drafcie.** Bot pisał już o tej historii w ostatnich dniach albo czeka na Twoją decyzję draft o tym samym – np. ten sam news z innego portalu albo opisany przez AI innymi słowami. Otwórz *zobacz post* i zdecyduj: ❌, gdy to powtórka, ✅, gdy to nowy wątek. Panel porównuje słowa, nie znaczenie: przy stałych tematach (np. comiesięczna decyzja o stopach procentowych) zdarza się fałszywy alarm – wtedy w *Bot → Publikacja → Sprawdzanie powtórek* ustaw niższą czułość albo krótsze okno. Tej samej historii w innym języku panel nie rozpozna.
 - **Ochrona SSRF (opcjonalnie).** Po włączeniu `N8N_SSRF_PROTECTION_ENABLED=true` dodaj `N8N_SSRF_ALLOWED_HOSTNAMES=rsshub,panel`, inaczej n8n nie połączy się z RSSHub i panelem w sieci Dockera.
 - **Przyciski nie reagują.** Sprawdź na Pulpicie kafelek Telegram. Kliknięcia są przyjmowane tylko z czatu z Ustawień; przy liście administratorów – tylko od nich.
 - **„Bot … nie ma podłączonego konta X/strony Facebook”.** Platforma jest włączona w *Publikacji*, ale konto nie jest połączone w zakładce *Konta* bota.

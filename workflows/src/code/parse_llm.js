@@ -79,7 +79,22 @@ const postX = need.x ? fitX(out.post_x) : '';
 // Post z linkiem (tryb „link” albo brak grafiki): X liczy każdy URL jako 23 znaki.
 const newsUrl = /^https?:\/\//i.test(String(news.url || '')) ? String(news.url) : '';
 const postXLink = need.x && newsUrl ? `${fitX(out.post_x, 255)}\n\n${newsUrl}` : postX;
+// X ręcznie przez link: oficjalny link X do nowego posta (web intent) z tekstem i adresem artykułu – publikuje
+// użytkownik w aplikacji X, bez płatnego API. Za długi adres (rzadko) – bez przycisku, tekst do skopiowania.
+const xManual = cfg.enableX && cfg.xMode === 'link' && !!postX;
+function xIntent(text) {
+  const q = encodeURIComponent(String(text || '').trim())
+    .replace(/%3A/g, ':')
+    .replace(/%2F/g, '/')
+    .replace(/%40/g, '@')
+    .replace(/%2C/g, ',');
+  const link = `https://x.com/intent/tweet?text=${q}`;
+  return link.length <= 2000 ? link : '';
+}
+const xIntentUrl = xManual ? xIntent(postXLink) : '';
 const postFb = need.fb ? fitCaption(out.post_fb_insta) : '';
+// Facebook: link do artykułu w pierwszym komentarzu (post bez linku)
+const fbComment = cfg.enableFacebook && cfg.fbLinkComment && !!newsUrl;
 const script = need.tiktok ? String(out.script_tiktok).trim().slice(0, 3000) : '';
 
 // --- Adresy i kontakty spoza źródła -----------------------------------------------------------
@@ -147,6 +162,32 @@ const outside = outsideSource(aiTexts, sourceTexts);
 const draftId = `d${$now.toFormat('yyyyLLdd-HHmm')}-${Math.random().toString(36).slice(2, 6)}`;
 const newsTitle = String(out.news_title || news.title).trim();
 
+// --- Powtórki -----------------------------------------------------------------------------------
+// Panel porównuje draft z postami bota z ostatnich dni (słowa i pary słów, bez AI; ustawienia w bocie). Podobny draft
+// dostaje ostrzeżenie z linkiem do wcześniejszego posta. Błąd panelu nie zatrzymuje draftu – jest tylko bez sprawdzenia.
+let similar = [];
+try {
+  const r = await this.helpers.httpRequest({
+    method: 'POST',
+    url: `${cfg.panelUrl}/internal/bots/${cfg.botId}/similar`,
+    headers: { 'x-poster-token': $env.PANEL_INTERNAL_TOKEN },
+    body: {
+      draftId,
+      title: newsTitle,
+      url: news.url,
+      source: news.source,
+      post_x: postX,
+      post_fb_insta: postFb,
+      script_tiktok: script,
+    },
+    json: true,
+    timeout: 15000,
+  });
+  similar = (Array.isArray(r && r.matches) ? r.matches : []).filter((m) => m && m.id).slice(0, 3);
+} catch (e) {
+  console.log('Sprawdzanie powtórek nie powiodło się:', e.message);
+}
+
 // --- Wiadomości do Telegrama (HTML) --------------------------------------------------------------
 // HTML Telegrama: cudzysłów też – adres z kanału trafia do href="…" (link z " psułby wiadomość z draftem)
 const esc = (s) =>
@@ -156,7 +197,25 @@ const esc = (s) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 const cut = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
-const platforms = [cfg.enableX && 'X', cfg.enableFacebook && 'FB'].filter(Boolean);
+// dzień wcześniejszego posta w strefie n8n, np. 3.11
+const day = (iso) => {
+  try {
+    const d = DateTime.fromISO(String(iso)).setZone($now.zoneName);
+    if (d.isValid) return d.toFormat('d.LL');
+  } catch (e) {}
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(iso));
+  return m ? `${+m[2]}.${m[1]}` : '';
+};
+// najbardziej podobny wcześniejszy post (albo draft czekający na akceptację) z linkiem do posta
+const similarLine = similar.length
+  ? (similar[0].status === 'draft'
+      ? tr('🔁 <b>Podobny do draftu z {0}</b> (czeka na akceptację): „{1}”', day(similar[0].at), esc(cut(similar[0].title, 90)))
+      : tr('🔁 <b>Podobny do posta z {0}</b>: „{1}”', day(similar[0].at), esc(cut(similar[0].title, 90)))) +
+    (/^https:\/\/\S+$/.test(String(similar[0].link || '')) ? tr(' · <a href="{0}">zobacz post</a>', esc(similar[0].link)) : '') +
+    (similar.length > 1 ? tr(' · i jeszcze {0}', similar.length - 1) : '')
+  : '';
+// platformy, na które publikuje ✅ (X ręcznie przez link publikuje człowiek – przycisk „Otwórz na X”)
+const platforms = [cfg.enableX && cfg.xMode !== 'link' && 'X', cfg.enableFacebook && 'FB'].filter(Boolean);
 // platformy włączone w chwili powstania draftu – panel pokazuje według nich teksty draftu
 const targets = [cfg.enableX && 'x', cfg.enableFacebook && 'facebook'].filter(Boolean);
 
@@ -167,6 +226,7 @@ const captionParts = [
   tr('🔗 {0}: <a href="{1}">otwórz źródło</a>', esc(cut(news.source, 60)), esc(news.url)),
   out.why_selected ? `💡 ${esc(cut(out.why_selected, 300))}` : '',
   outside.length ? tr('🔍 <b>Sprawdź tekst</b> – adresy lub kontakty spoza źródła: {0}', esc(outside.join(', '))) : '',
+  similarLine,
   tr('👇 Sprawdź teksty i zatwierdź przyciskiem pod ostatnią wiadomością.'),
 ].filter(Boolean);
 const llmModel = `${res.provider || 'gemini'}/${res.model || cfg.gemini.textModel}`;
@@ -184,32 +244,43 @@ const fbTitle = !fbText
 const postsText = (withImage) => {
   const blocks = [
     cfg.enableX
-      ? withImage
-        ? `🐦 <b>X</b> · ${xLength(postX)}/280\n<pre>${esc(postX)}</pre>`
-        : `${tr('🐦 <b>X</b> (post z linkiem) · {0}/280', xLength(postXLink))}\n<pre>${esc(postXLink)}</pre>`
+      ? xManual
+        ? // X ręcznie: tekst z linkiem do artykułu – przycisk „📝 Otwórz na X” albo kopiowanie
+          `${
+            xIntentUrl
+              ? tr('🐦 <b>X</b> · ręcznie – przycisk „📝 Otwórz na X” · {0}/280', xLength(postXLink))
+              : tr('🐦 <b>X</b> · ręcznie – skopiuj tekst do X · {0}/280', xLength(postXLink))
+          }\n<pre>${esc(postXLink)}</pre>`
+        : withImage
+          ? `🐦 <b>X</b> · ${xLength(postX)}/280\n<pre>${esc(postX)}</pre>`
+          : `${tr('🐦 <b>X</b> (post z linkiem) · {0}/280', xLength(postXLink))}\n<pre>${esc(postXLink)}</pre>`
       : '',
-    // bez grafiki Facebook dostaje post z linkiem
-    fbText && !withImage && cfg.enableFacebook
+    // bez grafiki Facebook dostaje post z linkiem (z linkiem w komentarzu – sam tekst)
+    fbText && !withImage && cfg.enableFacebook && !fbComment
       ? `${tr('📘 <b>Facebook</b> (post z linkiem) · {0} znaków', fbText.length)}\n<pre>${esc(fbText)}</pre>`
       : fbText
         ? `${fbTitle}\n<pre>${esc(fbText)}</pre>`
         : '',
+    fbText && fbComment ? tr('💬 Facebook: link do artykułu w pierwszym komentarzu') : '',
   ].filter(Boolean);
   return blocks.join('\n\n');
 };
-// przyciski ✅/❌ pod ostatnią wiadomością draftu
+// przyciski ✅/❌ pod ostatnią wiadomością draftu; X ręcznie – osobny wiersz z oficjalnym linkiem X
+const xRow = xIntentUrl ? [{ text: tr('📝 Otwórz na X'), url: xIntentUrl }] : null;
 const keyboard = {
   inline_keyboard: [
     [
       { text: platforms.length ? tr('✅ Publikuj ({0})', platforms.join(' + ')) : tr('✅ Zatwierdź'), callback_data: `pub:${draftId}` },
       { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },
     ],
+    ...(xRow ? [xRow] : []),
   ],
 };
 const messages = [
   { text: postsText(true), textLink: postsText(false) },
   {
     text: [`🧠 <i>${tr('Tekst: {0}', esc(llmModel))}</i>`].filter(Boolean).join('\n\n'),
+    // tryb automatyczny: bez ✅/❌, ale z przyciskiem X (ręcznie)
     reply_markup: keyboard,
   },
 ];
@@ -235,8 +306,10 @@ return [
       whySelected: out.why_selected || '',
       targets,
       ...(outside.length ? { outside } : {}), // adresy i kontakty spoza źródła w tekstach AI
+      ...(similar.length ? { similar } : {}), // podobne wcześniejsze posty bota (sprawdzanie powtórek)
       post_x: postX,
       post_x_link: postXLink,
+      ...(xIntentUrl ? { xIntent: xIntentUrl } : {}), // X ręcznie: oficjalny link X z gotowym tekstem
       post_fb_insta: postFb,
       script_tiktok: script,
       llmModel,

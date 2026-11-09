@@ -91,7 +91,11 @@ return [
       autoPublish: !!compose && compose.publishNow,
       compose,
       enableX: bool(c.enableX),
+      // link = X ręcznie przez oficjalny link X (przycisk „📝 Otwórz na X” w Telegramie) – bez publikacji przez API
+      xMode: c.xMode === 'link' ? 'link' : 'api',
       enableFacebook: bool(c.enableFacebook),
+      // Facebook: post bez linku, a link w pierwszym komentarzu strony
+      fbLinkComment: bool(c.fbLinkComment),
       meta: { graphVersion: str(meta.graphVersion, 'v24.0'), pageId: str(meta.pageId) },
       telegram: { chatId: str(c.telegram.chatId) },
       // grafika: source (zdjęcie ze źródła) | link (post z linkiem) | none

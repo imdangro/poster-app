@@ -15,6 +15,7 @@ let logs = '';
 let ui;
 let internal;
 let dataDir;
+let filesDir; // data/files – drafty zapisane przez n8n
 let mock;
 const mockHits = [];
 const n8nJobs = []; // zlecenia panelu do n8n (webhook „poster”)
@@ -116,7 +117,7 @@ before(async () => {
       PATH: process.env.PATH,
       TZ: 'Europe/Warsaw',
       POSTER_DATA_DIR: dataDir,
-      POSTER_FILES_DIR: tmpDir(),
+      POSTER_FILES_DIR: (filesDir = tmpDir()),
       PANEL_INTERNAL_TOKEN: TOKEN,
       PANEL_PORT_INTERNAL: String(ui),
       PANEL_INTERNAL_PORT: String(internal),
@@ -696,4 +697,102 @@ test('zmiana hasła: limit nieudanych prób obecnego hasła (z przejętą sesją
   assert.equal(status, 429);
   assert.ok(n <= 9, `blokada po ${n} próbach`);
   assert.equal((await json('POST', '/api/password', { current: 'nowehaslo123', password: 'innehaslo999' })).status, 429);
+});
+
+test('powtórki: pamięć postów ze zdarzeń n8n, sprawdzenie draftu i ustawienia bota', async () => {
+  const ib = `http://127.0.0.1:${internal}`;
+  const headers = { 'x-poster-token': TOKEN, 'content-type': 'application/json' };
+  const event = (e) => fetch(`${ib}/internal/events`, { method: 'POST', headers, body: JSON.stringify(e) });
+  const check = async (botId, body) =>
+    (await fetch(`${ib}/internal/bots/${botId}/similar`, { method: 'POST', headers, body: JSON.stringify(body) })).json();
+  const { bot } = await (await json('POST', '/api/bots', { name: 'Kosmos', topic: 'kosmos' })).json();
+  assert.deepEqual((await (await json('GET', `/api/bots/${bot.id}`)).json()).bot.similar, {
+    enabled: true,
+    days: 60,
+    sensitivity: 'medium',
+  });
+  assert.equal((await (await json('GET', `/api/bots/${bot.id}`)).json()).similarPosts, 0);
+
+  // n8n zapisał draft i go opublikował
+  const draftId = 'd20261107-1000-sp01';
+  const post = {
+    title: 'SpaceX przesuwa start Starshipa na 20 listopada',
+    post_x: '🚀 SpaceX znów przekłada lot Starshipa! Nowy termin startu to 20 listopada. Powód: wymiana silnika Raptor. #SpaceX',
+    post_fb_insta: 'SpaceX poinformowało, że 9. lot testowy Starshipa odbędzie się 20 listopada zamiast 15 listopada. Źródło: Spidersweb',
+  };
+  fs.writeFileSync(
+    path.join(filesDir, `${draftId}.json`),
+    JSON.stringify({
+      draftId,
+      botId: bot.id,
+      createdAt: new Date(Date.now() - 86400e3).toISOString(),
+      status: 'draft',
+      news: { title: post.title, url: 'https://spidersweb.example/starship', source: 'Spidersweb' },
+      post_x: post.post_x,
+      post_fb_insta: post.post_fb_insta,
+      results: {},
+    }),
+  );
+  await event({ type: 'draft', botId: bot.id, draftId, title: post.title });
+  const results = { x: { ok: true, url: 'https://x.com/i/status/42' } };
+  await event({ type: 'publish', botId: bot.id, draftId, status: 'published', results });
+  assert.equal((await (await json('GET', `/api/bots/${bot.id}`)).json()).similarPosts, 1);
+
+  // ta sama historia z innego portalu
+  const cand = {
+    title: 'Lot Starshipa opóźniony – nowa data to 20 listopada',
+    url: 'https://komputerswiat.example/starship',
+    source: 'Komputer Świat',
+    post_x: 'Starship poczeka dłużej ⏳ SpaceX ustaliło nowy termin 9. lotu testowego: 20 listopada. Wymiana silnika Raptor. #Starship',
+    post_fb_insta: 'Firma SpaceX przesunęła 9. lot testowy rakiety Starship na 20 listopada. Wcześniej start planowano na 15 listopada.',
+  };
+  let r = await check(bot.id, cand);
+  assert.equal(r.enabled, true);
+  assert.deepEqual(
+    r.matches.map((m) => [m.id, m.status, m.link]),
+    [[draftId, 'published', 'https://x.com/i/status/42']],
+  );
+  // inna historia – bez ostrzeżenia
+  r = await check(bot.id, { title: 'NASA wybiera lądownik do misji Artemis IV', post_x: 'Astronauci polecą lądownikiem Blue Moon. #NASA' });
+  assert.deepEqual(r.matches, []);
+
+  // zdarzenie draftu z podobnym postem – komunikat w historii uruchomień
+  const settings = { global: { telegram: { chatId: '-100123' } }, secrets: { geminiApiKey: 'AIza-test-key' } };
+  assert.equal((await json('PUT', '/api/settings', settings)).status, 200);
+  assert.equal((await json('PUT', `/api/bots/${bot.id}`, { sources: { rss: [{ url: 'https://spidersweb.example/feed' }] } })).status, 200);
+  const { run } = await (await json('POST', `/api/bots/${bot.id}/run`)).json();
+  assert.equal(run.status, 'running');
+  const draftEvent = {
+    type: 'draft',
+    runId: run.id,
+    botId: bot.id,
+    draftId: 'd20261108-1000-sp02',
+    title: cand.title,
+    similar: 1,
+    outside: 0,
+  };
+  // wiadomości draftu w Telegramie (nagłówek, teksty, przyciski) – odpowiedź zdjęciem na dowolną podmienia grafikę
+  await event({ ...draftEvent, chatId: '-100123', messages: [41, 42, 43] });
+  const view = (await (await json('GET', '/api/overview')).json()).runs.find((x) => x.id === run.id);
+  assert.equal(view.message, 'draft czeka na akceptację w Telegramie · 🔁 podobny do wcześniejszego posta');
+  await waitFor(
+    () => /"-100123:42": "d20261108-1000-sp02"/.test(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8')),
+    5000,
+    'wiadomości draftu w state.json',
+  );
+
+  // wyłączone sprawdzanie: bez porównania; usunięcie bota usuwa pamięć
+  assert.equal((await json('PUT', `/api/bots/${bot.id}`, { similar: { enabled: false, days: 90, sensitivity: 'high' } })).status, 200);
+  const saved = (await (await json('GET', `/api/bots/${bot.id}`)).json()).bot.similar;
+  assert.deepEqual(saved, { enabled: false, days: 90, sensitivity: 'high' });
+  assert.deepEqual(await check(bot.id, cand), { enabled: false, matches: [] });
+  assert.equal((await json('PUT', `/api/bots/${bot.id}`, { similar: { days: 45, sensitivity: 'xxx' } })).status, 200);
+  assert.deepEqual((await (await json('GET', `/api/bots/${bot.id}`)).json()).bot.similar, {
+    enabled: false,
+    days: 60,
+    sensitivity: 'medium',
+  });
+  assert.equal(fs.existsSync(path.join(dataDir, 'similar', `${bot.id}.json`)), true);
+  assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
+  assert.equal(fs.existsSync(path.join(dataDir, 'similar', `${bot.id}.json`)), false);
 });

@@ -392,8 +392,8 @@ window.POSTER_I18N.en = {
   'ID strony (opcjonalnie)': 'Page ID (optional)',
   'wykryjemy automatycznie': 'detected automatically',
   'Potrzebne tylko, gdy token ma dostęp do wielu stron.': 'Needed only when the token has access to many pages.',
-  'developers.facebook.com → Twoja aplikacja → uprawnienia: pages_manage_posts, pages_read_engagement.':
-    'developers.facebook.com → your app → permissions: pages_manage_posts, pages_read_engagement.',
+  'developers.facebook.com → Twoja aplikacja → uprawnienia: pages_manage_posts, pages_read_engagement, a do linku w komentarzu także pages_manage_engagement i pages_read_user_content.':
+    'developers.facebook.com → your app → permissions: pages_manage_posts, pages_read_engagement, and for the link comment also pages_manage_engagement and pages_read_user_content.',
   'Wygeneruj token (Graph API Explorer lub System User) i wklej powyżej – panel go sprawdzi.':
     'Generate a token (Graph API Explorer or System User) and paste it above – the panel will check it.',
   'Odłączyć stronę Facebook od tego bota?': 'Disconnect the Facebook page from this bot?',
@@ -682,4 +682,67 @@ window.POSTER_I18N.en = {
   'Aktywacja kończy prawo do zwrotu bez podania przyczyny – do tego czasu możesz zwrócić licencję w ciągu 14 dni od zakupu. ':
     'Activation ends the right to a refund without giving a reason – until then you can return the license within 14 days of the purchase. ',
   'Warunki licencji PRO': 'PRO license terms',
+  'Otwórz na X': 'Open on X',
+  '📝 Otwórz na X': '📝 Open on X',
+  'link w komentarzu': 'link in a comment',
+  'ręcznie przez link – konto API niepotrzebne': 'by hand via link – no API account needed',
+  'Przez API (automatycznie)': 'Via API (automatic)',
+  'Ręcznie przez link (za darmo)': 'By hand via link (free)',
+  'Draft w Telegramie dostaje przycisk „📝 Otwórz na X”: X otwiera się z gotowym tekstem i linkiem, a publikujesz Ty. Bez płatnego API X i bez autopilota na X; zdjęcie dołączasz sam.':
+    'The draft in Telegram gets a “📝 Open on X” button: X opens with the text and link ready, and you post it yourself. No paid X API and no autopilot on X; you attach the photo yourself.',
+  'Poster publikuje przez X API – płatne kredyty w X Developer Console i konto podłączone w zakładce Konta.':
+    'Poster posts through the X API – paid credits in the X Developer Console and an account connected in the Accounts tab.',
+  'Link w pierwszym komentarzu': 'Link in the first comment',
+  'Post idzie bez linku, a strona od razu dodaje pod nim komentarz z linkiem. Token strony musi mieć uprawnienie pages_manage_engagement (README → Meta).':
+    'The post goes out without the link, and the Page immediately adds a comment with the link under it. The Page token needs the pages_manage_engagement permission (README → Meta).',
+  'Ręcznie przez link – publikujesz sam w aplikacji X, bez płatnego API.':
+    'By hand via link – you post in the X app yourself, no paid API.',
+  'Połączono, ale link w komentarzu nie zadziała: {0}': 'Connected, but the link comment will not work: {0}',
+  'pełna kontrola': 'full control',
+  treść: 'content',
+  'aktywność społeczności': 'community activity',
+  wiadomości: 'messages',
+  reklamy: 'ads',
+  statystyki: 'insights',
+  'Link w komentarzu': 'Link in a comment',
+  'nie sprawdzono – wklej token i kliknij „Zapisz nowy token”': 'not checked – paste the token and click “Save new token”',
+  'uprawnienia w tokenie: {0}': 'permissions in the token: {0}',
+  'prawo „Aktywność społeczności” (moderowanie) na stronie': 'the “Community activity” (moderation) right on the Page',
+  'Uprawnienia tokenu': 'Token permissions',
+  'Meta ich nie podała': 'not provided by Meta',
+  'Prawa na stronie': 'Rights on the Page',
+  'brakuje: {0}': 'missing: {0}',
+  'nie wiadomo (Meta nie podała uprawnień)': 'unknown (Meta did not provide the permissions)',
+  możliwy: 'possible',
+  'Przed akceptacją panel porównuje draft z postami tego bota – bez AI i bez kosztów. Podobny draft dostaje w Telegramie „🔁 Podobny do posta z …” z linkiem.':
+    'Before approval, the panel compares the draft with this bot’s posts – no AI and no cost. A similar draft gets “🔁 Similar to the post from …” with a link in Telegram.',
+  'Sprawdzanie powtórek': 'Repeat check',
+  'Ostrzegaj o powtórkach': 'Warn about repeats',
+  'Ta sama historia z innego źródła albo opisana przez AI innymi słowami. Porównywane są słowa, nie znaczenie.':
+    'The same story from another source, or told by the AI in other words. Words are compared, not meaning.',
+  'Porównuj z postami z ostatnich': 'Compare with posts from the last',
+  '30 dni': '30 days',
+  '60 dni': '60 days',
+  '90 dni': '90 days',
+  'Także drafty czekające na akceptację (z ostatnich 7 dni).': 'Drafts waiting for approval count too (from the last 7 days).',
+  Czułość: 'Sensitivity',
+  Niska: 'Low',
+  Średnia: 'Medium',
+  Wysoka: 'High',
+  'Tylko bardzo podobne posty, np. ten sam artykuł drugi raz.': 'Only very similar posts, e.g. the same article a second time.',
+  'Zalecana: ta sama historia z innego źródła.': 'Recommended: the same story from another source.',
+  'Wyłapie więcej, ale częściej ostrzeże przy stałych tematach (np. comiesięczne decyzje).':
+    'Catches more, but warns more often on recurring topics (e.g. monthly decisions).',
+  'Postów tego bota w pamięci (ostatnie 90 dni): {0}.': 'Posts of this bot in memory (last 90 days): {0}.',
+  'Podobny do wcześniejszego posta': 'Similar to an earlier post',
+  '🔁 Możliwa powtórka': '🔁 Possible repeat',
+  'Podobny do draftu z {0} (czeka na akceptację): „{1}”': 'Similar to the draft from {0} (waiting for approval): “{1}”',
+  'Podobny do posta z {0}: „{1}”': 'Similar to the post from {0}: “{1}”',
+  '📷 Twoje zdjęcie': '📷 Your photo',
+  'Inne zdjęcie? Odpowiedz na draft w Telegramie swoim zdjęciem – podmienię je przed ✅.':
+    'A different photo? Reply to the draft in Telegram with your photo – I will replace it before ✅.',
+  'Posty na Twój adres: Discord, Slack, Make, Zapier, n8n – w wersji PRO.':
+    'Posts to your address: Discord, Slack, Make, Zapier, n8n – in the PRO version.',
+  'Webhook (Discord, Slack, Make, Zapier, n8n) jest w wersji PRO.':
+    'The webhook (Discord, Slack, Make, Zapier, n8n) is in the PRO version.',
 };

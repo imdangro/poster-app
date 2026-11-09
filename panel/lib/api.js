@@ -5,14 +5,14 @@ const { testFeed } = require('./feeds');
 const { esc } = require('./html');
 const { nextSlots, scheduleHours } = require('./schedule');
 const { sanitizeBot, DEFAULTS } = require('./store');
-const { UPSTREAM, apiError } = require('./accounts');
+const { UPSTREAM, apiError, metaCommentProblems } = require('./accounts');
 const { TEXT_PROVIDERS } = require('./ai');
 const { LANGUAGES, tr } = require('./i18n');
 
 const SECRET_KEYS = ['geminiApiKey', 'telegramBotToken', 'xClientSecret', 'apifyToken', 'ollamaKey', 'customKey'];
 
 function createApi(ctx) {
-  const { store, auth, runner, accounts, telegram, drafts, gateway, info, ai, compose, licenseKey } = ctx;
+  const { store, auth, runner, accounts, telegram, drafts, gateway, info, ai, compose, licenseKey, similar } = ctx;
   const routes = [];
   const route = (method, pattern, handler, { open = false, bodyLimit } = {}) => {
     const keys = [];
@@ -155,6 +155,8 @@ function createApi(ctx) {
       nextRuns: b.paused ? [] : nextSlots(b.schedule, new Date(), 6, b.id).map((d) => d.toISOString()),
       dedupCount: store.dedupCount(b.id),
       recentTopics: store.state.recentTopics[b.id] || [],
+      // sprawdzanie powtórek: ile postów bota z ostatnich 90 dni pamięta panel
+      similarPosts: similar ? similar.count(b.id) : 0,
       runs: store.state.runs
         .filter((r) => r.botId === b.id)
         .slice(0, 50)
@@ -180,6 +182,7 @@ function createApi(ctx) {
   });
   route('DELETE', '/api/bots/:id', async (req, res, p) => {
     store.deleteBot(p.id);
+    if (similar) similar.dropBot(p.id);
     return { ok: true };
   });
 
@@ -230,7 +233,11 @@ function createApi(ctx) {
     const r = await accounts.complete(accounts.parseRedirect(body.url));
     return { ok: true, botId: r.bot.id, platform: r.platform, account: r.bot.accounts[r.platform] };
   });
-  route('POST', '/api/bots/:id/accounts/meta', async (req, res, p, body) => ({ account: await accounts.connectMeta(p.id, body) }));
+  route('POST', '/api/bots/:id/accounts/meta', async (req, res, p, body) => {
+    const account = await accounts.connectMeta(p.id, body);
+    // czego brakuje do linku w pierwszym komentarzu (uprawnienie tokenu, prawa na stronie) – komunikat po połączeniu
+    return { account, commentProblems: metaCommentProblems(account) };
+  });
   route('DELETE', '/api/bots/:id/accounts/:platform', async (req, res, p) => {
     accounts.disconnect(p.id, p.platform);
     return { ok: true };

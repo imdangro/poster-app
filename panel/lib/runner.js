@@ -6,6 +6,7 @@ const { randomId, HttpError, periodic } = require('./util');
 const { esc } = require('./html');
 const { dueSlot, nextSlots } = require('./schedule');
 const { TEXT_PROVIDERS } = require('./ai');
+const { metaCommentProblems } = require('./accounts');
 const { tr } = require('./i18n');
 
 const PLATFORM_ACCOUNT = { x: 'x', facebook: 'meta' };
@@ -60,7 +61,11 @@ class Runner {
       apify: { actorId: g.apify.actorId, maxItems: s.apifyMaxItems },
       gemini: { textModel: bot.content.textModel },
       enableX: p.x,
+      // link = X ręcznie przez oficjalny link (przycisk w Telegramie), bez publikacji przez API
+      xMode: p.xMode === 'link' ? 'link' : 'api',
       enableFacebook: p.facebook,
+      // link w pierwszym komentarzu pod postem na Facebooku (post bez linku)
+      fbLinkComment: p.fbLinkComment === true,
       meta: {
         graphVersion: g.meta.graphVersion,
         pageId: (acc.meta && acc.meta.pageId) || '',
@@ -116,7 +121,13 @@ class Runner {
     }
     const names = { x: 'X', facebook: 'Facebook' };
     for (const [k, acc] of Object.entries(PLATFORM_ACCOUNT)) {
+      // X ręcznie przez link nie potrzebuje konta API
+      if (k === 'x' && bot.publishing.xMode === 'link') continue;
       if (bot.publishing[k] && !bot.accounts[acc]) out.push(tr('{0} włączony, ale bez podłączonego konta', names[k]));
+    }
+    // link w pierwszym komentarzu na Facebooku: brak uprawnienia tokenu albo prawa moderowania strony
+    if (bot.publishing.facebook && bot.publishing.fbLinkComment && bot.accounts.meta) {
+      for (const p of metaCommentProblems(bot.accounts.meta)) out.push(tr('link w komentarzu na Facebooku nie zadziała: {0}', p));
     }
     // czat draftów to grupa albo kanał (ID ujemne) bez listy administratorów: drafty zatwierdzi każdy uczestnik
     const draftChat = String(bot.telegram.chatId || this.store.global.telegram.chatId || '');
@@ -370,16 +381,23 @@ class Runner {
         break;
       case 'draft':
         if (botId) this.store.addRecentTopic(botId, e.title);
+        // pamięć postów do sprawdzania powtórek (plik draftu jest już na dysku)
+        if (botId) this.rememberPost(() => this.similar.addDraft(botId, e.draftId));
+        // wiadomości draftu w Telegramie – odpowiedź zdjęciem na dowolną z nich podmienia grafikę draftu
+        if (this.telegram && e.chatId && Array.isArray(e.messages)) this.telegram.rememberDraft(e.chatId, e.messages, e.draftId);
         if (run) {
           // auto: własny post z „Publikuj teraz” – publikacja rusza od razu
           const auto = e.auto === true;
           const autoText = tr('publikuję teraz – zlecenie z panelu');
+          // podobny do wcześniejszego posta bota (sprawdzanie powtórek)
+          const similar = Number(e.similar) > 0;
           const waiting = tr('draft czeka na akceptację w Telegramie');
+          const note = similar ? ` · ${tr('🔁 podobny do wcześniejszego posta')}` : '';
           this.store.updateRun(run.id, {
             draftId: e.draftId,
             title: String(e.title || '').slice(0, 300),
             status: auto ? 'publishing' : 'draft',
-            message: auto ? autoText : waiting,
+            message: (auto ? autoText : waiting) + note,
             ...(auto ? {} : { finishedAt: now }),
           });
         }
@@ -387,9 +405,11 @@ class Runner {
       case 'publish': {
         const results = e.results || {};
         const detail = (v) => (v && v.error ? ` (${String(v.error).slice(0, 120)})` : '');
-        // unknown: brak odpowiedzi platformy – post mógł się opublikować
+        // unknown: brak odpowiedzi platformy – post mógł się opublikować; manual: X ręcznie przez link (publikuje człowiek)
+        const state = (v) =>
+          v && v.ok ? 'OK' : v && v.manual ? tr('ręcznie') : v && v.unknown ? tr('nie wiadomo{0}', detail(v)) : tr('błąd{0}', detail(v));
         const summary = Object.entries(results)
-          .map(([k, v]) => `${k}: ${v && v.ok ? 'OK' : v && v.unknown ? tr('nie wiadomo{0}', detail(v)) : tr('błąd{0}', detail(v))}`)
+          .map(([k, v]) => `${k}: ${state(v)}`)
           .join(' · ');
         if (run)
           this.store.updateRun(run.id, {
@@ -402,12 +422,24 @@ class Runner {
         // status draftu w uruchomieniu, które go utworzyło (lista w Pulpicie)
         const gen = this.store.state.runs.find((r) => ['generate', 'compose'].includes(r.kind) && r.draftId === e.draftId && r !== run);
         if (gen) this.store.updateRun(gen.id, { status: e.status || 'published', message: summary });
+        // pamięć postów do sprawdzania powtórek: status i link do posta
+        if (botId && e.draftId) this.rememberPost(() => this.similar.published(botId, e.draftId, e.status || 'published', results));
         break;
       }
       default:
         break;
     }
     return { ok: true };
+  }
+
+  // Pamięć postów do sprawdzania powtórek (lib/similar.js) – jej błąd (np. dysk) nie psuje zdarzenia z n8n
+  rememberPost(fn) {
+    if (!this.similar) return;
+    try {
+      fn();
+    } catch (e) {
+      console.error('similar:', e.message);
+    }
   }
 
   async error(payload) {

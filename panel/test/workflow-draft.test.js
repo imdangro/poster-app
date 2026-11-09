@@ -11,8 +11,12 @@ const CODE = fs.readFileSync(path.join(__dirname, '../../workflows/src/code/pars
 const tr = (s, ...args) => String(s).replace(/\{(\d+)\}/g, (_, i) => String(args[i]));
 
 // news – wybrany news (kandydat); ai, cfg, res, prompt – zmiany w odpowiedzi AI, w Config, w odpowiedzi panelu
-// i w wyniku „Przygotuj prompt LLM” (need – teksty zamówione dla włączonych platform)
-async function draft(news, { ai: aiChanges = {}, cfg: cfgChanges = {}, res: resChanges = {}, prompt: promptChanges = {} } = {}) {
+// i w wyniku „Przygotuj prompt LLM” (need – teksty zamówione dla włączonych platform); http – atrapa zapytań do panelu
+// (sprawdzanie powtórek: /internal/bots/<id>/similar)
+async function draft(
+  news,
+  { ai: aiChanges = {}, cfg: cfgChanges = {}, res: resChanges = {}, prompt: promptChanges = {}, http = async () => ({}) } = {},
+) {
   const cfg = {
     botId: 'b1',
     botName: 'Kawiarnia',
@@ -48,7 +52,7 @@ async function draft(news, { ai: aiChanges = {}, cfg: cfgChanges = {}, res: resC
     console,
   };
   const fn = vm.runInNewContext(`(async function () {\n${CODE}\n})`, sandbox);
-  const [item] = await fn.call({ helpers: { httpRequest: async () => ({}) } });
+  const [item] = await fn.call({ helpers: { httpRequest: http } });
   return JSON.parse(JSON.stringify(item.json));
 }
 
@@ -114,6 +118,66 @@ test('tekst AI z adresem, kontem albo kontaktem spoza źródła: ostrzeżenie w 
   // konto ze źródła, ale inne niż w tekście
   d = await draft(NEWS, { ai: { post_x: 'Organizator: @PodLipa_promo #kawa' } });
   assert.deepEqual(d.outside, ['@PodLipa_promo']);
+});
+
+// --- powtórki: panel porównuje draft z wcześniejszymi postami bota -------------------------------------------------
+const MATCH = {
+  id: 'd20261103-1405-ab12',
+  at: '2026-11-03T13:05:00.000Z',
+  status: 'published',
+  title: 'Kawiarnia Pod Lipą powiększa się o salę',
+  link: 'https://x.com/i/status/123',
+  score: 0.42,
+  same: 'text',
+};
+
+test('powtórki: draft pyta panel o podobne posty, podobny dostaje linię 🔁 z linkiem do posta', async () => {
+  const calls = [];
+  const http = async (req) => {
+    calls.push(req);
+    return { enabled: true, days: 60, matches: [MATCH, { ...MATCH, id: 'd2', title: 'Drugi' }] };
+  };
+  const d = await draft(NEWS, { http });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://panel:7081/internal/bots/b1/similar');
+  assert.equal(calls[0].body.title, 'Nowa sala');
+  assert.equal(calls[0].body.url, NEWS.url);
+  assert.equal(calls[0].body.post_x, 'Nowa sala „Pod Lipą” – zapraszamy! #kawa');
+  assert.equal(calls[0].body.draftId, d.draftId);
+  assert.deepEqual(
+    d.similar.map((m) => m.id),
+    ['d20261103-1405-ab12', 'd2'],
+  );
+  const line = d.telegram.captionParts.find((l) => l.startsWith('🔁'));
+  assert.equal(
+    line,
+    '🔁 <b>Podobny do posta z 3.11</b>: „Kawiarnia Pod Lipą powiększa się o salę” · <a href="https://x.com/i/status/123">zobacz post</a> · i jeszcze 1',
+  );
+  assert.ok(d.telegram.messages[1].reply_markup.inline_keyboard[0][0].callback_data.startsWith('pub:'), 'draft z ✅/❌ jak zawsze');
+
+  // draft czekający na akceptację: bez linku do posta; tytuł z cudzego kanału escapowany
+  const pending = { ...MATCH, status: 'draft', link: '', title: 'Sala <b>"VIP"</b>' };
+  const p = await draft(NEWS, { http: async () => ({ matches: [pending] }) });
+  assert.equal(
+    p.telegram.captionParts.find((l) => l.startsWith('🔁')),
+    '🔁 <b>Podobny do draftu z 3.11</b> (czeka na akceptację): „Sala &lt;b&gt;&quot;VIP&quot;&lt;/b&gt;”',
+  );
+
+  // brak podobnych albo błąd panelu – draft bez linii i bez pola similar
+  for (const h of [async () => ({ matches: [] }), async () => Promise.reject(new Error('ECONNREFUSED'))]) {
+    const x = await draft(NEWS, { http: h });
+    assert.equal(x.similar, undefined);
+    assert.ok(!x.telegram.captionParts.some((l) => l.startsWith('🔁')));
+  }
+});
+
+test('workflow: zdarzenie draftu podaje czat i wiadomości draftu w Telegramie (zdjęcie w odpowiedzi na draft)', () => {
+  const wf = JSON.parse(fs.readFileSync(path.join(__dirname, '../../workflows/poster_workflow.json'), 'utf8'));
+  const event = JSON.stringify(wf.nodes.find((n) => n.name === 'Panel: zgłoś draft').parameters);
+  assert.ok(event.includes("chatId: $('Config').first().json.telegram.chatId"), event);
+  assert.ok(event.includes("($('Telegram: przygotuj teksty').first().json.posts.reply_parameters || {}).message_id"), event);
+  assert.ok(event.includes("($('Telegram: wyślij teksty postów').first().json.result || {}).message_id"), event);
+  assert.ok(event.includes('($json.result || {}).message_id].filter(Boolean)'), event);
 });
 
 // teksty w wiadomościach Telegrama: [teksty postów (wariant z grafiką), wariant z linkiem, ostatnia wiadomość z przyciskami]

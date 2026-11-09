@@ -1,15 +1,18 @@
 'use strict';
 // Telegram: odbieranie kliknięć ✅/❌ (long-polling getUpdates – NAS nie musi być wystawiony do internetu),
-// wykrywanie ID czatów (/start), komenda /post (post z Telegrama, PRO) oraz wysyłanie powiadomień z panelu.
+// wykrywanie ID czatów (/start), komenda /post (post z Telegrama, PRO), zdjęcie w odpowiedzi na draft (podmiana grafiki
+// – lib/draftphoto.js) oraz wysyłanie powiadomień z panelu.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { sleep, HttpError, noAnswer, productUrl } = require('./util');
+const { sleep, HttpError, noAnswer, readLimited, productUrl } = require('./util');
 const { UPSTREAM } = require('./accounts');
 const { tr, lang } = require('./i18n');
 
 // /post albo /post@nazwa_bota na początku wiadomości albo podpisu zdjęcia
 const POST_COMMAND = /^\/post(?:@[A-Za-z0-9_]+)?(?=\s|$)/i;
+// tyle wiadomości draftów (czat + wiadomość → draft) pamiętamy dla zdjęć w odpowiedzi na draft (ok. 300 draftów)
+const DRAFT_MESSAGES_MAX = 900;
 
 // Plik w parametrach wywołania (np. zdjęcie): { data: Buffer, filename, contentType }
 const isFile = (v) => !!v && typeof v === 'object' && Buffer.isBuffer(v.data);
@@ -54,6 +57,7 @@ class Telegram {
     this.conn = { ok: false, code: 'idle', error: '', username: '' };
     this.abort = null;
     this.tokenSeen = null;
+    this.photo = null; // zdjęcie w odpowiedzi na draft (lib/draftphoto.js) – ustawia server.js
   }
 
   get status() {
@@ -104,6 +108,43 @@ class Telegram {
       throw err;
     }
     return data.result;
+  }
+
+  // Plik z Telegrama (getFile → /file/bot<token>/…), najwyżej maxBytes bajtów – null, gdy plik jest większy.
+  // Adres pliku zawiera token bota – nie trafia do logów ani komunikatów.
+  async downloadFile(fileId, maxBytes) {
+    const f = await this.call('getFile', { file_id: fileId });
+    const p = String((f && f.file_path) || '');
+    if (!/^[\w./-]+$/.test(p) || p.includes('..')) throw new HttpError(502, tr('Telegram nie podał pliku zdjęcia'));
+    let res;
+    try {
+      res = await fetch(`${UPSTREAM.telegram}/file/bot${this.token}/${p}`, { signal: AbortSignal.timeout(30000) });
+    } catch (e) {
+      throw new HttpError(
+        502,
+        tr('Nie udało się pobrać zdjęcia z Telegrama: {0}', e.name === 'TimeoutError' ? tr('przekroczono czas') : e.cause?.code || e.name),
+      );
+    }
+    if (!res.ok) {
+      if (res.body) res.body.cancel().catch(() => {});
+      throw new HttpError(502, tr('Nie udało się pobrać zdjęcia z Telegrama (HTTP {0})', res.status));
+    }
+    return readLimited(res, maxBytes);
+  }
+
+  // Wiadomości draftu w czacie (nagłówek, teksty, przyciski – zdarzenie „draft” z n8n): odpowiedź zdjęciem na
+  // dowolną z nich podmienia grafikę draftu. Najstarsze wpisy wypadają.
+  rememberDraft(chatId, messageIds, draftId) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(draftId || '')) || !Array.isArray(messageIds)) return;
+    const tg = this.store.state.telegram;
+    const map = (tg.draftMessages = tg.draftMessages || {});
+    for (const id of messageIds) if (Number.isInteger(id) && id > 0) map[`${chatId}:${id}`] = draftId;
+    const keys = Object.keys(map);
+    for (const k of keys.slice(0, Math.max(0, keys.length - DRAFT_MESSAGES_MAX))) delete map[k];
+    this.store.saveState();
+  }
+  draftOfMessage(chatId, messageId) {
+    return (this.store.state.telegram.draftMessages || {})[`${chatId}:${messageId}`] || null;
   }
 
   // Wywołanie „najlepszej próby” – błąd tylko logujemy (np. edycja przycisków starej wiadomości).
@@ -247,6 +288,8 @@ class Telegram {
           text: tr('✍️ Post z Telegrama (/post) jest w wersji PRO: {0}', productUrl(lang())),
         });
       }
+      // zdjęcie w odpowiedzi na wiadomość draftu: podmiana grafiki draftu (tylko czaty ustawione w Posterze)
+      if (this.photo && msg.reply_to_message && this.allowedChats().has(String(msg.chat.id))) return this.photo.message(msg);
       return;
     }
     const cq = u.callback_query;
@@ -265,10 +308,14 @@ class Telegram {
     const draftId = m[2];
     const unknown = { pua: 'retry', puc: 'confirm' }[m[1]];
     const ctx = { draftId, chatId: cq.message.chat.id, messageId: cq.message.message_id, from, ...(unknown ? { unknown } : {}) };
-    const markup = (text) => ({
+    // przyciski z adresem (np. „📝 Otwórz na X” – X ręcznie przez link) zostają pod draftem w trakcie publikacji
+    const links = ((cq.message.reply_markup || {}).inline_keyboard || [])
+      .map((row) => (Array.isArray(row) ? row.filter((b) => b && typeof b.url === 'string') : []))
+      .filter((row) => row.length);
+    const markup = (text, keep = true) => ({
       chat_id: ctx.chatId,
       message_id: ctx.messageId,
-      reply_markup: { inline_keyboard: [[{ text, callback_data: 'noop' }]] },
+      reply_markup: { inline_keyboard: [[{ text, callback_data: 'noop' }], ...(keep ? links : [])] },
     });
 
     const draft = this.readDraft(draftId);
@@ -280,7 +327,7 @@ class Telegram {
 
     if (m[1] === 'rej') {
       await answer(tr('❌ Odrzucono'));
-      await this.try('editMessageReplyMarkup', markup(tr('❌ Odrzucono ({0})', from)));
+      await this.try('editMessageReplyMarkup', markup(tr('❌ Odrzucono ({0})', from), false));
       return this.onReject(draft, ctx);
     }
     const busy = unknown === 'confirm' ? tr('⏳ Zapisuję…') : tr('⏳ Publikuję…');
@@ -288,11 +335,11 @@ class Telegram {
     await this.try('editMessageReplyMarkup', markup(busy));
     // Publikacja w tle: kolejne kliknięcia (też w innych draftach) nie czekają na start n8n (do 30 s). Blokada
     // „publikacja w toku” działa od razu – onPublish (runner.start) zapisuje przebieg, zanim zacznie czekać na n8n.
-    this.track(this.startPublish(draft, ctx, m[1]));
+    this.track(this.startPublish(draft, ctx, m[1], links));
   }
 
-  // action: pub | pua | puc – ten sam przycisk ponawia po błędzie
-  async startPublish(draft, ctx, action) {
+  // action: pub | pua | puc – ten sam przycisk ponawia po błędzie; links – wiersze przycisków z adresem spod draftu
+  async startPublish(draft, ctx, action, links = []) {
     const draftId = ctx.draftId;
     try {
       await this.onPublish(draft, ctx);
@@ -306,6 +353,7 @@ class Telegram {
               { text: tr('🔁 Spróbuj ponownie'), callback_data: `${action}:${draftId}` },
               { text: tr('❌ Odrzuć'), callback_data: `rej:${draftId}` },
             ],
+            ...links,
           ],
         },
       });

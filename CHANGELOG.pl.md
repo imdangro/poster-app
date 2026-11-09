@@ -7,6 +7,34 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.5.0 – 2026-11-09
+
+- **X bez płatnego API – ręcznie przez link:** w *Bot → Publikacja → X* wybierasz „Przez API (automatycznie)” albo
+  „Ręcznie przez link (za darmo)”. W trybie linku draft w Telegramie dostaje przycisk **📝 Otwórz na X** – oficjalny
+  link X do nowego posta z gotowym tekstem i linkiem. Publikujesz sam, bez kredytów w X Developer Console i bez
+  podłączonego konta X. ✅ publikuje pozostałe platformy, przycisk X zostaje pod draftem, raport pokazuje przy X
+  „📝 ręcznie”, a link jest też w szczegółach draftu w panelu. Zdjęcie dołączasz sam. Domyślnie bez zmian – X przez API.
+- **Facebook: link w pierwszym komentarzu** (opcja w *Bot → Publikacja → Facebook*, domyślnie wyłączona): post idzie bez
+  linku – ze zdjęciem, jeśli draft je ma – a strona od razu dodaje pod nim komentarz z linkiem. Błąd komentarza nie psuje
+  publikacji: post jest na stronie, a raport pokazuje ostrzeżenie. Własne posty korzystają z tego samego ustawienia bota.
+  **Krok ręczny – tylko gdy włączasz tę opcję:** token Meta potrzebuje uprawnień `pages_manage_engagement`
+  i `pages_read_user_content` (Meta wymaga obu), a użytkownik systemowy – prawa „Aktywność społeczności” (albo pełnej
+  kontroli) na stronie. Wygeneruj nowy token
+  i zapisz go w **Konta → Facebook** ([README](README.pl.md) → „Meta”).
+- **Konta → Facebook pokazuje uprawnienia tokenu** i prawa na stronie (odczytane przy zapisaniu tokenu) oraz to, czego
+  brakuje do linku w komentarzu. Przy włączonej opcji braki są też ostrzeżeniem przy bocie, a raport w Telegramie
+  odsyła do tej karty.
+- **Sprawdzanie powtórek przed akceptacją:** panel porównuje nowy draft z postami bota z ostatnich 60 dni i z draftami,
+  które czekają na decyzję – słowa kluczowe i pary słów, bez AI i bez kosztów. Gdy ta sama historia była już w poście
+  (np. ten sam news z innego portalu albo opisany przez AI innymi słowami), draft w Telegramie dostaje
+  „🔁 Podobny do posta z …” z linkiem do posta, a w panelu – plakietkę 🔁 i listę podobnych postów. Ustawienia
+  w *Bot → Publikacja → Sprawdzanie powtórek*: włącznik (domyślnie włączone), okno 30, 60 albo 90 dni i czułość.
+  Pamięć postów panel uzupełnia na start draftami z dysku.
+- **Własne zdjęcie w drafcie:** w Telegramie odpowiedz na dowolną wiadomość draftu swoim zdjęciem (albo plikiem JPG, PNG
+  lub WebP, do 20 MB). Bot podmieni grafikę draftu (JPG do 2048 px) i odeśle podgląd, a ✅ opublikuje już Twoje
+  zdjęcie – także na platformach, które bez zdjęcia były pomijane. Działa przed publikacją i tylko dla osób, które mogą
+  klikać ✅. Szczegóły draftu w panelu pokazują „📷 Twoje zdjęcie”.
+
 ## 1.4.1 – 2026-11-03
 
 - **Draft tylko z tekstami platform, na które publikujesz:** wiadomość z draftem w Telegramie i szczegóły draftu

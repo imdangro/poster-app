@@ -5,11 +5,29 @@ const fs = require('fs');
 const path = require('path');
 
 const DRAFT_RE = /^d\d{8}-\d{4}-[a-z0-9]{3,8}\.json$/;
-// wszystkie pliki draftu: <draftId>.json, grafika i wideo
-const DRAFT_FILE_RE = /^(d\d{8}-\d{4}-[a-z0-9]{3,8})\.(json|jpe?g|png|webp|mp4)$/;
+// wszystkie pliki draftu: <draftId>.json, grafika (też własne zdjęcie z Telegrama: <draftId>-<losowe>.jpg) i wideo
+const DRAFT_FILE_RE = /^(d\d{8}-\d{4}-[a-z0-9]{3,8})(?:-[a-z0-9]{2,12})?\.(json|jpe?g|png|webp|mp4)$/;
 const CACHE_MAX = 1000; // podsumowania draftów w pamięci (najdawniej używane wypadają)
 const NAMES_MAX_AGE_MS = 60000; // lista plików odświeżana też co minutę (system plików bez zmian czasu katalogu)
 const DAY_MS = 86400 * 1000;
+
+// podobne posty zapisane w drafcie przez workflow – tylko znane pola i bezpieczne linki (trafiają do href w panelu)
+const httpUrl = (u) => (/^https?:\/\/\S+$/i.test(String(u || '')) ? String(u) : '');
+function similarOf(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((m) => m && typeof m === 'object' && m.id)
+    .slice(0, 3)
+    .map((m) => ({
+      id: String(m.id).slice(0, 40),
+      at: String(m.at || ''),
+      status: String(m.status || ''),
+      title: String(m.title || '').slice(0, 300),
+      link: httpUrl(m.link),
+      url: httpUrl(m.url),
+      same: m.same === 'link' ? 'link' : 'text',
+    }));
+}
 
 class Drafts {
   constructor(filesDir, store) {
@@ -81,6 +99,8 @@ class Drafts {
       source: (d.news && d.news.source) || '',
       url: (d.news && d.news.url) || '',
       image: d.image && d.image.file ? d.image.file : null,
+      // skąd grafika: source (ze źródła), upload (Twoje zdjęcie – z edytora albo z Telegrama), brand (grafika marki)
+      imageSource: d.image && d.image.file ? String(d.image.source || '') : '',
       results: d.results || {},
       // news | manual (własny post z panelu)
       mode: d.mode === 'manual' ? 'manual' : 'news',
@@ -93,9 +113,13 @@ class Drafts {
       linkMode: d.linkMode === true || !(d.image && d.image.file),
       post_x: d.post_x || '',
       post_x_link: d.post_x_link || '',
+      // X ręcznie przez link: oficjalny link X do nowego posta z gotowym tekstem (przycisk „Otwórz na X”)
+      xIntent: /^https:\/\/x\.com\/intent\/tweet\?/.test(String(d.xIntent || '')) ? d.xIntent : '',
       post_fb_insta: d.post_fb_insta || '',
       script_tiktok: d.script_tiktok || '',
       whySelected: d.whySelected || '',
+      // sprawdzanie powtórek: podobne wcześniejsze posty bota (lib/similar.js)
+      similar: similarOf(d.similar),
       approvedBy: d.approvedBy || '',
       lastAttemptAt: d.lastAttemptAt || null,
     };

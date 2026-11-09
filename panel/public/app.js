@@ -336,14 +336,26 @@
     const [label, cls, spin] = STATUS[st] || [st || '—', ''];
     return h('span', { class: `badge ${cls}` }, spin ? h('span', { class: 'spinner' }) : null, label);
   }
-  // wynik publikacji na platformie: ✓ link, ⚠️ nie wiadomo (brak odpowiedzi platformy – post mógł wyjść) albo ✗ błąd
+  // oficjalny link X do nowego posta (web intent) – X ręcznie przez link
+  const isXIntent = (u) => /^https:\/\/x\.com\/intent\/tweet\?/.test(String(u || ''));
+  // wynik publikacji na platformie: ✓ link, 📝 ręcznie (X przez link – publikuje człowiek), ⚠️ nie wiadomo (brak
+  // odpowiedzi platformy – post mógł wyjść) albo ✗ błąd
   function resultSpan(r) {
+    if (r.manual)
+      return h(
+        'span',
+        { class: 'res' },
+        `📝 ${tr('ręcznie')}`,
+        isXIntent(r.intent) ? [' · ', h('a', { href: r.intent, target: '_blank', rel: 'noopener' }, tr('Otwórz na X'))] : null,
+      );
     if (r.ok)
       return h(
         'span',
         { class: 'res ok' },
         '✓ ',
         r.url ? h('a', { href: r.url, target: '_blank', rel: 'noopener' }, tr('zobacz post')) : r.note || 'OK',
+        r.comment ? ` · ${tr('link w komentarzu')}` : null,
+        r.warning ? h('span', { class: 'res warn' }, ` ⚠️ ${r.warning}`) : null,
       );
     if (r.unknown)
       return h('span', { class: 'res warn' }, `⚠️ ${tr('nie wiadomo, czy się opublikował – sprawdź profil')} (${r.error || '—'})`);
@@ -363,6 +375,7 @@
   };
   // platformy publikacji w tej wersji programu (kolejność jak w workflow)
   const PLATFORMS = Object.keys(PLAT);
+  const withText = (list) => list;
   const plat = (k, off, title) => h('span', { class: `plat ${k} ${off ? 'off' : ''}`, title: title || PLAT[k][1] }, PLAT[k][0]);
   const GRADS = [
     ['#6366f1', '#8b5cf6'],
@@ -2048,13 +2061,19 @@
     const image = ['ok', tr('0 zł'), c.imageMode === 'none' ? tr('Bez grafiki.') : tr('Gdy brak zdjęcia – post z linkiem.')];
     const x = !b.publishing.x
       ? ['', tr('wyłączone'), tr('X nie jest włączony w zakładce Publikacja.')]
-      : xAlwaysLink(b)
-        ? ['warn', tr('ok. {0}', usd(X_PRICE_USD.link)), tr('Post z linkiem – płatne API X liczy go wielokrotnie drożej niż zwykły post.')]
-        : [
-            '',
-            tr('ok. {0}', usd(X_PRICE_USD.post)),
-            tr('Post ze zdjęciem, bez linku. Bez grafiki X dostaje post z linkiem (ok. {0}).', usd(X_PRICE_USD.link)),
-          ];
+      : b.publishing.xMode === 'link'
+        ? ['ok', tr('0 zł'), tr('Ręcznie przez link – publikujesz sam w aplikacji X, bez płatnego API.')]
+        : xAlwaysLink(b)
+          ? [
+              'warn',
+              tr('ok. {0}', usd(X_PRICE_USD.link)),
+              tr('Post z linkiem – płatne API X liczy go wielokrotnie drożej niż zwykły post.'),
+            ]
+          : [
+              '',
+              tr('ok. {0}', usd(X_PRICE_USD.post)),
+              tr('Post ze zdjęciem, bez linku. Bez grafiki X dostaje post z linkiem (ok. {0}).', usd(X_PRICE_USD.link)),
+            ];
     return [
       [tr('Tekst'), text],
       [tr('Grafika'), image],
@@ -2178,11 +2197,14 @@
   function tabPublishing(ed, rerender) {
     const p = ed.bot.publishing;
     const acc = ed.bot.accounts || {};
+    // X ręcznie przez link: przycisk „📝 Otwórz na X” w Telegramie, bez API i konta deweloperskiego
+    const xLink = p.xMode === 'link';
     const accInfo = {
-      x: acc.x ? tr('konto @{0}', acc.x.username) : null,
+      x: xLink ? tr('ręcznie przez link – konto API niepotrzebne') : acc.x ? tr('konto @{0}', acc.x.username) : null,
       facebook: acc.meta ? tr('strona „{0}”', acc.meta.pageName || acc.meta.pageId) : null,
     };
-    const row = (k, extra) =>
+    // missing – opis braku konta (domyślnie: link do zakładki Konta)
+    const row = (k, extra, missing) =>
       h(
         'div',
         { class: 'plat-row' },
@@ -2193,7 +2215,7 @@
           h('b', null, PLAT[k][1]),
           accInfo[k]
             ? h('span', null, `✓ ${accInfo[k]}`)
-            : h('span', null, tr('Brak konta – '), h('a', { href: `#/bot/${ed.id}/accounts` }, tr('podłącz w zakładce Konta'))),
+            : missing || h('span', null, tr('Brak konta – '), h('a', { href: `#/bot/${ed.id}/accounts` }, tr('podłącz w zakładce Konta'))),
           extra,
         ),
         sw(p[k], (v) => ed.set(`publishing.${k}`, v, true)),
@@ -2210,26 +2232,126 @@
           null,
           row(
             'x',
-            p.x && xAlwaysLink(ed.bot)
+            p.x
               ? h(
                   'div',
-                  { class: 'res warn small' },
-                  tr(
-                    'Ten bot publikuje na X posty z linkiem: ok. {0} za post (płatne API X, ceny w X Developer Console).',
-                    usd(X_PRICE_USD.link),
+                  { class: 'stack tight', style: { marginTop: '8px' } },
+                  segmented(
+                    xLink ? 'link' : 'api',
+                    [
+                      ['api', tr('Przez API (automatycznie)')],
+                      ['link', tr('Ręcznie przez link (za darmo)')],
+                    ],
+                    (v) => ed.set('publishing.xMode', v, true),
+                  ),
+                  h(
+                    'div',
+                    { class: 'muted small' },
+                    xLink
+                      ? tr(
+                          'Draft w Telegramie dostaje przycisk „📝 Otwórz na X”: X otwiera się z gotowym tekstem i linkiem, a publikujesz Ty. Bez płatnego API X i bez autopilota na X; zdjęcie dołączasz sam.',
+                        )
+                      : tr('Poster publikuje przez X API – płatne kredyty w X Developer Console i konto podłączone w zakładce Konta.'),
+                  ),
+                  !xLink && xAlwaysLink(ed.bot)
+                    ? h(
+                        'div',
+                        { class: 'res warn small' },
+                        tr(
+                          'Ten bot publikuje na X posty z linkiem: ok. {0} za post (płatne API X, ceny w X Developer Console).',
+                          usd(X_PRICE_USD.link),
+                        ),
+                      )
+                    : null,
+                )
+              : null,
+          ),
+          row(
+            'facebook',
+            p.facebook
+              ? h(
+                  'div',
+                  { style: { marginTop: '8px' } },
+                  sw(
+                    p.fbLinkComment === true,
+                    (v) => ed.set('publishing.fbLinkComment', v, true),
+                    tr('Link w pierwszym komentarzu'),
+                    tr(
+                      'Post idzie bez linku, a strona od razu dodaje pod nim komentarz z linkiem. Token strony musi mieć uprawnienie pages_manage_engagement (README → Meta).',
+                    ),
                   ),
                 )
               : null,
           ),
-          row('facebook'),
           proRow('instagram', 'IG', 'Instagram', tr('Publikacja na Instagramie (konto połączone ze stroną FB) – w wersji PRO.')),
           proRow('threads', '@', 'Threads', tr('Posty na Threads (tekst, zdjęcie, karta linku) – w wersji PRO.')),
           proRow('bluesky', '🦋', 'Bluesky', tr('Posty na Bluesky (tekst, zdjęcie, karta linku) – w wersji PRO.')),
           proRow('telegram', 'TG', tr('Kanał Telegram'), tr('Posty na kanale Telegram (tekst, zdjęcie, link) – w wersji PRO.')),
           proRow('tiktok', 'TT', 'TikTok', tr('Wideo z grafiki posta (animacja) – w wersji PRO.')),
+          proRow('webhook', 'WH', 'Webhook', tr('Posty na Twój adres: Discord, Slack, Make, Zapier, n8n – w wersji PRO.')),
         ),
       ),
+      similarCard(ed),
     ];
+  }
+
+  // Sprawdzanie powtórek: draft porównany z postami bota z ostatnich dni (bez AI), ostrzeżenie w Telegramie
+  const SIMILAR_HELP = tr(
+    'Przed akceptacją panel porównuje draft z postami tego bota – bez AI i bez kosztów. Podobny draft dostaje w Telegramie „🔁 Podobny do posta z …” z linkiem.',
+  );
+  function similarCard(ed) {
+    const sm = ed.bot.similar || { enabled: true, days: 60, sensitivity: 'medium' };
+    const level = sm.sensitivity || 'medium';
+    return card(
+      cardHead(tr('Sprawdzanie powtórek'), SIMILAR_HELP),
+      h(
+        'div',
+        { class: 'stack' },
+        sw(
+          sm.enabled !== false,
+          (v) => ed.set('similar.enabled', v, true),
+          tr('Ostrzegaj o powtórkach'),
+          tr('Ta sama historia z innego źródła albo opisana przez AI innymi słowami. Porównywane są słowa, nie znaczenie.'),
+        ),
+        sm.enabled !== false
+          ? h(
+              'div',
+              { class: 'form-grid' },
+              field(
+                tr('Porównuj z postami z ostatnich'),
+                select(
+                  sm.days || 60,
+                  [
+                    [30, tr('30 dni')],
+                    [60, tr('60 dni')],
+                    [90, tr('90 dni')],
+                  ],
+                  (v) => ed.set('similar.days', Number(v)),
+                ),
+                tr('Także drafty czekające na akceptację (z ostatnich 7 dni).'),
+              ),
+              field(
+                tr('Czułość'),
+                segmented(
+                  level,
+                  [
+                    ['low', tr('Niska')],
+                    ['medium', tr('Średnia')],
+                    ['high', tr('Wysoka')],
+                  ],
+                  (v) => ed.set('similar.sensitivity', v, true),
+                ),
+                {
+                  low: tr('Tylko bardzo podobne posty, np. ten sam artykuł drugi raz.'),
+                  medium: tr('Zalecana: ta sama historia z innego źródła.'),
+                  high: tr('Wyłapie więcej, ale częściej ostrzeże przy stałych tematach (np. comiesięczne decyzje).'),
+                }[level],
+              ),
+            )
+          : null,
+        h('div', { class: 'muted small' }, tr('Postów tego bota w pamięci (ostatnie 90 dni): {0}.', ed.data.similarPosts || 0)),
+      ),
+    );
   }
 
   // ------------------------------------------------------------------ Konta
@@ -2346,15 +2468,58 @@
     const xReady = !!(st.global.x && st.global.x.clientId);
     const tsDate = (ms) => (ms ? fmtWhen(new Date(ms).toISOString()) : '—');
 
+    // Uprawnienia tokenu Meta i prawa na stronie (z chwili łączenia) – czy zadziała link w pierwszym komentarzu
+    function metaCommentRows(meta) {
+      const TASKS = {
+        MANAGE: tr('pełna kontrola'),
+        CREATE_CONTENT: tr('treść'),
+        MODERATE: tr('aktywność społeczności'),
+        MESSAGING: tr('wiadomości'),
+        ADVERTISE: tr('reklamy'),
+        ANALYZE: tr('statystyki'),
+      };
+      if (meta.scopes === undefined)
+        return [h('dt', null, tr('Link w komentarzu')), h('dd', null, tr('nie sprawdzono – wklej token i kliknij „Zapisz nowy token”'))];
+      // pages_manage_engagement działa tylko razem z pages_read_user_content (zależność uprawnień Meta)
+      const lacking = Array.isArray(meta.scopes)
+        ? ['pages_manage_engagement', 'pages_read_user_content'].filter((p) => !meta.scopes.includes(p))
+        : null;
+      const scope = lacking ? !lacking.length : null;
+      const moderate = Array.isArray(meta.tasks) ? meta.tasks.some((t) => t === 'MODERATE' || t === 'MANAGE') : null;
+      const missing = [
+        scope === false ? tr('uprawnienia w tokenie: {0}', lacking.join(', ')) : null,
+        moderate === false ? tr('prawo „Aktywność społeczności” (moderowanie) na stronie') : null,
+      ].filter(Boolean);
+      return [
+        h('dt', null, tr('Uprawnienia tokenu')),
+        h('dd', { class: 'small' }, Array.isArray(meta.scopes) ? meta.scopes.join(', ') || '—' : tr('Meta ich nie podała')),
+        h('dt', null, tr('Prawa na stronie')),
+        h('dd', null, Array.isArray(meta.tasks) ? meta.tasks.map((t) => TASKS[t] || t).join(', ') || '—' : tr('Meta ich nie podała')),
+        h('dt', null, tr('Link w komentarzu')),
+        h(
+          'dd',
+          null,
+          missing.length
+            ? h('span', { class: 'res bad' }, `✗ ${tr('brakuje: {0}', missing.join(' · '))}`)
+            : scope === null && moderate === null
+              ? tr('nie wiadomo (Meta nie podała uprawnień)')
+              : h('span', { class: 'res ok' }, `✓ ${tr('możliwy')}`),
+        ),
+      ];
+    }
+
     let metaPage = '';
     let metaToken = '';
     const metaPick = ed._metaPages;
     const connectMeta = (btn) =>
       busy(btn, async () => {
         try {
-          await api('POST', `/api/bots/${ed.id}/accounts/meta`, { pageId: metaPage, token: metaToken });
+          const r = await api('POST', `/api/bots/${ed.id}/accounts/meta`, { pageId: metaPage, token: metaToken });
           ed._metaPages = null;
-          toast(tr('Połączono stronę Facebook'));
+          // link w pierwszym komentarzu włączony, a tokenowi czegoś brakuje – od razu wiadomo, co poprawić w Meta
+          const missing = ed.bot.publishing.fbLinkComment ? r.commentProblems || [] : [];
+          if (missing.length) toast(tr('Połączono, ale link w komentarzu nie zadziała: {0}', missing.join(' · ')), 'warn', 15000);
+          else toast(tr('Połączono stronę Facebook'));
           await ed.reload();
         } catch (e) {
           if (e.status === 409 && e.data.pages) {
@@ -2402,6 +2567,7 @@
                 h('dd', null, `${acc.meta.pageName || '—'} (ID ${acc.meta.pageId})`),
                 h('dt', null, tr('Połączono')),
                 h('dd', null, fmtWhen(acc.meta.connectedAt)),
+                ...metaCommentRows(acc.meta),
               )
             : null,
           metaPick
@@ -2434,7 +2600,13 @@
           h(
             'ol',
             { class: 'steps' },
-            h('li', null, tr('developers.facebook.com → Twoja aplikacja → uprawnienia: pages_manage_posts, pages_read_engagement.')),
+            h(
+              'li',
+              null,
+              tr(
+                'developers.facebook.com → Twoja aplikacja → uprawnienia: pages_manage_posts, pages_read_engagement, a do linku w komentarzu także pages_manage_engagement i pages_read_user_content.',
+              ),
+            ),
             h('li', null, tr('Wygeneruj token (Graph API Explorer lub System User) i wklej powyżej – panel go sprawdzi.')),
           ),
         ),
@@ -2469,6 +2641,7 @@
       proCard('Bluesky', tr('Konto Bluesky i publikacja postów są w wersji PRO.')),
       proCard(tr('Kanał Telegram'), tr('Publikacja postów na kanale Telegram jest w wersji PRO.')),
       proCard('TikTok', tr('Konto TikTok i publikacja wideo są w wersji PRO.')),
+      proCard('Webhook', tr('Webhook (Discord, Slack, Make, Zapier, n8n) jest w wersji PRO.')),
     ];
   }
 
@@ -2951,6 +3124,7 @@
           ['bluesky', '🦋', 'Bluesky'],
           ['telegram', 'TG', tr('Kanał Telegram')],
           ['tiktok', 'TT', 'TikTok'],
+          ['webhook', 'WH', 'Webhook'],
         ].map(([k, short, name]) =>
           h(
             'a',
@@ -3228,7 +3402,7 @@
       const list = chosen();
       for (const b of list) {
         const o = st.out[b.id];
-        const empty = o ? platformsOf(b).filter((k) => !String(o.variants[k] || '').trim()) : [];
+        const empty = o ? withText(platformsOf(b)).filter((k) => !String(o.variants[k] || '').trim()) : [];
         if (empty.length) return toast(tr('Brak tekstu dla: {0}', (many() ? `${b.name}: ` : '') + names(empty)), 'warn');
       }
       if (st.image.source === 'upload' && !st.image.data) return toast(tr('Dodaj zdjęcie albo wybierz „Bez grafiki”'), 'warn');
@@ -3313,6 +3487,7 @@
           { class: 'row small muted' },
           h('span', { class: 'grow ellipsis' }, d.botName || '—'),
           d.mode === 'manual' ? h('span', { class: 'badge', title: tr('Własny post z panelu') }, '✍️') : null,
+          d.similar && d.similar.length ? h('span', { class: 'badge warn', title: tr('Podobny do wcześniejszego posta') }, '🔁') : null,
           h('span', { class: 'nowrap' }, fmtWhen(d.createdAt)),
         ),
       ),
@@ -3350,6 +3525,15 @@
           d.image
             ? h('img', { src: `/files/${encodeURIComponent(d.image)}`, alt: tr('grafika') })
             : h('div', { class: 'muted' }, tr('brak grafiki')),
+          d.image && d.imageSource === 'upload' ? h('div', { class: 'muted small' }, tr('📷 Twoje zdjęcie')) : null,
+          // draft czeka na akceptację: zdjęcie podmienisz w Telegramie (odpowiedź zdjęciem na draft)
+          d.status === 'draft'
+            ? h(
+                'div',
+                { class: 'muted small' },
+                tr('Inne zdjęcie? Odpowiedz na draft w Telegramie swoim zdjęciem – podmienię je przed ✅.'),
+              )
+            : null,
           h(
             'div',
             { class: 'row wrap' },
@@ -3371,9 +3555,26 @@
           'div',
           { class: 'stack' },
           d.whySelected ? alertBox('info', d.whySelected) : null,
+          // sprawdzanie powtórek: podobne wcześniejsze posty bota (link do posta albo – draft bez decyzji – sam tytuł)
+          d.similar && d.similar.length
+            ? alertBox(
+                'warn',
+                tr('🔁 Możliwa powtórka'),
+                d.similar.map((m) => [
+                  m.status === 'draft'
+                    ? tr('Podobny do draftu z {0} (czeka na akceptację): „{1}”', fmtWhen(m.at), m.title)
+                    : tr('Podobny do posta z {0}: „{1}”', fmtWhen(m.at), m.title),
+                  m.link ? [' · ', h('a', { href: m.link, target: '_blank', rel: 'noopener' }, tr('zobacz post'))] : null,
+                ]),
+              )
+            : null,
           manual ? block(tr('Twój tekst'), d.composeText) : null,
           // post z linkiem: na X poszedł wariant z adresem artykułu
           chosen('x') ? block('X', d.linkMode && d.post_x_link ? d.post_x_link : d.post_x) : null,
+          // X ręcznie przez link: oficjalny link X z gotowym tekstem i linkiem – publikujesz sam
+          chosen('x') && isXIntent(d.xIntent)
+            ? h('div', null, h('a', { class: 'btn sm', href: d.xIntent, target: '_blank', rel: 'noopener' }, tr('📝 Otwórz na X')))
+            : null,
           chosen('facebook') ? block(fbLabel, d.post_fb_insta) : null,
           block(tr('Skrypt TikTok'), d.script_tiktok),
         ),
