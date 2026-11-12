@@ -5,7 +5,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
-const { readJsonSafe, writeJsonAtomic, HttpError } = require('./util');
+const { readJsonSafe, writeJsonAtomic, HttpError, withLock } = require('./util');
 const { isPublicAddress } = require('./net');
 const { tr, trBoth } = require('./i18n');
 
@@ -155,6 +155,26 @@ class Auth {
     }
     // wygasłe wpisy znikają – mapa nie rośnie bez końca
     if (this.failures.size > 1000) for (const [k, f] of this.failures) if (f.until < now) this.failures.delete(k);
+  }
+
+  // Jedna próba hasła (logowanie, obecne hasło przy zmianie). Próba liczy się PRZED sprawdzeniem: zapytania wysłane
+  // naraz nie miną limitu, zanim zapisze się pierwszy błąd (scrypt trwa kilkadziesiąt ms), a udana oddaje swój punkt.
+  // Hasła sprawdzamy pojedynczo – seria zapytań nie zajmie puli wątków Node.js, z której korzysta też DNS połączeń
+  // wychodzących panelu. check() zwraca true, gdy hasło jest poprawne.
+  async attempt(key, check) {
+    this.checkRate(key);
+    this.fail(key);
+    const ok = await withLock(`auth:${this.file}`, check);
+    if (ok) this.forgive(key);
+    return ok;
+  }
+  forgive(key) {
+    for (const k of [key, ALL]) {
+      const f = this.failures.get(k);
+      if (!f) continue;
+      if (f.count > 1) f.count--;
+      else this.failures.delete(k);
+    }
   }
 
   // „Wyloguj na wszystkich urządzeniach”: nowy sekret sesji – każde wydane ciasteczko (np. na zgubionym telefonie)

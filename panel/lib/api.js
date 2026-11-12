@@ -63,10 +63,8 @@ function createApi(ctx) {
     'POST',
     '/api/login',
     async (req, res, p, body) => {
-      const client = auth.clientKey(req);
-      auth.checkRate(client);
-      if (!(await auth.verify(body.password))) {
-        auth.fail(client);
+      // limit prób liczy auth.attempt – także dla zapytań wysłanych naraz
+      if (!(await auth.attempt(auth.clientKey(req), () => auth.verify(body.password)))) {
         throw new HttpError(401, tr('Nieprawidłowe hasło'));
       }
       res.setHeader('set-cookie', auth.createCookie(req));
@@ -90,10 +88,7 @@ function createApi(ctx) {
   );
   route('POST', '/api/password', async (req, res, p, body) => {
     // limit prób także tutaj: z przejętą sesją (ciasteczkiem) nie da się zgadywać obecnego hasła
-    const client = auth.clientKey(req);
-    auth.checkRate(client);
-    if (!(await auth.verify(body.current))) {
-      auth.fail(client);
+    if (!(await auth.attempt(auth.clientKey(req), () => auth.verify(body.current)))) {
       throw new HttpError(400, tr('Obecne hasło jest nieprawidłowe'));
     }
     await auth.setPassword(body.password);
@@ -265,7 +260,22 @@ function createApi(ctx) {
     },
   });
   route('GET', '/api/settings', async () => settingsView());
+  // Serwer (origin) adresu API każdego dostawcy tekstu zgodnego z OpenAI – '' bez adresu
+  const providerOrigins = () =>
+    Object.fromEntries(
+      Object.entries(TEXT_PROVIDERS)
+        .filter(([, pr]) => pr.secret)
+        .map(([id, pr]) => {
+          const base = ((store.global.ai.providers || {})[id] || {}).baseUrl || pr.defaultBase || '';
+          try {
+            return [id, new URL(base).origin];
+          } catch (e) {
+            return [id, ''];
+          }
+        }),
+    );
   route('PUT', '/api/settings', async (req, res, p, body) => {
+    const originsBefore = providerOrigins();
     if (body.global) store.updateGlobal(body.global);
     const secrets = body.secrets || {};
     let changed = false;
@@ -280,8 +290,21 @@ function createApi(ctx) {
       modelsCache.clear();
       if (k === 'telegramBotToken') telegram.restart();
     }
+    // Klucz dostawcy jest zapisany dla jednego serwera: po zmianie adresu API na inny serwer panel wysłałby go tam
+    // przy pierwszym zapytaniu (np. „Zapisz i sprawdź”) – kto ma sesję panelu, odczytałby tak klucz, którego
+    // przeglądarka nie widzi. Bez nowego klucza w tym samym zapisie stary znika i trzeba wpisać go ponownie.
+    const keysCleared = [];
+    const originsAfter = providerOrigins();
+    for (const [id, pr] of Object.entries(TEXT_PROVIDERS)) {
+      if (!pr.secret || originsAfter[id] === originsBefore[id] || !store.secrets.global[pr.secret]) continue;
+      if (secrets[pr.secret] !== undefined && secrets[pr.secret] !== null && String(secrets[pr.secret]).trim()) continue;
+      delete store.secrets.global[pr.secret];
+      keysCleared.push(pr.label);
+      changed = true;
+      modelsCache.clear();
+    }
     if (changed) store.saveSecrets();
-    return settingsView();
+    return { ...settingsView(), keysCleared };
   });
 
   // ------------------------------------------------------------------ licencja PRO: klucz z panelu

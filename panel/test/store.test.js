@@ -107,3 +107,38 @@ test('pamięć duplikatów: plik czytany raz (potem z pamięci), zmiany zapisane
   assert.equal(store.dedupCount(bot.id), 0);
   assert.equal(store.dedupFilter(bot.id, [{ id: 'a' }]).length, 1);
 });
+
+test('ustawienia o złym typie (napis, liczba albo lista zamiast grupy pól): błąd 400 z nazwą pola, bez zmian w konfiguracji', () => {
+  const store = new Store(tmpDir());
+  const bot = store.addBot({ name: 'Test' });
+  const before = JSON.stringify(store.config);
+  for (const [field, value] of [
+    ['sources', 'abc'],
+    ['content', 5],
+    ['schedule', 'x'],
+    ['publishing', ['x']],
+  ]) {
+    assert.throws(
+      () => store.updateBot(bot.id, { [field]: value }),
+      (e) => e.status === 400 && e.message.includes(`„${field}”`),
+      field,
+    );
+  }
+  for (const [field, value] of [
+    ['telegram', 'x'],
+    ['ai', 'y'],
+    ['x', 7],
+    ['files', [30]],
+  ]) {
+    assert.throws(
+      () => store.updateGlobal({ [field]: value }),
+      (e) => e.status === 400 && e.message.includes(`„${field}”`),
+      field,
+    );
+  }
+  assert.equal(JSON.stringify(store.config), before);
+  // null i brak pola to „bez zmian”, nieznane pola są pomijane, zagnieżdżony zły typ nie kończy się błędem serwera
+  assert.equal(store.updateBot(bot.id, { sources: null, schedule: undefined, nieznane: 'x' }).name, 'Test');
+  assert.equal(store.updateGlobal({ ai: { providers: 'x' }, nieznane: 1 }).ai.providers.custom.baseUrl, '');
+  assert.equal(store.updateGlobal({ ai: { providers: { custom: 'x' } } }).ai.providers.custom.baseUrl, '');
+});

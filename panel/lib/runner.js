@@ -248,7 +248,10 @@ class Runner {
 
   async tick() {
     const now = new Date();
-    this.lastTickAt = now.getTime(); // stan harmonogramu dla /healthz
+    // stan harmonogramu dla /healthz: znak życia na początku taktu i po każdym bocie – takt, który przy wolnym n8n
+    // czeka kolejno na kilka botów (do 30 s na każdego), nie wygląda jak zatrzymany harmonogram
+    const alive = () => (this.lastTickAt = Date.now());
+    alive();
     for (const bot of [...this.store.bots]) {
       if (bot.paused) continue;
       const slot = dueSlot(bot.schedule, now, undefined, bot.id);
@@ -268,6 +271,7 @@ class Runner {
           bot,
         );
       }
+      alive();
     }
     this.sweep();
   }

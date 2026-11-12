@@ -261,6 +261,17 @@ class Telegram {
     return this.allowedChats().has(String(chatId)) && (!admins.length || admins.includes(String(from && from.id)));
   }
 
+  // Draft należy do tego czatu: to czat draftów jego bota (własny czat bota albo czat z Ustawień) albo wiadomość, której
+  // dotyczy kliknięcie, jest zapamiętaną wiadomością tego draftu (zdarzenie „draft” z n8n – także po zmianie czatu
+  // bota). Przy kilku botach z osobnymi czatami osoba z czatu jednego bota nie zatwierdzi, nie odrzuci ani nie zmieni
+  // zdjęcia draftu innego bota spreparowanym kliknięciem z jego ID (klient Telegrama może wysłać dowolne callback_data).
+  ownsDraft(draft, draftId, chatId, messageId) {
+    if (this.draftOfMessage(chatId, messageId) === draftId) return true;
+    const bot = draft && draft.botId ? this.store.bot(draft.botId) : this.store.bots[0];
+    const home = String((bot && bot.telegram.chatId) || this.store.global.telegram.chatId || '');
+    return !!home && home === String(chatId);
+  }
+
   async handle(u) {
     if (u.my_chat_member) this.rememberChat(u.my_chat_member.chat);
     if (u.message) {
@@ -320,6 +331,10 @@ class Telegram {
 
     const draft = this.readDraft(draftId);
     if (!draft) return answer(tr('Nie znaleziono draftu na dysku'));
+    if (!this.ownsDraft(draft, draftId, ctx.chatId, ctx.messageId)) {
+      console.log(tr('Pominięto kliknięcie draftu z czatu innego bota'), draftId, cq.from && cq.from.id);
+      return answer(tr('⛔ Brak uprawnień'));
+    }
     // publikacja tego draftu już trwa (podwójne tapnięcie, dwóch administratorów): bez drugiej publikacji i bez
     // zmiany przycisków – pierwsze kliknięcie pokazuje „⏳ Publikuję…”, a wynik przyjdzie w raporcie
     if (this.isPublishing && this.isPublishing(draftId))

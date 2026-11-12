@@ -7,6 +7,26 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.5.1 – 2026-11-12
+
+- **Bezpieczeństwo logowania:** limit nieudanych prób hasła (8 z jednego adresu, 40 łącznie w 15 minut) działa także dla
+  prób wysłanych naraz – wcześniej seria równoległych zapytań mijała limit, zanim zapisał się pierwszy błąd. Hasła są
+  sprawdzane pojedynczo, więc taka seria nie spowalnia już reszty panelu.
+- **Wroga strona nie zatrzyma panelu:** strona artykułu z linku w kanale (albo adres wpisany w „Sprawdź” przy źródle)
+  z tysiącami niezamkniętych znaczników potrafiła zatrzymać cały panel na ponad minutę – harmonogram, kliknięcia
+  w Telegramie i `/healthz`. Panel czyta teraz znaczniki strony i wpisy kanału w czasie proporcjonalnym do rozmiaru
+  treści.
+- **Klucz dostawcy AI zostaje przy swoim adresie:** zmiana *Adresu API* dostawcy tekstu na inny serwer usuwa zapisany
+  klucz tego dostawcy – wpisz klucz ponownie albo podaj go razem z nowym adresem (panel o tym przypomina). Wcześniej
+  zapisany klucz poszedłby pod nowy adres przy pierwszym zapytaniu. Zmiana samej ścieżki na tym samym serwerze niczego
+  nie usuwa.
+- **Odporność panelu:** błąd odczytu pliku draftu (np. uszkodzony dysk) nie kończy już pracy panelu, ustawienia wysłane
+  w złym kształcie dają czytelny błąd zamiast błędu serwera, błędy zadań w tle trafiają do logów, a `/healthz` nie
+  zgłasza zatrzymanego harmonogramu, gdy panel czeka na wolne n8n.
+- **Drobne utwardzenia:** katalog `data/n8n` (baza n8n) jest dostępny tylko dla właściciela, jak `data/panel` – jeśli
+  kopiujesz go z innego konta NAS-a, rób to przez `sudo`. Obraz panelu nie zawiera npm, panel odrzuca obrazy większe
+  niż 120 Mpx, zanim ffmpeg zacznie je dekodować, a odpowiedzi API mają nagłówek `nosniff`.
+
 ## 1.5.0 – 2026-11-09
 
 - **X bez płatnego API – ręcznie przez link:** w *Bot → Publikacja → X* wybierasz „Przez API (automatycznie)” albo

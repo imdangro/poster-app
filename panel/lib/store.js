@@ -102,13 +102,24 @@ const modelName = (v, def) => {
   // Gemini: gemini-3.8-flash · OpenRouter: meta-llama/llama-3.3-70b-instruct:free · Ollama: llama3.1:8b
   return /^[A-Za-z0-9@][A-Za-z0-9@._:\/\-]*$/.test(s) ? s : def;
 };
+const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+// Grupa pól z zapytania (sources, schedule, telegram…): obiekt, a bez niej – pusty obiekt („bez zmian”). Inny typ
+// (napis, liczba, lista) to błąd zapytania dopisany do `errors` – operator „in” na napisie kończyłby je błędem serwera.
+const groupOf = (input, errors) => (name) => {
+  const v = input[name];
+  if (v === undefined || v === null) return {};
+  if (typeof v === 'object' && !Array.isArray(v)) return v;
+  errors.push(tr('Niepoprawne dane w polu „{0}”', name));
+  return {};
+};
 const isHttpUrl = (s) => /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(s);
 const chatIdOk = (s) => s === '' || /^-?\d{1,20}$/.test(s) || /^@[A-Za-z0-9_]{4,64}$/.test(s);
 
 function sanitizeBot(input, existing) {
   const b = JSON.parse(JSON.stringify(existing));
-  const i = input || {};
+  const i = obj(input);
   const errors = [];
+  const group = groupOf(i, errors);
 
   if ('name' in i) {
     const name = str(i.name, 60);
@@ -120,7 +131,7 @@ function sanitizeBot(input, existing) {
   if ('language' in i) b.language = str(i.language, 40, defaultPostLanguage());
   if ('instructions' in i) b.instructions = str(i.instructions, 3000);
 
-  const s = i.sources || {};
+  const s = group('sources');
   if (Array.isArray(s.rss)) {
     const rss = [];
     for (const f of s.rss.slice(0, 60)) {
@@ -157,13 +168,13 @@ function sanitizeBot(input, existing) {
   if ('maxAgeHours' in s) b.sources.maxAgeHours = int(s.maxAgeHours, 1, 168, 12);
   if ('maxCandidates' in s) b.sources.maxCandidates = int(s.maxCandidates, 3, 60, 25);
 
-  const c = i.content || {};
+  const c = group('content');
   if ('textProvider' in c) b.content.textProvider = oneOf(c.textProvider, TEXT_PROVIDER_IDS, 'gemini');
   if ('textModel' in c) b.content.textModel = modelName(c.textModel, b.content.textProvider === 'gemini' ? DEFAULTS.textModel : '');
   if ('thinking' in c) b.content.thinking = oneOf(c.thinking, ['low', 'default'], 'low');
   if ('imageMode' in c) b.content.imageMode = oneOf(c.imageMode, IMAGE_MODES, 'source');
 
-  const sc = i.schedule || {};
+  const sc = group('schedule');
   if ('mode' in sc) b.schedule.mode = oneOf(sc.mode, ['interval', 'hours'], 'interval');
   if ('every' in sc) b.schedule.every = INTERVALS.includes(Number(sc.every)) ? Number(sc.every) : 4;
   if ('from' in sc) b.schedule.from = int(sc.from, 0, 23, 8);
@@ -176,13 +187,13 @@ function sanitizeBot(input, existing) {
   if (b.schedule.mode === 'hours' && !b.schedule.hours.length) errors.push(tr('Wybierz co najmniej jedną godzinę uruchomienia'));
   if (!b.schedule.days.length) errors.push(tr('Wybierz co najmniej jeden dzień tygodnia'));
 
-  const p = i.publishing || {};
+  const p = group('publishing');
   const flags = ['x', 'facebook'];
   for (const k of flags) if (k in p) b.publishing[k] = bool(p[k]);
   if ('xMode' in p) b.publishing.xMode = oneOf(p.xMode, ['api', 'link'], 'api');
   if ('fbLinkComment' in p) b.publishing.fbLinkComment = bool(p.fbLinkComment);
 
-  const sm = i.similar && typeof i.similar === 'object' ? i.similar : {};
+  const sm = obj(i.similar); // zły format = bez zmian (jak dotąd)
   if ('enabled' in sm) b.similar.enabled = bool(sm.enabled, true);
   if ('days' in sm) b.similar.days = [30, 60, 90].includes(Number(sm.days)) ? Number(sm.days) : 60;
   if ('sensitivity' in sm) b.similar.sensitivity = oneOf(sm.sensitivity, ['low', 'medium', 'high'], 'medium');
@@ -195,8 +206,10 @@ function sanitizeBot(input, existing) {
 
 function sanitizeGlobal(input, existing) {
   const g = JSON.parse(JSON.stringify(existing));
-  const i = input || {};
   const errors = [];
+  // znane grupy ustawień (ui, telegram, ai…) po sprawdzeniu typu; nieznane pola są pomijane jak dotąd
+  const group = groupOf(obj(input), errors);
+  const i = Object.fromEntries(Object.keys(defaultGlobal()).map((k) => [k, group(k)]));
   if (i.ui && 'language' in i.ui) g.ui.language = oneOf(i.ui.language, ['', ...LANGUAGES], g.ui.language);
   if (i.telegram) {
     if ('chatId' in i.telegram) {
@@ -243,7 +256,7 @@ function sanitizeGlobal(input, existing) {
       return u;
     };
     for (const id of Object.keys(defaultAi().providers)) {
-      if (a.providers && a.providers[id] && 'baseUrl' in a.providers[id]) {
+      if ('baseUrl' in obj(obj(a.providers)[id])) {
         const u = url(a.providers[id].baseUrl, id);
         if (u !== null) g.ai.providers[id] = { ...g.ai.providers[id], baseUrl: u };
       }

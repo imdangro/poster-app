@@ -5,6 +5,7 @@ const { PROJECT_URL, readLimited } = require('./util');
 const { sniffImage, imageSize } = require('./media');
 const { convertWebp } = require('./ffmpeg');
 const { fetchUntrusted } = require('./net');
+const { tagsOf, elementsOf } = require('./html');
 const { tr } = require('./i18n');
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // limit X dla zdjęć
@@ -137,21 +138,34 @@ async function pageMeta(pageUrl, { trust = [] } = {}) {
     if (/<\/head>/i.test(html)) break;
   }
   reader.cancel().catch(() => {});
-  const base = res.url || pageUrl;
+  return parseMeta(html, res.url || pageUrl);
+}
+
+// Znaczniki z początku strony → { title, description, images }. Strona jest cudza, więc znaczniki czyta tagsOf
+// (lib/html.js) – w czasie liniowym także wtedy, gdy strona ma tysiące „<meta ” bez zamknięcia.
+function parseMeta(html, base) {
   const out = [];
-  const metaRe = /<meta\b[^>]*>/gi;
   const wanted = ['og:image:secure_url', 'og:image:url', 'og:image', 'twitter:image', 'twitter:image:src'];
   const text = ['og:title', 'twitter:title', 'og:description', 'twitter:description', 'description'];
   const found = {};
-  for (const tag of html.match(metaRe) || []) {
+  for (const tag of tagsOf(html, 'meta')) {
     const key = (attr(tag, 'property') || attr(tag, 'name') || '').toLowerCase();
     const content = attr(tag, 'content');
     if ((wanted.includes(key) || text.includes(key)) && content && !found[key]) found[key] = content;
   }
   for (const k of wanted) if (found[k]) out.push(found[k]);
-  const link = (html.match(/<link\b[^>]*rel=["']image_src["'][^>]*>/i) || [])[0];
-  if (link && attr(link, 'href')) out.push(attr(link, 'href'));
-  const title = (html.match(/<title\b[^>]*>([^<]*)<\/title>/i) || [])[1] || '';
+  for (const tag of tagsOf(html, 'link')) {
+    if (attr(tag, 'rel').trim().toLowerCase() !== 'image_src') continue;
+    if (attr(tag, 'href')) out.push(attr(tag, 'href'));
+    break;
+  }
+  // pierwszy <title> z samym tekstem w środku (tytuł strony)
+  let title = '';
+  for (const el of elementsOf(html, ['title'])) {
+    if (el.inner.includes('<')) continue;
+    title = el.inner;
+    break;
+  }
   const clean = (s) => decodeEntities(s).replace(/\s+/g, ' ').trim();
   return {
     title: clean(found['og:title'] || found['twitter:title'] || title).slice(0, 300),

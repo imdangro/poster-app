@@ -18,10 +18,20 @@ const release = () => {
   else running--;
 };
 
+// Największy obraz, jaki ffmpeg zdekoduje: FFMPEG_MAX_PIXELS, domyślnie 120 Mpx (zdjęcia z aparatów 108 Mpx się
+// mieszczą). Plik z cudzego kanału może mieć kilka MB, a w nagłówku np. 30000 × 30000 px – jego dekodowanie zajęłoby
+// kilka GB pamięci kontenera panelu. Większy obraz ffmpeg odrzuca błędem, zanim przydzieli pamięć.
+const maxPixels = () => Math.max(1, parseInt(process.env.FFMPEG_MAX_PIXELS, 10) || 120 * 1000 * 1000);
+// opcja dekodera musi stać przed plikiem wejściowym (pierwsze „-i”)
+function withPixelLimit(args) {
+  const i = args.indexOf('-i');
+  return i < 0 ? args : [...args.slice(0, i), '-max_pixels', String(maxPixels()), ...args.slice(i)];
+}
+
 async function ffmpeg(args, timeout) {
   await slot();
   try {
-    return await run(args, timeout);
+    return await run(withPixelLimit(args), timeout);
   } finally {
     release();
   }

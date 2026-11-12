@@ -2,7 +2,8 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
-const { readLimited, safeEqual, mask } = require('../lib/util');
+const { Readable } = require('stream');
+const { readLimited, safeEqual, mask, fetchJson, readJsonBody, periodic } = require('../lib/util');
 
 let srv;
 let base;
@@ -53,4 +54,47 @@ test('safeEqual i mask', () => {
   assert.equal(safeEqual(undefined, 'x'), false);
   assert.equal(mask('sekretnyklucz'), '••••lucz');
   assert.equal(mask(''), '');
+});
+
+test('fetchJson: odpowiedź większa niż limit to błąd „nie wiadomo” zamiast megabajtów w pamięci panelu', async () => {
+  const e = await fetchJson(`${base}/chunked`, { maxBytes: 1024 * 1024 }).catch((x) => x);
+  assert.equal(e.status, 502);
+  assert.match(e.message, /jest za duża \(ponad 1 MB\)/);
+  assert.equal(e.noAnswer, true, 'zapytanie dotarło do serwera');
+  const ok = await fetchJson(`${base}/small`, { maxBytes: 1024 * 1024 });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.text.length, 3000);
+});
+
+test('readJsonBody: treść zapytania to obiekt – null, liczba, napis i lista dają błąd 400', async () => {
+  const body = (text) => readJsonBody(Readable.from([Buffer.from(text)]));
+  assert.deepEqual(await body('{"a":1}'), { a: 1 });
+  assert.deepEqual(await readJsonBody(Readable.from([])), {});
+  for (const bad of ['null', '5', '"abc"', '[1,2]', '{zle']) {
+    await assert.rejects(body(bad), (e) => e.status === 400, bad);
+  }
+});
+
+test('periodic: błąd zadania trafia do logów, a kolejne takty idą dalej', async () => {
+  const errors = [];
+  const original = console.error;
+  console.error = (...a) => errors.push(a);
+  let runs = 0;
+  const job = periodic(
+    async () => {
+      runs++;
+      throw new Error('awaria zadania');
+    },
+    20,
+    1,
+  );
+  try {
+    await new Promise((r) => setTimeout(r, 120));
+  } finally {
+    await job.stop();
+    console.error = original;
+  }
+  assert.ok(runs >= 2, `takty: ${runs}`);
+  assert.equal(errors.length, runs);
+  assert.equal(errors[0][1].message, 'awaria zadania');
 });

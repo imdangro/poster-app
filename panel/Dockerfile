@@ -8,6 +8,10 @@ ENV NODE_ENV=production
 # Alpine), zamiast cicho zbudować panel, który pominie zdjęcia WebP
 RUN for i in 1 2 3; do apk add --no-cache ffmpeg && exit 0; sleep 5; done; \
   echo 'Nie udało się zainstalować ffmpeg (apk) – sprawdź połączenie NAS-a z internetem i ponów aktualizację' >&2; exit 1
+# Panel nie ma zależności npm – menedżery pakietów z obrazu Node.js są zbędne, a przejętemu procesowi ułatwiałyby
+# pobranie i uruchomienie cudzego kodu
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+  /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 WORKDIR /app
 # Kod należy do roota i jest tylko do odczytu dla procesu panelu (USER node): przejęty proces nie podmieni programu.
 COPY . .

@@ -227,6 +227,7 @@ module.exports = {
   '👋 To jest bot <b>Poster</b>.\nID tego czatu: <code>{0}</code>\nWpisz je w panelu: <b>Ustawienia → Telegram → ID czatu</b> (albo kliknij „Wykryj”).':
     "👋 This is the <b>Poster</b> bot.\nThis chat's ID: <code>{0}</code>\nEnter it in the panel: <b>Settings → Telegram → Chat ID</b> (or click “Detect”).",
   'Pominięto kliknięcie spoza dozwolonego czatu/użytkownika': 'Ignored a click from a chat/user that is not allowed',
+  'Pominięto kliknięcie draftu z czatu innego bota': "Ignored a click on a draft from another bot's chat",
   '⛔ Brak uprawnień': '⛔ Not allowed',
   'Nie znaleziono draftu na dysku': 'Draft not found on disk',
   '⏳ Ten draft właśnie się publikuje – wynik przyjdzie w raporcie':
@@ -247,6 +248,10 @@ module.exports = {
     'The file {0} was damaged – starting with empty data, and the damaged file was saved as {1}',
   'Zbyt duże zapytanie': 'Request too large',
   'Niepoprawny JSON w zapytaniu': 'Invalid JSON in the request',
+  'Niepoprawne dane w polu „{0}”': 'Invalid data in the field “{0}”',
+  'Odpowiedź od {0} jest za duża (ponad {1} MB)': 'The response from {0} is too large (over {1} MB)',
+  'Zadanie cykliczne:': 'Periodic task:',
+  'Nie udało się wysłać pliku {0}: {1}': 'Could not send the file {0}: {1}',
   'przekroczono czas ({0} s)': 'timed out ({0} s)',
   'Brak połączenia z {0}: {1}': 'No connection to {0}: {1}',
   'brak ID aktywacji w odpowiedzi Polara': 'no activation ID in the Polar response',
@@ -308,6 +313,8 @@ module.exports = {
   'link w komentarzu na Facebooku nie zadziała: {0}': 'the link comment on Facebook will not work: {0}',
   '🔁 podobny do wcześniejszego posta': '🔁 similar to an earlier post',
   'Wyślij zdjęcie jako zdjęcie albo plik JPG, PNG lub WebP': 'Send the photo as a photo or as a JPG, PNG or WebP file',
+  '⛔ Ten draft należy do innego czatu – zdjęcie podmienisz w czacie jego bota.':
+    "⛔ This draft belongs to another chat – replace the photo in its bot's chat.",
   '⛔ Zdjęcie w drafcie podmieni tylko osoba, która może zatwierdzać drafty (Ustawienia → Telegram → ID administratorów).':
     '⛔ Only a person who can approve drafts can replace the photo in a draft (Settings → Telegram → Admin IDs).',
   '❗ Zdjęcie może mieć najwyżej 20 MB': '❗ The photo can be at most 20 MB',

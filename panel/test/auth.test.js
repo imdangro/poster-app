@@ -113,6 +113,32 @@ test('limit prób: po 8 nieudanych kolejna próba zablokowana', () => {
   assert.doesNotThrow(() => auth.checkRate('10.0.0.2'));
 });
 
+test('limit prób: zapytania wysłane naraz nie mijają limitu, a poprawne hasło go nie zużywa', async () => {
+  const auth = new Auth(tmpDir(), { log: quiet });
+  await auth.setPassword('dobrehaslo123');
+  // 30 prób naraz: licznik rośnie przed sprawdzeniem hasła, więc tylko 8 dochodzi do scrypt
+  let checked = 0;
+  const tries = await Promise.allSettled(
+    Array.from({ length: 30 }, (_, i) =>
+      auth.attempt('10.0.0.1', () => {
+        checked++;
+        return auth.verify(`zlehaslo${i}`);
+      }),
+    ),
+  );
+  assert.equal(tries.filter((t) => t.status === 'fulfilled' && t.value === false).length, 8);
+  assert.equal(tries.filter((t) => t.status === 'rejected' && t.reason.status === 429).length, 22);
+  assert.equal(checked, 8);
+  await assert.rejects(
+    auth.attempt('10.0.0.1', () => auth.verify('dobrehaslo123')),
+    (e) => e.status === 429,
+  );
+  // udane logowania (inny adres) nie liczą się do limitu – ani tego adresu, ani wspólnego
+  for (let i = 0; i < 50; i++) assert.equal(await auth.attempt('10.0.0.2', () => auth.verify('dobrehaslo123')), true);
+  assert.equal(auth.failures.has('10.0.0.2'), false);
+  assert.equal(auth.failures.get('*').count, 8);
+});
+
 test('limit prób: wspólny dla wszystkich adresów (podrobione X-Forwarded-For), adres klienta za proxy w sieci lokalnej', () => {
   const auth = new Auth(tmpDir(), { log: quiet });
   // 40 nieudanych prób z różnych adresów – potem blokada dla wszystkich (na 15 min)

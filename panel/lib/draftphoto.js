@@ -85,6 +85,11 @@ class DraftPhoto {
         tr('⛔ Zdjęcie w drafcie podmieni tylko osoba, która może zatwierdzać drafty (Ustawienia → Telegram → ID administratorów).'),
       );
     }
+    // draft innego bota (osobny czat) – zdjęcie podmienia się tylko w czacie draftów jego bota
+    const target = this.telegram.readDraft(draftId);
+    if (target && !this.telegram.ownsDraft(target, draftId, chatId, msg.reply_to_message.message_id)) {
+      return reply(tr('⛔ Ten draft należy do innego czatu – zdjęcie podmienisz w czacie jego bota.'));
+    }
     // album: tylko pierwsze zdjęcie (każde przychodzi jako osobna wiadomość)
     if (msg.media_group_id) {
       const now = Date.now();

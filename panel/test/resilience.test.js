@@ -217,3 +217,86 @@ test('ffmpeg: najwyżej 2 procesy naraz, kolejne czekają w kolejce', async () =
     else process.env.FFMPEG_PATH = saved;
   }
 });
+
+test('ffmpeg: limit pikseli dekodowanego obrazu stoi przed plikiem wejściowym (domyślnie 120 Mpx, FFMPEG_MAX_PIXELS)', async () => {
+  const dir = tmpDir();
+  const log = path.join(dir, 'log');
+  const fake = path.join(dir, 'ffmpeg');
+  fs.writeFileSync(fake, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\n`, { mode: 0o755 });
+  const saved = { path: process.env.FFMPEG_PATH, max: process.env.FFMPEG_MAX_PIXELS };
+  process.env.FFMPEG_PATH = fake;
+  delete process.env.FFMPEG_MAX_PIXELS;
+  try {
+    const { ffmpeg } = require('../lib/ffmpeg');
+    await ffmpeg(['-y', '-i', 'in.png', '-frames:v', '1', 'out.jpg'], 10000);
+    process.env.FFMPEG_MAX_PIXELS = '5000000';
+    await ffmpeg(['-y', '-loglevel', 'error', '-i', 'in.png', 'out.jpg'], 10000);
+    assert.deepEqual(fs.readFileSync(log, 'utf8').trim().split('\n'), [
+      '-y -max_pixels 120000000 -i in.png -frames:v 1 out.jpg',
+      '-y -loglevel error -max_pixels 5000000 -i in.png out.jpg',
+    ]);
+  } finally {
+    for (const [k, v] of [
+      ['FFMPEG_PATH', saved.path],
+      ['FFMPEG_MAX_PIXELS', saved.max],
+    ]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+let realFfmpeg = true;
+try {
+  require('child_process').execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+} catch (e) {
+  realFfmpeg = false;
+}
+test(
+  'ffmpeg: obraz większy niż limit pikseli jest odrzucany zamiast zająć pamięć panelu',
+  { skip: !realFfmpeg && 'brak ffmpeg' },
+  async () => {
+    const { execFileSync } = require('child_process');
+    const { fitJpeg } = require('../lib/ffmpeg');
+    const dir = tmpDir();
+    const make = (name) => {
+      const file = path.join(dir, name);
+      execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=s=1200x1000', '-frames:v', '1', file]);
+      return { buffer: fs.readFileSync(file), width: 1200, height: 1000 };
+    };
+    const saved = process.env.FFMPEG_MAX_PIXELS;
+    try {
+      for (const name of ['a.jpg', 'a.png']) {
+        const img = make(name);
+        process.env.FFMPEG_MAX_PIXELS = '1000000'; // obraz ma 1,2 Mpx
+        await assert.rejects(fitJpeg(img, { maxSide: 600 }), name);
+        process.env.FFMPEG_MAX_PIXELS = '2000000';
+        assert.equal((await fitJpeg(img, { maxSide: 600 })).width, 600, name);
+      }
+    } finally {
+      if (saved === undefined) delete process.env.FFMPEG_MAX_PIXELS;
+      else process.env.FFMPEG_MAX_PIXELS = saved;
+    }
+  },
+);
+
+test('harmonogram: znak życia dla /healthz także w trakcie taktu, który czeka na wolne n8n', async () => {
+  const store = new Store(tmpDir());
+  const bot = store.addBot({ name: 'Wolne n8n' });
+  const now = new Date();
+  // termin „teraz”: bot jest do uruchomienia w tym takcie
+  store.updateBot(bot.id, {
+    paused: false,
+    schedule: { mode: 'hours', hours: [now.getHours()], minute: now.getMinutes(), jitter: 0, days: [1, 2, 3, 4, 5, 6, 7] },
+  });
+  const runner = new Runner(store, {});
+  let started = 0;
+  runner.start = async () => {
+    started++;
+    await new Promise((r) => setTimeout(r, 80)); // n8n odpowiada wolno
+  };
+  const t0 = Date.now();
+  await runner.tick();
+  assert.equal(started, 1);
+  assert.ok(runner.lastTickAt - t0 >= 70, `znak życia po starcie bota, a nie tylko na początku taktu (${runner.lastTickAt - t0} ms)`);
+});

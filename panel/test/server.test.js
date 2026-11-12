@@ -147,6 +147,8 @@ test('strona panelu ma nagłówki bezpieczeństwa', async () => {
   assert.match(r.headers.get('content-security-policy'), /default-src 'self'/);
   assert.equal(r.headers.get('x-frame-options'), 'DENY');
   assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
+  // odpowiedzi API (JSON) też bez zgadywania typu przez przeglądarkę
+  assert.equal((await fetch(url('/api/session'))).headers.get('x-content-type-options'), 'nosniff');
 });
 
 test('sesja przed konfiguracją: potrzebne hasło, wersja i link do kodu', async () => {
@@ -376,6 +378,36 @@ test('pliki draftów tylko po zalogowaniu i bez wychodzenia poza katalog', async
   assert.equal((await fetch(url('/%2e%2e/%2e%2e/etc/passwd'))).status, 404);
 });
 
+test('błąd odczytu pliku draftu zamyka odpowiedź, a nie panel', { skip: !fs.existsSync('/proc/self/mem') && 'brak /proc' }, async () => {
+  // plik, którego odczyt kończy się błędem wejścia/wyjścia (jak uszkodzony dysk NAS-a): bez obsługi błędu strumienia
+  // proces panelu kończył pracę
+  fs.symlinkSync('/proc/self/mem', path.join(filesDir, 'd20261110-0600-zzzz.png'));
+  try {
+    await fetch(url('/files/d20261110-0600-zzzz.png'), { headers: { cookie } })
+      .then((r) => r.arrayBuffer())
+      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal((await fetch(url('/api/settings'), { headers: { cookie } })).status, 200, 'panel działa dalej');
+    assert.match(logs, /(Nie udało się wysłać pliku|Could not send the file) d20261110-0600-zzzz\.png/);
+  } finally {
+    fs.rmSync(path.join(filesDir, 'd20261110-0600-zzzz.png'), { force: true });
+  }
+});
+
+test('zapytania o złym kształcie: 400 zamiast błędu serwera (pole bota jako napis, treść „null”)', async () => {
+  const { bot } = await (await json('POST', '/api/bots', { name: 'Kształt' })).json();
+  for (const body of [{ sources: 'abc' }, { schedule: 5 }, { publishing: ['x'] }]) {
+    const r = await json('PUT', `/api/bots/${bot.id}`, body);
+    assert.equal(r.status, 400, JSON.stringify(body));
+    assert.match((await r.json()).error.message, /(Niepoprawne dane w polu|Invalid data in the field)/);
+  }
+  assert.equal((await json('PUT', '/api/settings', { global: { telegram: 'x' } })).status, 400);
+  const raw = (path2, text) => fetch(url(path2), { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: text });
+  assert.equal((await raw('/api/login', 'null')).status, 400);
+  assert.equal((await raw('/api/logout', '[1]')).status, 400);
+  assert.equal((await json('DELETE', `/api/bots/${bot.id}`)).status, 200);
+});
+
 test('API wewnętrzne i bramka wymagają PANEL_INTERNAL_TOKEN', async () => {
   const ib = `http://127.0.0.1:${internal}`;
   assert.equal((await fetch(`${ib}/internal/health`)).status, 200);
@@ -408,6 +440,47 @@ test('bramka dokleja token Telegrama, a przeglądarka i usługa nie widzą sekre
   assert.equal(hook.status, 403);
   assert.notEqual(mockHits.at(-1).url, `/bot${secret}/setWebhook`);
   assert.equal(hit.headers['x-poster-token'], undefined, 'sekret panelu nie wychodzi poza bramkę');
+});
+
+test('klucz dostawcy AI nie idzie pod zmieniony adres API: inny serwer bez nowego klucza usuwa zapisany klucz', async () => {
+  const key = 'sk-wlasny-klucz-1234';
+  const port = mock.address().port;
+  const put = async (body) => {
+    const r = await json('PUT', '/api/settings', body);
+    assert.equal(r.status, 200);
+    return r.json();
+  };
+  const custom = (baseUrl) => ({ ai: { providers: { custom: { baseUrl } } } });
+  const check = () => json('POST', '/api/test/provider', { provider: 'custom' });
+  const sent = () => mockHits.at(-1).headers.authorization;
+
+  // adres i klucz w jednym zapisie: klucz idzie pod ten adres
+  let s = await put({ global: custom(`http://127.0.0.1:${port}/v1`), secrets: { customKey: key } });
+  assert.deepEqual(s.keysCleared, []);
+  assert.equal((await check()).status, 200);
+  assert.equal(sent(), `Bearer ${key}`);
+  // ten sam serwer, inna ścieżka – klucz zostaje
+  s = await put({ global: custom(`http://127.0.0.1:${port}/api/v1`) });
+  assert.deepEqual(s.keysCleared, []);
+  assert.equal(s.secrets.customKey.set, true);
+
+  // inny serwer (tu: ta sama atrapa pod inną nazwą) bez nowego klucza: zapisany klucz znika i nigdzie nie wychodzi
+  s = await put({ global: custom(`http://localhost:${port}/v1`) });
+  assert.equal(s.keysCleared.length, 1);
+  assert.equal(s.secrets.customKey.set, false);
+  assert.equal((await check()).status, 200);
+  assert.equal(mockHits.at(-1).url, '/v1/models');
+  assert.equal(sent(), undefined, 'zapisany klucz nie poszedł pod nowy adres');
+
+  // klucz zapisany bez adresu też nie pójdzie pod adres dopisany później
+  await put({ global: custom(''), secrets: { customKey: key } });
+  s = await put({ global: custom(`http://localhost:${port}/v1`) });
+  assert.equal(s.secrets.customKey.set, false);
+  // nowy klucz razem z nowym adresem – zostaje
+  s = await put({ global: custom(`http://127.0.0.1:${port}/v1`), secrets: { customKey: key } });
+  assert.deepEqual(s.keysCleared, []);
+  assert.equal(s.secrets.customKey.set, true);
+  await put({ global: custom(''), secrets: { customKey: null } });
 });
 
 test('własny post: wersje z AI, zlecenie „compose” do n8n, zdjęcie dla n8n i historia', async () => {
@@ -697,6 +770,21 @@ test('zmiana hasła: limit nieudanych prób obecnego hasła (z przejętą sesją
   assert.equal(status, 429);
   assert.ok(n <= 9, `blokada po ${n} próbach`);
   assert.equal((await json('POST', '/api/password', { current: 'nowehaslo123', password: 'innehaslo999' })).status, 429);
+});
+
+test('logowanie: próby wysłane naraz nie mijają limitu (licznik rośnie przed sprawdzeniem hasła)', async () => {
+  // osobny klient (odwrotne proxy w sieci lokalnej podaje adres w X-Forwarded-For) – bez ciasteczka sesji
+  const login = (password, client) =>
+    fetch(url('/api/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': client },
+      body: JSON.stringify({ password }),
+    }).then((r) => r.status);
+  const statuses = await Promise.all(Array.from({ length: 30 }, (_, i) => login(`zlehaslo${i}`, '203.0.113.50')));
+  assert.equal(statuses.filter((s) => s === 401).length, 8, statuses.join(' '));
+  assert.equal(statuses.filter((s) => s === 429).length, 22, statuses.join(' '));
+  assert.equal(await login('nowehaslo123', '203.0.113.50'), 429, 'zablokowany klient nie zaloguje się nawet poprawnym hasłem');
+  assert.equal(await login('nowehaslo123', '203.0.113.51'), 200, 'inny klient loguje się normalnie');
 });
 
 test('powtórki: pamięć postów ze zdarzeń n8n, sprawdzenie draftu i ustawienia bota', async () => {

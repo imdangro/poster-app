@@ -147,6 +147,7 @@ function sendJson(res, status, obj, headers = {}) {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff', // przeglądarka nie zgaduje typu odpowiedzi (jak przy plikach panelu)
     'content-length': Buffer.byteLength(body),
     ...headers,
   });
@@ -174,11 +175,15 @@ function readBody(req, limit = 1024 * 1024) {
 async function readJsonBody(req, limit) {
   const buf = await readBody(req, limit);
   if (!buf.length) return {};
+  let data;
   try {
-    return JSON.parse(buf.toString('utf8'));
+    data = JSON.parse(buf.toString('utf8'));
   } catch (e) {
     throw new HttpError(400, tr('Niepoprawny JSON w zapytaniu'));
   }
+  // treść zapytania to zawsze obiekt z polami – „null”, liczba albo lista kończyłyby obsługę błędem serwera
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new HttpError(400, tr('Niepoprawny JSON w zapytaniu'));
+  return data;
 }
 
 // Ochrona przed CSRF dla zapytań zmieniających dane. Typ treści musi być dokładnie application/json – formularz ani
@@ -224,7 +229,10 @@ function noAnswer(e) {
 
 // fetch z limitem czasu; zwraca { status, ok, data (JSON lub null), text }. Błąd bez odpowiedzi serwera ma
 // noAnswer = true (zapytanie mogło dotrzeć – przy publikacji wynik „nie wiadomo”, a nie zwykły błąd).
-async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = 20000 } = {}) {
+// Odpowiedź większa niż maxBytes (domyślnie 16 MB – odpowiedzi API mają najwyżej kilkaset kB) jest błędem zamiast
+// zająć pamięć panelu; zapytanie dotarło, więc to też „nie wiadomo”.
+const FETCH_JSON_MAX = 16 * 1024 * 1024;
+async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = 20000, maxBytes = FETCH_JSON_MAX } = {}) {
   const failed = (e) => {
     const reason = e.name === 'TimeoutError' ? tr('przekroczono czas ({0} s)', Math.round(timeout / 1000)) : e.cause?.code || e.message;
     if (!noAnswer(e)) return new HttpError(502, tr('Brak połączenia z {0}: {1}', hostOf(url), reason));
@@ -236,9 +244,15 @@ async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = 20
   let text;
   try {
     res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(timeout), redirect: 'follow' });
-    text = await res.text();
+    const raw = await readLimited(res, maxBytes);
+    text = raw === null ? null : raw.toString('utf8');
   } catch (e) {
     throw failed(e);
+  }
+  if (text === null) {
+    const err = new HttpError(502, tr('Odpowiedź od {0} jest za duża (ponad {1} MB)', hostOf(url), Math.round(maxBytes / 1048576)));
+    err.noAnswer = true;
+    throw err;
   }
   let data = null;
   try {
@@ -285,6 +299,8 @@ function periodic(fn, ms, first = ms, { unref = false } = {}) {
       try {
         await fn();
       } catch (e) {
+        // fn zwykle łapie własne błędy – ten, który się wymknął, zostaje w logach zamiast zniknąć
+        console.error(tr('Zadanie cykliczne:'), e);
       } finally {
         current = null;
       }

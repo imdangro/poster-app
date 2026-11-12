@@ -7,6 +7,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { pipeline } = require('stream');
 const { PROJECT_URL, PRODUCT_URL, EDITION, HttpError, sendJson, readJsonBody, safeEqual, periodic } = require('./lib/util');
 const { setLanguageSource, withLanguage, lang, tr, trBoth } = require('./lib/i18n');
 const { Store } = require('./lib/store');
@@ -153,7 +154,12 @@ function serveFile(res, file, { cache = 'no-cache', download } = {}) {
       ...(download ? { 'content-disposition': `attachment; filename="${path.basename(file)}"` } : {}),
       ...SECURITY_HEADERS,
     });
-    fs.createReadStream(file).pipe(res);
+    // błąd odczytu (uszkodzony dysk, plik usunięty po sprawdzeniu) zamyka tę odpowiedź – bez obsługi zdarzenia „error”
+    // strumienia kończyłby cały proces panelu
+    pipeline(fs.createReadStream(file), res, (e) => {
+      if (e && e.code !== 'ERR_STREAM_PREMATURE_CLOSE')
+        console.error(tr('Nie udało się wysłać pliku {0}: {1}', path.basename(file), e.message));
+    });
   });
 }
 

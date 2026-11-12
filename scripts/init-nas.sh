@@ -78,8 +78,11 @@ chmod -R u+rwX,g+rwX,o-rwx data
 # data/panel (klucze API, tokeny kont, hasło panelu, licencja) – tylko dla właściciela: panel działa jako ten użytkownik,
 # a grupa (na NAS-ie często wszyscy użytkownicy) nie dostaje dostępu do sekretów nawet do najbliższego zapisu panelu
 chmod -R u+rwX,go-rwx data/panel
-info "$(m "Katalogi data/n8n, data/files i data/panel należą do ${N8N_UID}:${N8N_GID} (chmod u+rwX,g+rwX; data/panel – tylko właściciel)." \
-  "The data/n8n, data/files and data/panel directories belong to ${N8N_UID}:${N8N_GID} (chmod u+rwX,g+rwX; data/panel – owner only).")"
+# data/n8n też tylko dla właściciela: w bazie n8n są dane wykonań workflow, a w nich nagłówki zleceń panelu
+# (wspólny sekret PANEL_INTERNAL_TOKEN) i konto właściciela n8n; n8n działa jako ten sam użytkownik
+chmod -R u+rwX,go-rwx data/n8n
+info "$(m "Katalogi data/n8n, data/files i data/panel należą do ${N8N_UID}:${N8N_GID} (data/files: chmod u+rwX,g+rwX; data/panel i data/n8n – tylko właściciel)." \
+  "The data/n8n, data/files and data/panel directories belong to ${N8N_UID}:${N8N_GID} (data/files: chmod u+rwX,g+rwX; data/panel and data/n8n – owner only).")"
 
 # Katalog projektu dla panelu – w kontenerze go nie zna, a pokazuje gotowe polecenia (np. przejście na PRO).
 # Plik tymczasowy poza data/panel (katalog kontenera) i zamiana nazwy (mv -T): root nie pójdzie za dowiązaniem

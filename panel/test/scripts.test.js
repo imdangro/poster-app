@@ -140,9 +140,17 @@ test('kontenery bez podnoszenia uprawnień i z limitami; panel tylko do odczytu,
   assert.doesNotMatch(dockerfile, /\|\| echo|\|\| true/);
 });
 
-test('init-nas.sh: data/panel (klucze, tokeny, hasło) tylko dla właściciela, także po aktualizacji', () => {
+test('init-nas.sh: data/panel (klucze, tokeny, hasło) i data/n8n (baza n8n) tylko dla właściciela, także po aktualizacji', () => {
   const init = read('scripts/init-nas.sh');
   const all = init.indexOf('chmod -R u+rwX,g+rwX,o-rwx data\n');
   const panel = init.indexOf('chmod -R u+rwX,go-rwx data/panel\n');
+  const n8n = init.indexOf('chmod -R u+rwX,go-rwx data/n8n\n');
   assert.ok(all > 0 && panel > all, 'najpierw uprawnienia całego data/, potem zaostrzenie data/panel');
+  assert.ok(n8n > all, 'baza n8n (dane wykonań z nagłówkami zleceń panelu) też tylko dla właściciela');
+});
+
+test('obraz panelu bez menedżerów pakietów (panel nie ma zależności npm)', () => {
+  const dockerfile = read('panel/Dockerfile');
+  assert.match(dockerfile, /RUN rm -rf \/usr\/local\/lib\/node_modules\/npm /);
+  for (const bin of ['npm', 'npx', 'corepack', 'yarn']) assert.match(dockerfile, new RegExp(`/usr/local/bin/${bin}\\b`));
 });

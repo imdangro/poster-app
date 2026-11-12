@@ -7,6 +7,26 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.5.1 – 2026-11-12
+
+- **Sign-in security:** the limit of failed password attempts (8 from one address, 40 in total per 15 minutes) now also
+  holds for attempts sent at the same time – before, a burst of parallel requests got past the limit before the first
+  failure was recorded. Passwords are checked one at a time, so such a burst no longer slows the rest of the panel.
+- **A hostile page cannot stall the panel:** an article page from a link in a feed (or an address entered in “Check”
+  next to a source) with thousands of unclosed tags could stall the whole panel for over a minute – the schedule,
+  Telegram clicks and `/healthz`. The panel now reads page tags and feed entries in time proportional to the size of
+  the content.
+- **An AI provider key stays with its address:** changing a text provider's *API address* to another server removes
+  that provider's saved key – enter the key again or send it together with the new address (the panel reminds you).
+  Before, the saved key would go to the new address with the first request. Changing only the path on the same server
+  removes nothing.
+- **Panel resilience:** a read error on a draft file (e.g. a failing disk) no longer ends the panel process, settings
+  sent in the wrong shape give a clear error instead of a server error, errors of background tasks go to the logs, and
+  `/healthz` no longer reports a stalled schedule while the panel waits for a slow n8n.
+- **Small hardening:** the `data/n8n` directory (the n8n database) is accessible only to its owner, like `data/panel` –
+  if you copy it from another NAS account, use `sudo`. The panel image no longer contains npm, the panel rejects images
+  larger than 120 megapixels before ffmpeg starts decoding them, and API responses carry the `nosniff` header.
+
 ## 1.5.0 – 2026-11-09
 
 - **X without the paid API – by hand via a link:** in *Bot → Publishing → X* you choose "Via API (automatic)" or "By

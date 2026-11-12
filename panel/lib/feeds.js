@@ -3,7 +3,17 @@
 // a dla adresu strony WWW – kanał, który strona wskazuje sama (<link rel="alternate" …>).
 const { readLimited } = require('./util');
 const { fetchUntrusted } = require('./net');
+const { tagsOf, elementsOf, firstElement } = require('./html');
 const { tr } = require('./i18n');
+
+// Treść kanału jest cudza (do 10 MB): wpisy, tytuły i daty czytają elementsOf / tagsOf z lib/html.js – w czasie
+// liniowym, a teksty do pokazania są najpierw przycinane (bez wyrażeń regularnych na megabajtach treści).
+const SNIPPET = 4000;
+// początek tekstu do pokazania; przycięty tekst – bez znacznika uciętego w połowie
+function snippet(s) {
+  const t = String(s);
+  return t.length > SNIPPET ? t.slice(0, SNIPPET).replace(/<[^>]*$/, '') : t;
+}
 
 // Adres wpisany przez użytkownika (trust) może prowadzić także do sieci lokalnej (RSSHub, blog na NAS-ie);
 // przekierowania i kanał wskazany przez stronę na innym hoście – tylko do internetu (fetchUntrusted)
@@ -34,13 +44,13 @@ async function testFeed(url, { discover = true, trust = [url] } = {}) {
   if (!res.ok)
     return {
       ok: false,
-      message: `HTTP ${res.status}: ${text
+      message: `HTTP ${res.status}: ${snippet(text)
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 160)}`,
     };
-  const items = text.match(/<(item|entry)[\s>][\s\S]*?<\/\1>/gi) || [];
+  const items = [...elementsOf(text, ['item', 'entry'])].map((el) => el.outer);
   if (!items.length) {
     // adres strony zamiast kanału: kanał wskazuje <link rel="alternate" type="application/rss+xml" href="…">
     const html = /<html[\s>]|<!doctype html/i.test(text.slice(0, 2000));
@@ -58,11 +68,12 @@ async function testFeed(url, { discover = true, trust = [url] } = {}) {
         : tr('To nie wygląda na kanał RSS/Atom (brak wpisów)'),
     };
   }
-  const titles = items.slice(0, 3).map((it) => decodeTitle((it.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || ''));
+  const titles = items.slice(0, 3).map((it) => decodeTitle(firstElement(it, ['title'])));
   const dates = items
-    .map((it) => Date.parse((it.match(/<(pubDate|updated|published|dc:date)[^>]*>([\s\S]*?)<\/\1>/i) || [])[2] || ''))
+    .map((it) => Date.parse(firstElement(it, ['pubDate', 'updated', 'published', 'dc:date']).slice(0, 100)))
     .filter(Boolean);
-  const newest = dates.length ? new Date(Math.max(...dates)).toISOString() : null;
+  // bez Math.max(...dates): kanał z setkami tysięcy wpisów przepełniłby stos wywołań
+  const newest = dates.length ? new Date(dates.reduce((a, b) => Math.max(a, b))).toISOString() : null;
   const n = items.length;
   const few = [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100);
   const message = n === 1 ? tr('OK – {0} wpis', n) : few ? tr('OK – {0} wpisy', n) : tr('OK – {0} wpisów', n);
@@ -70,7 +81,7 @@ async function testFeed(url, { discover = true, trust = [url] } = {}) {
 }
 
 function decodeTitle(s) {
-  return s
+  return snippet(s)
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/<[^>]+>/g, '')
     .replace(/&amp;/g, '&')
@@ -85,7 +96,7 @@ function decodeTitle(s) {
 
 // Kanał RSS/Atom wskazany przez stronę WWW (<link rel="alternate" …>); kanały komentarzy pomijamy.
 function discoverFeed(html, base) {
-  for (const tag of String(html).match(/<link\b[^>]*>/gi) || []) {
+  for (const tag of tagsOf(html, 'link')) {
     const attr = (name) => (tag.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i')) || [])[1] || '';
     if (!/(^|\s)alternate(\s|$)/i.test(attr('rel')) || !/application\/(rss|atom)\+xml/i.test(attr('type'))) continue;
     const href = attr('href').replace(/&amp;/g, '&').trim();

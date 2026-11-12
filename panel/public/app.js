@@ -3617,6 +3617,19 @@
     const g = clone(st.global);
     g.ai = { providers: {}, ...(g.ai || {}) };
     const sec = {};
+    // zmiana adresu API dostawcy na inny serwer usuwa zapisany klucz (był dla poprzedniego adresu) – trzeba go wpisać
+    const warnKeysCleared = () => {
+      const names = S.settings.keysCleared || [];
+      if (names.length)
+        toast(
+          tr(
+            'Zmieniono adres API ({0}) – zapisany klucz był dla poprzedniego adresu i został usunięty. Wpisz klucz ponownie.',
+            names.join(', '),
+          ),
+          'bad',
+          9000,
+        );
+    };
     const saveSection = (btn, globalPart, secretKeys) =>
       busy(btn, async () => {
         const secrets = {};
@@ -3624,6 +3637,7 @@
         S.settings = await api('PUT', '/api/settings', { global: globalPart, secrets });
         resetModels();
         toast(tr('Zapisano ustawienia'));
+        warnKeysCleared();
         await loadOverview().catch(() => {});
         pageSettings();
       });
@@ -3634,6 +3648,7 @@
         for (const k of secretKeys) if (sec[k]) secrets[k] = sec[k];
         S.settings = await api('PUT', '/api/settings', { global: { ai: g.ai }, secrets });
         resetModels();
+        warnKeysCleared();
         toast((await api('POST', '/api/test/provider', { provider })).message, 'ok', 6000);
         if (onOk) onOk();
       });

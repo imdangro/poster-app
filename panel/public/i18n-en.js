@@ -434,6 +434,8 @@ window.POSTER_I18N.en = {
     'All generated posts with images (archive on the NAS: data/files).',
   'Wszystkie boty': 'All bots',
   'Zapisano ustawienia': 'Settings saved',
+  'Zmieniono adres API ({0}) – zapisany klucz był dla poprzedniego adresu i został usunięty. Wpisz klucz ponownie.':
+    'The API address changed ({0}) – the saved key was for the previous address and has been removed. Enter the key again.',
   'Usunąć zapisany {0}?': 'Remove the saved {0}?',
   usuń: 'remove',
   'np. 123456789 lub -1001234567890': 'e.g. 123456789 or -1001234567890',
