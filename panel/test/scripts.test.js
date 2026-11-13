@@ -126,7 +126,11 @@ test('kontenery bez podnoszenia uprawnień i z limitami; panel tylko do odczytu,
     assert.match(s, /mem_limit: \$\{[A-Z0-9]+_MEMORY:-\d+g\}/, `${name}: limit pamięci z .env`);
   }
   assert.match(compose, /x-hardening: &hardening\n {2}security_opt:\n {4}- no-new-privileges:true/);
-  for (const name of ['n8n', 'panel']) assert.match(service(name), /cap_drop: \[ALL\]/, name);
+  // bez uprawnień jądra i z limitem procesów – także RSSHub (cudzy obraz pobierany przy każdej aktualizacji)
+  for (const name of ['n8n', 'panel', 'rsshub']) {
+    assert.match(service(name), /cap_drop: \[ALL\]/, name);
+    assert.match(service(name), /pids_limit: \d+/, name);
+  }
   const panel = service('panel');
   assert.match(panel, /read_only: true/);
   assert.match(panel, /tmpfs:\n\s+- \/tmp:size=\d+m/);

@@ -77,7 +77,9 @@ before(async () => {
       POSTER_DATA_DIR: dataDir,
       POSTER_FILES_DIR: filesDir,
       PANEL_INTERNAL_TOKEN: TOKEN,
-      PANEL_PORT_INTERNAL: String(await freePort()),
+      // port interfejsu WWW nie jest tu używany: 0 = system przydziela wolny port przy starcie panelu (bez wyścigu
+      // między sprawdzeniem wolnego portu a jego zajęciem)
+      PANEL_PORT_INTERNAL: '0',
       PANEL_INTERNAL_PORT: String(internal),
       UPSTREAM_TELEGRAM: `http://127.0.0.1:${mock.address().port}`,
       N8N_INTERNAL_URL: `http://127.0.0.1:${mock.address().port}`,
@@ -85,7 +87,23 @@ before(async () => {
   });
   proc.stdout.on('data', (d) => (logs += d));
   proc.stderr.on('data', (d) => (logs += d));
-  await waitFor(() => telegramCalls.some((c) => c.method === 'getUpdates'), 15000, 'odbiór wiadomości z Telegrama');
+  // stan panelu do komunikatu błędu: co panel wysłał do Telegrama, czy proces jeszcze działa i jego logi
+  const state = () =>
+    `wywołania Telegrama: ${telegramCalls.map((c) => c.method).join(', ') || 'brak'}; ` +
+    `proces panelu: ${proc.exitCode === null ? 'działa' : `zakończony (kod ${proc.exitCode})`}; logi panelu:\n${logs}`;
+  const started = Date.now();
+  // 30 s: po nieudanym pierwszym getMe panel ponawia połączenie z Telegramem dopiero po 15 s – czekamy dłużej niż to
+  // ponowienie; panel, który zakończył pracę przy starcie (np. zajęty port), przerywa czekanie od razu
+  await waitFor(
+    () => {
+      if (proc.exitCode !== null) throw new Error(`Panel zakończył pracę przy starcie – ${state()}`);
+      return telegramCalls.some((c) => c.method === 'getUpdates');
+    },
+    30000,
+    () => `odbiór wiadomości z Telegrama – ${state()}`,
+  );
+  // zwykle ok. 0,2 s; wolny start zostawia ślad w logach CI także wtedy, gdy testy przejdą
+  if (Date.now() - started > 5000) console.log(`Wolny start odbioru wiadomości (${Date.now() - started} ms) – ${state()}`);
 });
 
 after(() => {

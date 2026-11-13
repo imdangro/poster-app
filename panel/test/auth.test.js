@@ -55,9 +55,74 @@ test('sesja: podpisane ciasteczko, podróbka i wygasłe odrzucone', async () => 
   const cookie = cookieOf(auth.createCookie(req()));
   assert.equal(auth.isAuthenticated(req({ cookie })), true);
   assert.equal(auth.isAuthenticated(req({ cookie: cookie.slice(0, -2) + 'xx' })), false);
-  const expired = `poster_session=${Date.now() - 1000}.${auth.sign(String(Date.now() - 1000))}`;
+  // wygasła sesja z poprawnym podpisem i wpisem na liście
+  const past = Date.now() - 1000;
+  auth.save({ ...auth.data, sessions: { ...auth.data.sessions, stara: past } });
+  const expired = `poster_session=stara.${past}.${auth.sign(`stara.${past}`)}`;
   assert.equal(auth.isAuthenticated(req({ cookie: expired })), false);
   assert.equal(auth.isAuthenticated(req({})), false);
+});
+
+test('sesja: „Wyloguj” kończy sesję tej przeglądarki – skopiowane ciasteczko przestaje działać, inne urządzenia zostają', async () => {
+  const dir = tmpDir();
+  const auth = new Auth(dir, { log: quiet });
+  await auth.setPassword('dobrehaslo123');
+  const phone = cookieOf(auth.createCookie(req()));
+  const laptop = cookieOf(auth.createCookie(req()));
+  assert.notEqual(phone, laptop, 'każde logowanie to osobna sesja');
+  assert.equal(Object.keys(auth.sessions()).length, 2);
+
+  assert.equal(auth.logout(req({ cookie: phone })), true);
+  assert.equal(auth.isAuthenticated(req({ cookie: phone })), false, 'kopia ciasteczka po wylogowaniu nie działa');
+  assert.equal(auth.isAuthenticated(req({ cookie: laptop })), true);
+  assert.equal(auth.logout(req({ cookie: phone })), false, 'drugie wylogowanie tej samej sesji nic nie zmienia');
+  assert.equal(auth.logout(req({})), false);
+  // lista sesji jest w auth.json – wylogowanie przetrwa restart panelu
+  assert.equal(new Auth(dir, { log: quiet }).isAuthenticated(req({ cookie: phone })), false);
+  assert.equal(new Auth(dir, { log: quiet }).isAuthenticated(req({ cookie: laptop })), true);
+});
+
+test('sesja: ciasteczko sprzed listy sesji, podpis bez wpisu na liście i zmieniony termin – odrzucone', async () => {
+  const auth = new Auth(tmpDir(), { log: quiet });
+  await auth.setPassword('dobrehaslo123');
+  const cookie = cookieOf(auth.createCookie(req()));
+  const [sid, exp] = cookie.split('=')[1].split('.');
+  const future = Date.now() + 86400000;
+  // dawny format „wygaśnięcie.podpis” (panel przed tą zmianą) – po aktualizacji trzeba zalogować się ponownie
+  assert.equal(auth.isAuthenticated(req({ cookie: `poster_session=${future}.${auth.sign(String(future))}` })), false);
+  // poprawny podpis, ale sesji nie ma na liście (np. zakończona)
+  assert.equal(auth.isAuthenticated(req({ cookie: `poster_session=obca.${future}.${auth.sign(`obca.${future}`)}` })), false);
+  for (const name of ['__proto__', 'constructor', 'toString']) {
+    assert.equal(auth.isAuthenticated(req({ cookie: `poster_session=${name}.${future}.${auth.sign(`${name}.${future}`)}` })), false);
+  }
+  // przedłużony termin przy sesji z listy – podpis już nie pasuje, a z nowym podpisem nie zgadza się termin z listy
+  const later = Number(exp) + 86400000;
+  assert.equal(auth.isAuthenticated(req({ cookie: `poster_session=${sid}.${later}.${cookie.split('.')[2]}` })), false);
+  assert.equal(auth.isAuthenticated(req({ cookie: `poster_session=${sid}.${later}.${auth.sign(`${sid}.${later}`)}` })), false);
+  assert.equal(auth.isAuthenticated(req({ cookie })), true);
+});
+
+test('sesja: najwyżej 30 naraz (wypada najstarsza), zmiana hasła kończy wszystkie poza nową', async () => {
+  const auth = new Auth(tmpDir(), { log: quiet });
+  await auth.setPassword('dobrehaslo123');
+  // pierwsza sesja z wcześniejszym terminem niż kolejne – to ona wypadnie przy 31. logowaniu
+  const first = cookieOf(auth.createCookie(req()));
+  const [firstSid] = first.split('=')[1].split('.');
+  auth.save({ ...auth.data, sessions: { ...auth.data.sessions, [firstSid]: auth.data.sessions[firstSid] - 5000 } });
+  const others = [];
+  for (let i = 0; i < 29; i++) others.push(cookieOf(auth.createCookie(req())));
+  assert.equal(Object.keys(auth.sessions()).length, 30);
+  const last = cookieOf(auth.createCookie(req()));
+  assert.equal(Object.keys(auth.sessions()).length, 30);
+  assert.equal(Object.prototype.hasOwnProperty.call(auth.sessions(), firstSid), false, 'najstarsza sesja wypadła');
+  assert.equal(auth.isAuthenticated(req({ cookie: last })), true);
+  assert.equal(auth.isAuthenticated(req({ cookie: others[0] })), true);
+
+  await auth.setPassword('nowehaslo12345');
+  assert.equal(Object.keys(auth.sessions()).length, 0, 'zmiana hasła kończy wszystkie sesje');
+  const fresh = cookieOf(auth.createCookie(req()));
+  assert.equal(auth.isAuthenticated(req({ cookie: last })), false);
+  assert.equal(auth.isAuthenticated(req({ cookie: fresh })), true);
 });
 
 test('flaga Secure tylko za proxy z HTTPS', async () => {

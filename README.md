@@ -430,7 +430,7 @@ messages. The post language is a separate setting in every bot (*Bot → General
 - API keys and account tokens are stored only in `data/panel/secrets.json` (chmod 600). The panel does not send them to the browser: it only shows the ending `••••abcd`.
 - n8n gets the bot configuration from the panel **without secrets** and calls APIs through the gateway `http://panel:7081/gw/<bot>/<service>/…`. The gateway adds the right key or token, so secrets do not end up in the n8n execution history.
 - The n8n webhook and the gateway are protected by a shared secret `PANEL_INTERNAL_TOKEN`, and the gateway is reachable only in the Docker network.
-- Login: password (scrypt), session in a signed cookie (30 days), limited login attempts. You can set the first password only with a one-time code from the panel logs.
+- Login: password (scrypt), session in a signed cookie (30 days), limited login attempts. “Log out” ends the session on the panel side – that browser's cookie stops working. You can set the first password only with a one-time code from the panel logs.
 - More about security and reporting vulnerabilities: [SECURITY.md](SECURITY.md).
 
 **Panel backup**: the `data/panel` directory (bot, keys, history). A full backup is described in “Maintenance”.

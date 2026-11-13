@@ -26,7 +26,8 @@ Poprawki bezpieczeństwa trafiają tylko do najnowszej wersji z gałęzi `main` 
   `data/panel/license-key.json` (chmod 600, przeglądarka widzi tylko końcówkę) i znika po aktywacji. Aktywację, klucz SSH
   NAS-a i stan licencji ma tylko skrypt (`.git/`, tylko root) – kontener panelu nie ma do nich dostępu.
 - **Logowanie.** Pierwsze hasło (i nowe po resecie) ustawisz tylko z jednorazowym kodem z logów panelu. Hasło jest
-  haszowane (scrypt), sesja to podpisane ciasteczko (HttpOnly, SameSite=Lax, 30 dni; za proxy z HTTPS także Secure),
+  haszowane (scrypt), sesja to podpisane ciasteczko (HttpOnly, SameSite=Lax, 30 dni; za proxy z HTTPS także Secure)
+  z identyfikatorem sesji, którą panel pamięta – „Wyloguj” ją kończy, więc skopiowane ciasteczko przestaje działać,
   a logowanie i kod mają limit prób. Reset hasła (`reset-password.js`) od razu wylogowuje wszystkie sesje.
 - **n8n.** Konto właściciela n8n zakłada instalator jednym poleceniem (losowe hasło). Przy instalacji ręcznej załóż je
   od razu po pierwszym starcie – dopóki go nie ma, może to zrobić każdy w sieci.

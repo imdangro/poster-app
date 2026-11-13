@@ -28,8 +28,9 @@ Security fixes go only into the latest version from the `main` branch (update: `
   cannot reach them.
 - **Login.** You can set the first password (and a new one after a reset) only with a one-time code from the panel logs.
   The password is hashed (scrypt), the session is a signed cookie (HttpOnly, SameSite=Lax, 30 days; behind a proxy with
-  HTTPS also Secure), and the login and the code have limited attempts. A password reset (`reset-password.js`) logs out
-  all sessions at once.
+  HTTPS also Secure) with the ID of a session the panel remembers – “Log out” ends it, so a copied cookie stops working –
+  and the login and the code have limited attempts. A password reset (`reset-password.js`) logs out all sessions at
+  once.
 - **n8n.** The one-command installer creates the n8n owner account (random password). With a manual installation create
   it right after the first start – until it exists, anyone on the network can do it.
 - **Browser.** Requests that change data must have the JSON type (CSRF protection), and the panel sends the

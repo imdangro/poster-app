@@ -133,7 +133,11 @@ before(async () => {
   });
   proc.stdout.on('data', (d) => (logs += d));
   proc.stderr.on('data', (d) => (logs += d));
-  await waitFor(() => /API dla n8n/.test(logs) && /Panel:/.test(logs) && setupCodeFromLogs(), 15000, 'start panelu');
+  await waitFor(
+    () => /API dla n8n/.test(logs) && /Panel:/.test(logs) && setupCodeFromLogs(),
+    15000,
+    () => `start panelu – logi panelu:\n${logs}`,
+  );
 });
 
 after(() => {
@@ -740,6 +744,24 @@ test('wyloguj na wszystkich urządzeniach (tylko z ważnej sesji); zły adres AP
   const again = await json('POST', '/api/login', { password: 'mojehaslo123' });
   cookie = again.headers.get('set-cookie').split(';')[0];
   assert.equal((await fetch(url('/api/settings'), { headers: { cookie } })).status, 200);
+});
+
+test('wyloguj: sesja tej przeglądarki kończy się na serwerze – jej ciasteczko nie działa także jako kopia', async () => {
+  const other = (await json('POST', '/api/login', { password: 'mojehaslo123' })).headers.get('set-cookie').split(';')[0];
+  assert.notEqual(other, cookie, 'drugie logowanie to osobna sesja');
+  assert.equal((await fetch(url('/api/settings'), { headers: { cookie: other } })).status, 200);
+  const out = await fetch(url('/api/logout'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: other },
+    body: '{}',
+  });
+  assert.equal(out.status, 200);
+  assert.match(out.headers.get('set-cookie'), /^poster_session=;.*Max-Age=0/);
+  assert.equal((await fetch(url('/api/settings'), { headers: { cookie: other } })).status, 401, 'skopiowane ciasteczko po wylogowaniu');
+  assert.equal((await fetch(url('/api/settings'), { headers: { cookie } })).status, 200, 'pozostałe sesje działają dalej');
+  // ciasteczko w formacie sprzed listy sesji (wygaśnięcie.podpis) nie jest sesją
+  const old = `poster_session=${Date.now() + 86400000}.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ`;
+  assert.equal((await fetch(url('/api/settings'), { headers: { cookie: old } })).status, 401);
 });
 
 test('reset hasła działa od razu: stara sesja wylogowana, nowy kod ustawia hasło', async () => {

@@ -7,6 +7,20 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.5.2 – 2026-11-13
+
+- **n8n 2.47.5:** the update pulls a new n8n image – version 2.40.7 is covered by the n8n security advisories of
+  28 October 2026. With an empty `N8N_VERSION` in `.env` (the default) you do nothing; a deliberately pinned other
+  version stays, and `update.sh` reminds you about it. On its first start the new n8n upgrades its database. **Manual
+  step – only if you want to be able to go back to an older n8n:** make a backup before updating
+  ([README](README.md) → “Maintenance” → Backup), because an older n8n cannot open the upgraded database.
+- **“Log out” really ends the session:** the panel remembers the sessions of signed-in browsers, and logging out removes
+  the session on its side too – a cookie copied earlier stops working (until now it stayed valid for up to 30 days).
+  Other devices stay signed in; “Log out on all devices” works as before. **After this update sign in to the panel
+  again** (once on every device).
+- **RSSHub without kernel capabilities:** the RSSHub container now runs without kernel capabilities and with a process
+  limit, like the panel and n8n.
+
 ## 1.5.1 – 2026-11-12
 
 - **Sign-in security:** the limit of failed password attempts (8 from one address, 40 in total per 15 minutes) now also

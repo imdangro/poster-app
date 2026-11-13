@@ -30,14 +30,16 @@ function freePort() {
   });
 }
 
-// Czeka, aż warunek będzie spełniony (np. komunikat w logach serwera)
+// Czeka, aż warunek będzie spełniony (np. komunikat w logach serwera). `what` może być funkcją – jej wynik trafia do
+// błędu dopiero po przekroczeniu czasu (np. logi uruchomionego panelu z tej chwili: bez nich nieudany start w CI
+// nie mówi, co się stało).
 async function waitFor(check, timeoutMs = 10000, what = 'warunek') {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
     if (check()) return;
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error(`Nie doczekano się: ${what}`);
+  throw new Error(`Nie doczekano się: ${typeof what === 'function' ? what() : what}`);
 }
 
 module.exports = { tmpDir, freePort, waitFor };

@@ -7,6 +7,20 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.5.2 – 2026-11-13
+
+- **n8n 2.47.5:** aktualizacja pobiera nowy obraz n8n – wersja 2.40.7 jest objęta ostrzeżeniami bezpieczeństwa n8n
+  z 28.10.2026. Przy pustym `N8N_VERSION` w `.env` (domyślnie) nie robisz nic; świadomie przypięta inna wersja zostaje,
+  a `update.sh` o niej przypomina. Przy pierwszym starcie nowe n8n aktualizuje swoją bazę. **Krok ręczny – tylko jeśli
+  chcesz móc wrócić do starszego n8n:** zrób przed aktualizacją kopię zapasową ([README](README.pl.md) → „Utrzymanie”
+  → Backup), bo starsze n8n nie otworzy zaktualizowanej bazy.
+- **„Wyloguj” naprawdę kończy sesję:** panel pamięta sesje zalogowanych przeglądarek, a wylogowanie usuwa sesję także
+  po swojej stronie – skopiowane wcześniej ciasteczko przestaje działać (dotąd było ważne jeszcze do 30 dni). Pozostałe
+  urządzenia zostają zalogowane; „Wyloguj na wszystkich urządzeniach” działa jak dotąd. **Po tej aktualizacji zaloguj
+  się do panelu ponownie** (raz na każdym urządzeniu).
+- **RSSHub bez uprawnień jądra:** kontener RSSHub działa teraz bez uprawnień jądra i z limitem procesów, jak panel
+  i n8n.
+
 ## 1.5.1 – 2026-11-12
 
 - **Bezpieczeństwo logowania:** limit nieudanych prób hasła (8 z jednego adresu, 40 łącznie w 15 minut) działa także dla

@@ -80,6 +80,8 @@ function createApi(ctx) {
       if (body && body.everywhere === true) {
         if (!auth.isAuthenticated(req)) throw new HttpError(401, tr('Zaloguj się'));
         auth.logoutEverywhere();
+      } else {
+        auth.logout(req); // koniec sesji tej przeglądarki – jej ciasteczko przestaje działać także jako kopia
       }
       res.setHeader('set-cookie', auth.clearCookie(req));
       return { ok: true };

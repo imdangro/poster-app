@@ -20,7 +20,7 @@ x-hardening: &hardening
 
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.40.7}
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.47.5}
     container_name: poster-n8n
     restart: unless-stopped
     # Obraz n8n działa jako użytkownik "node" (UID/GID 1000:1000) – katalogi w ./data muszą do niego należeć.
@@ -133,5 +133,9 @@ services:
       retries: 3
       start_period: 60s
     <<: *hardening
+    # RSSHub tylko pobiera strony i odpowiada w sieci Dockera na porcie 1200 – nie potrzebuje uprawnień jądra; limit
+    # procesów jak w n8n (obraz jest cudzy i pobierany przy każdej aktualizacji)
+    cap_drop: [ALL]
     mem_limit: ${RSSHUB_MEMORY:-1g} # .env: RSSHUB_MEMORY
+    pids_limit: 512
     logging: *default-logging

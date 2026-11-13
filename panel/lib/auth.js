@@ -1,5 +1,6 @@
 'use strict';
-// Logowanie do panelu: hasło (scrypt) i sesja w podpisanym ciasteczku. Pierwsze hasło (i nowe po resecie) ustawisz
+// Logowanie do panelu: hasło (scrypt) i sesja – podpisane ciasteczko z identyfikatorem sesji, którą panel pamięta
+// w auth.json („Wyloguj” ją usuwa). Pierwsze hasło (i nowe po resecie) ustawisz
 // tylko z jednorazowym kodem z logów panelu – kto pierwszy otworzy panel w sieci, nie przejmie go bez dostępu do NAS-a.
 // Reset hasła: sudo docker compose exec panel node reset-password.js (wypisuje nowy kod, działa bez restartu panelu).
 const fs = require('fs');
@@ -11,6 +12,8 @@ const { tr, trBoth } = require('./i18n');
 
 const COOKIE = 'poster_session';
 const SESSION_DAYS = 30;
+// tyle sesji (przeglądarek, urządzeń) naraz pamięta panel – przy kolejnym logowaniu wypada ta, która wygasa najwcześniej
+const MAX_SESSIONS = 30;
 // Limit nieudanych prób (hasło, kod z logów, obecne hasło przy zmianie): na adres i dla wszystkich adresów razem
 // w oknie 15 min – wspólny limit ogranicza zgadywanie także wtedy, gdy ktoś podaje fałszywe adresy (X-Forwarded-For)
 const MAX_FAILS = 8;
@@ -177,12 +180,26 @@ class Auth {
     }
   }
 
-  // „Wyloguj na wszystkich urządzeniach”: nowy sekret sesji – każde wydane ciasteczko (np. na zgubionym telefonie)
-  // przestaje działać; hasło bez zmian
+  // „Wyloguj na wszystkich urządzeniach”: nowy sekret sesji i pusta lista sesji – każde wydane ciasteczko (np. na
+  // zgubionym telefonie) przestaje działać; hasło bez zmian
   logoutEverywhere() {
     this.reload();
     if (this.needsSetup) return;
-    this.save({ ...this.data, secret: crypto.randomBytes(32).toString('hex'), sessionsResetAt: new Date().toISOString() });
+    this.save({
+      ...this.data,
+      secret: crypto.randomBytes(32).toString('hex'),
+      sessions: {},
+      sessionsResetAt: new Date().toISOString(),
+    });
+  }
+
+  // Sesje zalogowanych przeglądarek: auth.json → sessions { identyfikator: czas wygaśnięcia w ms }, bez wygasłych.
+  // Ciasteczko to „identyfikator.wygaśnięcie.podpis”: podpis (HMAC sekretem sesji) mówi, że wydał je ten panel, a wpis
+  // na liście – że sesja trwa. „Wyloguj” usuwa wpis, więc ciasteczko skopiowane wcześniej (np. podsłuchane w sieci
+  // domowej – panel działa po HTTP) przestaje działać, a nie żyje jeszcze 30 dni.
+  sessions(now = Date.now()) {
+    const all = this.data && this.data.sessions && typeof this.data.sessions === 'object' ? this.data.sessions : {};
+    return Object.fromEntries(Object.entries(all).filter(([, exp]) => Number(exp) > now));
   }
 
   sign(value) {
@@ -199,27 +216,57 @@ class Auth {
     return `HttpOnly; SameSite=Lax; Path=/${https ? '; Secure' : ''}`;
   }
 
+  // Nowa sesja (po zalogowaniu, ustawieniu albo zmianie hasła): wpis na liście sesji i ciasteczko dla przeglądarki
   createCookie(req) {
-    const exp = Date.now() + SESSION_DAYS * 86400 * 1000;
-    const value = `${exp}.${this.sign(String(exp))}`;
-    return `${this.cookie}=${value}; ${this.cookieFlags(req)}; Max-Age=${SESSION_DAYS * 86400}`;
+    const now = Date.now();
+    const exp = now + SESSION_DAYS * 86400 * 1000;
+    const sid = crypto.randomBytes(18).toString('base64url');
+    // ponad limit zostają sesje ważne najdłużej, czyli najnowsze
+    const kept = Object.entries(this.sessions(now))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MAX_SESSIONS - 1);
+    this.save({ ...this.data, sessions: Object.fromEntries([...kept, [sid, exp]]) });
+    const value = `${sid}.${exp}`;
+    return `${this.cookie}=${value}.${this.sign(value)}; ${this.cookieFlags(req)}; Max-Age=${SESSION_DAYS * 86400}`;
   }
 
   clearCookie(req) {
     return `${this.cookie}=; ${this.cookieFlags(req)}; Max-Age=0`;
   }
 
-  isAuthenticated(req) {
-    if (this.needsSetup) return false;
+  // Sesja z ciasteczka zapytania: { sid, exp } albo null – brak ciasteczka, podróbka, sesja wygasła albo zakończona.
+  // Ciasteczko w dawnym formacie („wygaśnięcie.podpis”, bez identyfikatora) nie jest sesją – po aktualizacji panelu
+  // trzeba zalogować się ponownie.
+  session(req) {
+    if (this.needsSetup) return null;
     const raw = String(req.headers.cookie || '')
       .split(/;\s*/)
       .find((c) => c.startsWith(this.cookie + '='));
-    if (!raw) return false;
-    const [exp, sig] = raw.slice(this.cookie.length + 1).split('.');
-    if (!exp || !sig || Number(exp) < Date.now()) return false;
-    const expected = Buffer.from(this.sign(exp));
+    if (!raw) return null;
+    const parts = raw.slice(this.cookie.length + 1).split('.');
+    if (parts.length !== 3) return null;
+    const [sid, exp, sig] = parts;
+    if (!sid || !sig || !(Number(exp) > Date.now())) return null;
+    const expected = Buffer.from(this.sign(`${sid}.${exp}`));
     const got = Buffer.from(sig);
-    return expected.length === got.length && crypto.timingSafeEqual(expected, got);
+    if (expected.length !== got.length || !crypto.timingSafeEqual(expected, got)) return null;
+    const known = this.data.sessions;
+    if (!known || !Object.prototype.hasOwnProperty.call(known, sid) || Number(known[sid]) !== Number(exp)) return null;
+    return { sid, exp: Number(exp) };
+  }
+
+  isAuthenticated(req) {
+    return !!this.session(req);
+  }
+
+  // „Wyloguj”: koniec sesji tej przeglądarki (pozostałe urządzenia zostają zalogowane). Zwraca true, gdy sesja była.
+  logout(req) {
+    const current = this.session(req);
+    if (!current) return false;
+    const sessions = this.sessions();
+    delete sessions[current.sid];
+    this.save({ ...this.data, sessions });
+    return true;
   }
 }
 

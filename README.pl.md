@@ -430,7 +430,7 @@ błędów. Język postów to osobne ustawienie w każdym bocie (*Bot → Ogólne
 - Klucze API i tokeny kont leżą tylko w `data/panel/secrets.json` (chmod 600). Panel nie wysyła ich do przeglądarki: pokazuje wyłącznie końcówkę `••••abcd`.
 - n8n dostaje od panelu konfigurację bota **bez sekretów** i woła API przez bramkę `http://panel:7081/gw/<bot>/<usługa>/…`. Bramka dokleja właściwy klucz lub token, więc sekrety nie trafiają do historii wykonań n8n.
 - Webhook n8n i bramkę chroni wspólny sekret `PANEL_INTERNAL_TOKEN`, a bramka jest dostępna tylko w sieci Dockera.
-- Logowanie: hasło (scrypt), sesja w podpisanym ciasteczku (30 dni), limit prób logowania. Pierwsze hasło ustawisz tylko z jednorazowym kodem z logów panelu.
+- Logowanie: hasło (scrypt), sesja w podpisanym ciasteczku (30 dni), limit prób logowania. „Wyloguj” kończy sesję po stronie panelu – ciasteczko tej przeglądarki przestaje działać. Pierwsze hasło ustawisz tylko z jednorazowym kodem z logów panelu.
 - Więcej o zabezpieczeniach i zgłaszaniu podatności: [SECURITY.pl.md](SECURITY.pl.md).
 
 **Kopia zapasowa panelu**: katalog `data/panel` (bot, klucze, historia). Pełny backup opisuje sekcja „Utrzymanie”.

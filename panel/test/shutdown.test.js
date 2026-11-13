@@ -77,7 +77,11 @@ before(async () => {
   proc.stdout.on('data', (d) => (logs += d));
   proc.stderr.on('data', (d) => (logs += d));
   proc.on('exit', (code, signal) => (exit = { code, signal }));
-  await waitFor(() => /API dla n8n/.test(logs), 15000, 'start panelu');
+  await waitFor(
+    () => /API dla n8n/.test(logs),
+    15000,
+    () => `start panelu – logi panelu:\n${logs}`,
+  );
 });
 
 after(() => {
