@@ -1,0 +1,9 @@
+# Klucze, którymi podpisywane są wydania Postera (format „allowed signers” OpenSSH: nazwa, namespaces="git", klucz).
+# Keys that sign Poster releases (OpenSSH "allowed signers" format: name, namespaces="git", key).
+# Nazwa „poster-release” to tylko etykieta klucza, nie adres e-mail. / The name "poster-release" is a label, not an email.
+#
+# scripts/update.sh i scripts/upgrade-to-pro.sh instalują nową wersję z repozytorium wydań tylko wtedy, gdy jej commit
+# podpisał jeden z tych kluczy (scripts/release-verify.sh). Liczy się plik z zainstalowanej wersji, nie z pobieranej.
+# Bez wpisanego klucza podpis nie jest sprawdzany.
+poster-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7qeoQ0+LaSK+0Z+mDvQv5dBNacYi52Uo4Nb5wFgSRY
+poster-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKugI7Thd3MrSWgM0F/sbYU8GAgFkZnvRPfJvTTVk4/X

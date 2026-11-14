@@ -29,10 +29,40 @@ const entity = (m, e) => {
   const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
   return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
 };
+// Znaczniki usuwamy w jednym przejściu po tekście. Wyrażenia w rodzaju /<[^>]*>/g albo /<script[\s\S]*?<\/script>/g
+// na treści z tysiącami niezamkniętych „<” liczą się kwadratowo – wpis z cudzego kanału zatrzymywałby przebieg bota.
+// Wynik jak dotąd: bloki <script>…</script> i <style>…</style> oraz każdy znacznik „<…>” zamienione na spację.
+function stripTags(s) {
+  const parts = [];
+  const open = /<(script|style)\b/gi;
+  const close = { script: /<\/script>/gi, style: /<\/style>/gi };
+  let pos = 0;
+  let m;
+  while ((close.script || close.style) && (m = open.exec(s))) {
+    const end = close[m[1].toLowerCase()];
+    if (!end) continue; // dalej nie ma już znacznika zamykającego – nie szukamy go ponownie
+    end.lastIndex = open.lastIndex;
+    if (!end.exec(s)) {
+      close[m[1].toLowerCase()] = null;
+      continue;
+    }
+    parts.push(s.slice(pos, m.index), ' ');
+    pos = open.lastIndex = end.lastIndex;
+  }
+  const text = parts.join('') + s.slice(pos);
+  const out = [];
+  let i = 0;
+  for (;;) {
+    const lt = text.indexOf('<', i);
+    const gt = lt < 0 ? -1 : text.indexOf('>', lt + 1);
+    if (gt < 0) break; // bez „>” nie ma już znaczników
+    out.push(text.slice(i, lt), ' ');
+    i = gt + 1;
+  }
+  return out.join('') + text.slice(i);
+}
 const decode = (s) =>
-  String(s || '')
-    .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
+  stripTags(String(s || ''))
     .replace(/&(#\d{1,7}|#x[0-9a-f]{1,6}|[a-z]{2,8});/gi, entity)
     .replace(/\s+/g, ' ')
     .trim();
@@ -79,9 +109,37 @@ function imagesOf(j) {
   media(j['media:content']);
   media(j['media:group']);
   media(j['media:thumbnail']);
-  const html = String(j['content:encoded'] || j.content || '');
-  for (const m of html.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)) push(m[1]);
+  for (const src of imgSources(String(j['content:encoded'] || j.content || ''))) push(src);
   return out.slice(0, 5);
+}
+// Adresy z <img … src="…"> – ostatnie src w znaczniku, dokładnie jak dawne /<img\b[^>]*\bsrc=["']([^"']+)["']/gi, ale
+// w czasie liniowym: znacznik (do najbliższego „>”) czytamy najwyżej dwa razy, a po znaczniku bez src idziemy za
+// jego „>” (w treści bez żadnego „>” – kończymy), zamiast próbować od każdego kolejnego <img.
+function imgSources(html) {
+  const found = [];
+  const img = /<img\b/gi;
+  const value = /([^"']+)["']/y;
+  while (img.exec(html)) {
+    const from = img.lastIndex;
+    const gt = html.indexOf('>', from);
+    const tag = html.slice(from, gt < 0 ? html.length : gt);
+    const starts = [];
+    for (const a of tag.matchAll(/\bsrc=["']/gi)) starts.push(from + a.index + a[0].length);
+    let hit = null;
+    for (let k = starts.length - 1; k >= 0 && !hit; k--) {
+      value.lastIndex = starts[k];
+      hit = value.exec(html);
+    }
+    if (hit) {
+      found.push(hit[1]);
+      img.lastIndex = value.lastIndex;
+    } else if (gt < 0) {
+      break;
+    } else {
+      img.lastIndex = gt + 1;
+    }
+  }
+  return found;
 }
 
 // Błąd węzła RSS bywa obiektem ({ message, description }) – do raportu wystarczy krótki tekst.

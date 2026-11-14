@@ -35,6 +35,11 @@ Poprawki bezpieczeństwa trafiają tylko do najnowszej wersji z gałęzi `main` 
   Content-Security-Policy, X-Frame-Options i X-Content-Type-Options.
 - **Telegram.** Przyciski ✅/❌ działają tylko w czatach ustawionych w panelu, a przy liście administratorów – tylko dla nich.
 - **Kontenery.** Panel i n8n działają jako zwykły użytkownik (UID 1000), bez uprawnień roota.
+- **Podpisane wydania.** Każde wydanie w repozytoriach Postera to commit podpisany kluczem wydań. `scripts/update.sh`
+  i `scripts/upgrade-to-pro.sh` sprawdzają podpis kluczem z zainstalowanej wersji (`scripts/release-signers`), zanim
+  zmienią jakikolwiek plik programu – sam dostęp do repozytorium nie wystarcza, żeby podsunąć kod instalacjom.
+  Commity bez podpisu dopisane za wydaniem są pomijane, a klucz może zmienić tylko wydanie podpisane dotychczasowym.
+  Pierwsza instalacja ufa GitHubowi i stronie posterapp.pl – nie ma jeszcze wersji, która zna klucz.
 
 ## Znane ograniczenia
 

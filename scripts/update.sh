@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Aktualizacja Poster na NAS-ie jednym poleceniem (SSH, katalog projektu):
 #   sudo bash scripts/update.sh
-# Kroki: 1) pobranie nowej wersji z GitHuba (git pull w kontenerze alpine/git; bez hasła po
-#           jednorazowym sudo bash scripts/setup-deploy-key.sh),
+# Kroki: 1) pobranie nowej wersji z GitHuba (git w kontenerze alpine/git; bez hasła po jednorazowym
+#           sudo bash scripts/setup-deploy-key.sh) i sprawdzenie podpisu wydania, zanim zmieni się jakikolwiek plik
+#           programu (scripts/release.sh),
 #        2) uzupełnienie .env o nowe klucze + uprawnienia katalogów (init-nas.sh),
 #        3) nowe obrazy n8n i RSSHub, przebudowa panelu na aktualnym obrazie bazowym i restart kontenerów,
 #        4) import i publikacja workflow w n8n (import-to-n8n.sh).
@@ -14,6 +15,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 . scripts/lang.sh
+. scripts/release.sh
 
 # git w kontenerze: obraz przypięty digestem (kompilacja alpine/git z 25.10.2026) – skrypty działają jako root
 # z całym katalogiem projektu, więc nowa wersja obrazu nie trafi tu bez wydania Postera. Ta sama wartość jest
@@ -84,9 +86,22 @@ if [ "$PULL" -eq 1 ]; then
   # Zawsze git z kontenera alpine/git: w nim działa klucz z scripts/setup-deploy-key.sh (ścieżki /git/...).
   # safe.directory: w kontenerze git działa jako root, a katalog projektu może należeć do innego
   # użytkownika NAS-a – bez tego git przerywa z błędem „detected dubious ownership”
-  pull() {
+  dgit() { # $1 – opcje dockera (-it albo nic), dalej polecenie gita
+    local opts="$1"
+    shift
     # shellcheck disable=SC2086
-    docker run --rm $1 -v "$PWD":/git "$GIT_IMAGE" -c safe.directory=/git pull --ff-only
+    docker run --rm $opts -v "$PWD":/git "$GIT_IMAGE" -c safe.directory=/git "$@"
+  }
+  # Jak „git pull --ff-only”, ale w trzech krokach: pobranie (pliki programu bez zmian), podpis wydania
+  # (scripts/release.sh – klucze z zainstalowanej wersji) i dopiero przejście do sprawdzonego commitu.
+  # Kod wyjścia 3: nowa wersja nie ma podpisu wydań – komunikat już wypisany.
+  pull() {
+    local target
+    dgit "$1" fetch || return 1
+    release_check HEAD '@{upstream}' || return 3
+    target="$REL_COMMIT"
+    [ -n "$target" ] || target='@{upstream}'
+    dgit "$1" merge --ff-only "$target"
   }
   # licencja wygasła albo jest nieaktywna: repozytorium PRO zwykle już odmawia dostępu – zamiast surowego błędu gita
   # („Permission denied (publickey)”) tylko nasz komunikat; gdy dostęp jeszcze jest, pobieramy jak zwykle
@@ -94,13 +109,19 @@ if [ "$PULL" -eq 1 ]; then
   if [ "$LICENSED" -eq 1 ]; then
     case "$LIC_RESULT" in expired | inactive | invalid) QUIET=1 ;; esac
   fi
+  RC=0
   if [ "$QUIET" -eq 1 ]; then
-    if OUT="$(pull "" 2>&1)"; then
-      printf '%s\n' "$OUT"
-    else
-      pro_pull_failed
-    fi
-  elif ! pull "$TTY"; then
+    OUT="$(pull "" 2>&1)" || RC=$?
+    case "$RC" in
+      0) printf '%s\n' "$OUT" ;;
+      3) printf '%s\n' "$OUT" >&2 ;;
+      *) pro_pull_failed ;;
+    esac
+  else
+    pull "$TTY" || RC=$?
+  fi
+  [ "$RC" -ne 3 ] || exit 1 # wydanie bez podpisu – nic nie zostało zmienione
+  if [ "$RC" -ne 0 ]; then
     [ "$LICENSED" -eq 1 ] && pro_pull_failed
     die "$(m "Nie udało się pobrać nowej wersji (komunikat gita powyżej)." "Could not download the new version (git message above).")"
   fi

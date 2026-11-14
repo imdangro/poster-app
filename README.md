@@ -153,7 +153,8 @@ sudo bash scripts/update.sh
 ```
 
 `update.sh` runs, in order:
-1. pulls the new version from GitHub (`git pull` in the `alpine/git` container, no git installation needed);
+1. downloads the new version from GitHub (git in the `alpine/git` container, no git installation needed) and checks
+   the release signature – only then does it change the program files;
 2. `init-nas.sh`: adds missing auto-generated keys to `.env` and fixes the permissions of `data/`, without changing existing values;
 3. pulls new n8n and RSSHub images, rebuilds the panel on an up-to-date base image (security fixes of Node.js, Alpine
    and ffmpeg) and restarts the containers – without a connection to Docker Hub the current images stay (`--no-images` skips this step);
@@ -161,6 +162,12 @@ sudo bash scripts/update.sh
 
 What changed and whether a version needs anything more – [CHANGELOG.md](CHANGELOG.md).
 Installing from a private copy of the repository (e.g. your own fork)? Updating without typing a token is described in [docs/deploy-key.md](docs/deploy-key.md).
+
+**Signed releases.** Every Poster release is signed with the author's key, and your installation knows its public part
+(`scripts/release-signers`). `update.sh` installs a new version only with that signature – code slipped in by someone
+who gained access to the repository will not be installed. The message “no Poster release signature” changes nothing:
+the installed version keeps working, try again later, and if it keeps happening write to kontakt@posterapp.pl.
+Your own copy of the repository (a fork) updates without the signature check.
 
 
 ---

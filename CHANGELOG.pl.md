@@ -7,6 +7,18 @@ Najnowsze zmiany są na górze. Aktualizację robisz zawsze tak samo: `sudo bash
 
 ## Niewydane
 
+## 1.5.3 – 2026-11-14
+
+- **Podpisane wydania:** każde wydanie Postera jest podpisane kluczem autora, a `scripts/update.sh`
+  i `scripts/upgrade-to-pro.sh` sprawdzają ten podpis, zanim zmienią pliki programu. Kod wysłany do repozytorium przez
+  kogoś, kto zdobyłby do niego dostęp (np. wykradziony klucz wdrożeniowy), nie zostanie zainstalowany – aktualizacja
+  kończy się komunikatem, a dotychczasowa wersja działa dalej. Nic nie ustawiasz: klucz jest w programie
+  (`scripts/release-signers`), a aktualizacja do tej wersji przebiega jak zwykle.
+  Własna kopia repozytorium (fork) aktualizuje się bez sprawdzania podpisu.
+- **Wrogi kanał RSS nie zatrzyma przebiegu bota:** wpis z kanału z tysiącami niezamkniętych znaczników (`<`, `<script`,
+  `<img`) potrafił zająć przebieg bota w n8n na wiele minut. Bot czyta teraz treść wpisu w czasie proporcjonalnym do
+  jej rozmiaru; teksty i zdjęcia z kanałów wychodzą takie same jak dotąd.
+
 ## 1.5.2 – 2026-11-13
 
 - **n8n 2.47.5:** aktualizacja pobiera nowy obraz n8n – wersja 2.40.7 jest objęta ostrzeżeniami bezpieczeństwa n8n

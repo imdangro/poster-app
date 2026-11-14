@@ -6,7 +6,8 @@
 #        2) klucz SSH tego NAS-a (tylko do odczytu) i aktywacja licencji na tym NAS-ie – publiczna część klucza
 #           trafia do aktywacji, a sprzedawca dodaje ją do prywatnego repozytorium PRO,
 #        3) czekanie na dostęp do repozytorium PRO (zwykle kilka minut),
-#        4) przełączenie katalogu projektu na wersję PRO i scripts/update.sh (przebudowa panelu, import workflow).
+#        4) sprawdzenie podpisu wydania PRO (scripts/release.sh), przełączenie katalogu projektu na wersję PRO
+#           i scripts/update.sh (przebudowa panelu, import workflow).
 # Boty, klucze API, konta i historia (data/, .env) zostają bez zmian. Skrypt można uruchomić ponownie – zapisana
 # aktywacja nie zajmuje drugiego urządzenia licencji. W wersji PRO z licencją aktywuje NAS ponownie (np. zwolnione
 # urządzenie; nowy klucz licencyjny wklejasz w panelu) i pobiera aktualizacje. POSTER_PRO_WAIT – ile sekund czekać na dostęp
@@ -16,6 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lang.sh
 . scripts/license.sh
+. scripts/release.sh
 # polecenie aktualizacji z pełną ścieżką – działa z każdego katalogu
 UPDATE_CMD="sudo bash $PWD/scripts/update.sh"
 
@@ -149,11 +151,20 @@ restore() {
 dgit config core.sshCommand "$PRO_SSH"
 dgit config ssh.variant ssh # polecenie zaczyna się od „umask”, więc mówimy gitowi wprost, że to OpenSSH
 dgit remote set-url origin "$PRO_REPO"
-if ! dgit fetch --quiet origin || ! dgit checkout -q -B main --track origin/main; then
+switch_failed() {
   restore
   die "$(m "Nie udało się przełączyć na wersję PRO (wyżej komunikat gita) – katalog projektu został bez zmian. Lokalne zmiany w plikach programu pokaże: sudo docker run --rm -v \"\$PWD\":/git alpine/git -c safe.directory=/git status" \
     "Could not switch to the PRO edition (git message above) – the project directory is unchanged. Local changes in the program files: sudo docker run --rm -v \"\$PWD\":/git alpine/git -c safe.directory=/git status")"
+}
+dgit fetch --quiet origin || switch_failed
+# Podpis wydania PRO kluczami z zainstalowanej wersji (LITE i PRO podpisuje ten sam klucz) – przed zmianą plików programu.
+# Po wymianie klucza wydań dawno nieaktualizowana wersja LITE jeszcze go nie zna: wtedy najpierw aktualizacja.
+if ! release_check - origin/main; then
+  restore
+  die "$(m "Wersja PRO nie została zainstalowana – katalog projektu został bez zmian. Jeśli Poster dawno nie był aktualizowany, uruchom najpierw: $UPDATE_CMD, a potem ten skrypt ponownie (nie zajmie drugiego urządzenia)." \
+    "The PRO edition was not installed – the project directory is unchanged. If Poster has not been updated for a long time, first run: $UPDATE_CMD, then this script again (it will not use a second device).")"
 fi
+dgit checkout -q -B main --track origin/main || switch_failed
 
 VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' panel/package.json | head -n1)"
 info "$(m "Przebudowuję panel i importuję workflow (Poster PRO $VERSION)..." "Rebuilding the panel and importing the workflow (Poster PRO $VERSION)...")"

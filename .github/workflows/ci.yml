@@ -259,6 +259,78 @@ jobs:
           set -o pipefail
           cat docs/install.sh | sudo env POSTER_LANG=en bash -s | tee "$RUNNER_TEMP/again.log"
           grep -q 'already installed' "$RUNNER_TEMP/again.log"
+      - name: Podpisane wydania – update.sh instaluje tylko commit z podpisem klucza wydań (git z przypiętego obrazu)
+        run: |
+          # katalog projektu należy do roota (instalator), więc cała próba działa jako root
+          sudo env RUNNER_TEMP="$RUNNER_TEMP" POSTER_LANG=en bash -euo pipefail <<'SH'
+          cd "$RUNNER_TEMP/poster"
+          K="$RUNNER_TEMP/release-keys"
+          mkdir -p "$K"
+          for k in release next other; do ssh-keygen -q -t ed25519 -N '' -C "$k" -f "$K/$k"; done
+          signers() { local k; for k in "$@"; do printf 'poster-release namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$K/$k.pub")"; done; }
+          # „repozytorium wydań” w katalogu projektu (kontener z gitem widzi tylko ten katalog) i klon roboczy autora
+          git checkout -q -B main
+          git clone -q --bare . .git/releases.git
+          git remote set-url origin /git/.git/releases.git
+          git config branch.main.remote origin
+          git config branch.main.merge refs/heads/main
+          A="$RUNNER_TEMP/release-author"
+          git clone -q .git/releases.git "$A"
+          n=0
+          release() { # $1 – klucz podpisu albo „-”, $2 – nowa lista kluczy (opcjonalnie)
+            n=$((n + 1))
+            echo "wydanie $n" > "$A/release-$n.txt"
+            if [ -n "${2:-}" ]; then printf '%s\n' "$2" > "$A/scripts/release-signers"; fi
+            git -C "$A" add -A
+            if [ "$1" = - ]; then
+              git -C "$A" -c user.name=CI -c user.email=ci@example.com commit -q --no-gpg-sign -m "wydanie $n"
+            else
+              git -C "$A" -c user.name=CI -c user.email=ci@example.com -c gpg.format=ssh -c "user.signingkey=$K/$1" commit -q -S -m "wydanie $n"
+            fi
+            git -C "$A" push -q origin HEAD:main
+          }
+          update() { bash scripts/update.sh --no-images --no-workflow 2>&1; }
+          refused() { # aktualizacja musi odmówić z komunikatem $1 i niczego nie zmienić
+            local before out
+            before="$(git rev-parse HEAD)"
+            if out="$(POSTER_REQUIRE_SIGNED=1 update)"; then echo "$out"; echo "zainstalowano wydanie bez podpisu klucza wydań"; exit 1; fi
+            grep -q "$1" <<<"$out" || { echo "$out"; echo "brak komunikatu: $1"; exit 1; }
+            grep -q 'Not installing it' <<<"$out"
+            test "$(git rev-parse HEAD)" = "$before"
+            test -z "$(git status --porcelain --untracked-files=no)"
+          }
+          installed() { test "$(git rev-parse HEAD)" = "$(git -C "$A" rev-parse HEAD)"; }
+
+          # 1) repozytorium spoza wydań Postera (jak fork) – bez sprawdzania podpisu: instaluje wydanie z kluczem
+          #    testowym; dalej sprawdzanie wymusza POSTER_REQUIRE_SIGNED=1
+          release release "$(signers release)"
+          update | tail -n 3
+          installed
+          # 2) commit bez podpisu i commit podpisany obcym kluczem – odmowa, pliki programu bez zmian
+          release -
+          refused 'no Poster release signature'
+          release other
+          refused 'not a Poster release key'
+          # 3) podpisane wydanie po commitach bez podpisu; wymiana klucza w wydaniu, które NAS omija
+          release release "$(signers next)"
+          release next
+          out="$(POSTER_REQUIRE_SIGNED=1 update)" || { echo "$out"; exit 1; }
+          grep -q 'Release signature verified (key SHA256:' <<<"$out"
+          installed
+          # 4) commit bez podpisu dopisany za wydaniem: instalowane jest ostatnie podpisane wydanie
+          release next
+          release -
+          out="$(POSTER_REQUIRE_SIGNED=1 update)" || { echo "$out"; exit 1; }
+          grep -q 'installing the last signed release' <<<"$out"
+          test "$(git rev-parse HEAD)" = "$(git -C "$A" rev-parse HEAD~1)"
+          # 5) stary klucz po wymianie już nie wystarcza, a świadome pominięcie instaluje z ostrzeżeniem
+          release release
+          refused 'not a Poster release key'
+          out="$(POSTER_REQUIRE_SIGNED=1 POSTER_ALLOW_UNSIGNED=1 update)" || { echo "$out"; exit 1; }
+          grep -q 'POSTER_ALLOW_UNSIGNED=1' <<<"$out"
+          installed
+          echo "podpisane wydania: OK"
+          SH
       - name: Stan i logi kontenerów (po błędzie)
         if: failure()
         run: cd "$RUNNER_TEMP/poster" && sudo docker compose ps -a && sudo docker compose logs --tail=80

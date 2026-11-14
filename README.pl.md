@@ -153,7 +153,8 @@ sudo bash scripts/update.sh
 ```
 
 `update.sh` wykonuje kolejno:
-1. pobiera nową wersję z GitHuba (`git pull` w kontenerze `alpine/git`, bez instalowania gita);
+1. pobiera nową wersję z GitHuba (git w kontenerze `alpine/git`, bez instalowania gita) i sprawdza podpis wydania –
+   dopiero potem zmienia pliki programu;
 2. `init-nas.sh`: uzupełnia w `.env` brakujące klucze generowane automatycznie i poprawia uprawnienia `data/`, nie zmieniając istniejących wartości;
 3. pobiera nowe obrazy n8n i RSSHub, przebudowuje panel na aktualnym obrazie bazowym (poprawki bezpieczeństwa Node.js,
    Alpine i ffmpeg) i restartuje kontenery – bez połączenia z Docker Hub zostają dotychczasowe obrazy (`--no-images` pomija ten krok);
@@ -161,6 +162,13 @@ sudo bash scripts/update.sh
 
 Co się zmieniło i czy dana wersja wymaga czegoś więcej – [CHANGELOG.pl.md](CHANGELOG.pl.md).
 Instalujesz z prywatnej kopii repozytorium (np. własnego forka)? Aktualizacje bez wpisywania tokenu opisuje [docs/deploy-key.pl.md](docs/deploy-key.pl.md).
+
+**Podpisane wydania.** Każde wydanie Postera jest podpisane kluczem autora, a Twoja instalacja zna jego publiczną
+część (`scripts/release-signers`). `update.sh` instaluje nową wersję tylko z takim podpisem – kod podsunięty przez
+kogoś, kto zdobyłby dostęp do repozytorium, nie zostanie zainstalowany. Komunikat „nie ma podpisu wydań Postera”
+niczego nie zmienia: zainstalowana wersja działa dalej, spróbuj ponownie później, a gdy się powtarza – napisz na
+kontakt@posterapp.pl.
+Własna kopia repozytorium (fork) aktualizuje się bez sprawdzania podpisu.
 
 
 ---

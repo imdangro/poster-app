@@ -7,6 +7,18 @@ The newest changes are at the top. You always update the same way: `sudo bash sc
 
 ## Unreleased
 
+## 1.5.3 – 2026-11-14
+
+- **Signed releases:** every Poster release is signed with the author's key, and `scripts/update.sh` and
+  `scripts/upgrade-to-pro.sh` check that signature before they change the program files. Code pushed to the repository
+  by someone who gained access to it (e.g. a stolen deploy key) will not be installed – the update ends with a
+  message and the current version keeps working. You set nothing up: the key is in the program
+  (`scripts/release-signers`), and updating to this version works as usual.
+  Your own copy of the repository (a fork) updates without the signature check.
+- **A hostile RSS feed cannot stall a bot run:** a feed entry with thousands of unclosed tags (`<`, `<script`, `<img`)
+  could keep a bot run in n8n busy for many minutes. The bot now reads entry content in time proportional to its
+  size; texts and images from feeds come out the same as before.
+
 ## 1.5.2 – 2026-11-13
 
 - **n8n 2.47.5:** the update pulls a new n8n image – version 2.40.7 is covered by the n8n security advisories of

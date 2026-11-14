@@ -37,6 +37,12 @@ Security fixes go only into the latest version from the `main` branch (update: `
   Content-Security-Policy, X-Frame-Options and X-Content-Type-Options headers.
 - **Telegram.** The ✅/❌ buttons work only in the chats set in the panel, and with an admin list – only for the admins.
 - **Containers.** The panel and n8n run as a regular user (UID 1000), without root privileges.
+- **Signed releases.** Every release in the Poster repositories is a commit signed with the release key.
+  `scripts/update.sh` and `scripts/upgrade-to-pro.sh` check the signature with the key from the installed version
+  (`scripts/release-signers`) before they change any program file – access to the repository alone is not enough to
+  push code to installations. Unsigned commits added after a release are skipped, and only a release signed with the
+  current key can change the key. The first installation trusts GitHub and posterapp.pl – there is no version yet
+  that knows the key.
 
 ## Known limitations
 
